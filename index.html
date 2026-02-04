@@ -152,8 +152,7 @@
             lowStockThreshold: 5,
             storeName: APP_NAME,
             storeAddress: "Jl. Berkah No. 99, Indonesia",
-            storeContact: "", // Header 3
-            storeHeader4: "", // Header 4 (NEW)
+            storeHeader3: "", // New Header
             receiptFooter: "Terima Kasih\nBarang tidak dapat ditukar",
             waTemplate: "*[STORE_NAME]*\nTanggal: [DATE]\n\n[ITEMS]\n----------------\n*Total: [TOTAL]*\n\nTerima kasih telah berbelanja!"
         };
@@ -329,14 +328,9 @@
                 encoder.init().alignCenter().bold(true).text(settings.storeName || APP_NAME).newline()
                     .bold(false).text(settings.storeAddress || "Indonesia").newline();
 
-                // ADDED: Header 3 (Contact/Info)
-                if (settings.storeContact) {
-                    encoder.text(settings.storeContact).newline();
-                }
-                
-                // ADDED: Header 4 (Extra Info)
-                if (settings.storeHeader4) {
-                    encoder.text(settings.storeHeader4).newline();
+                // HEADER TAMBAHAN (HEADER 3)
+                if (settings.storeHeader3) {
+                    encoder.text(settings.storeHeader3).newline();
                 }
 
                 encoder.line()
@@ -374,12 +368,14 @@
             }
         };
 
-        // --- NEW: SETTINGS COMPONENT ---
+        // --- SETTINGS COMPONENT ---
         const SettingsView = ({ settings, onSave, loading }) => {
             const [localSettings, setLocalSettings] = useState(settings);
+            const [showHeader3, setShowHeader3] = useState(!!settings.storeHeader3);
 
             useEffect(() => {
                 setLocalSettings(settings);
+                setShowHeader3(!!settings.storeHeader3);
             }, [settings]);
 
             const handleChange = (key, value) => {
@@ -443,30 +439,30 @@
                                             placeholder="Contoh: Jl. Raya No. 1"
                                         />
                                     </div>
-                                    
-                                    {/* Dual Column for Header 3 & 4 */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="text-xs font-bold text-slate-500 block mb-1">Kontak / Info (Header 3)</label>
+
+                                    {/* HEADER 3 DENGAN TOMBOL + */}
+                                    {showHeader3 ? (
+                                        <div className="fade-in">
+                                            <div className="flex justify-between items-center mb-1">
+                                                <label className="text-xs font-bold text-slate-500">Info Tambahan (Header 3)</label>
+                                                <button onClick={() => { setShowHeader3(false); handleChange('storeHeader3', ''); }} className="text-[10px] text-red-500 hover:underline">Hapus</button>
+                                            </div>
                                             <input 
                                                 type="text" 
-                                                value={localSettings.storeContact || ''} 
-                                                onChange={(e) => handleChange('storeContact', e.target.value)}
+                                                value={localSettings.storeHeader3 || ''} 
+                                                onChange={(e) => handleChange('storeHeader3', e.target.value)}
                                                 className="w-full p-2.5 rounded-lg border border-slate-300 focus:border-sky-500 outline-none text-sm"
-                                                placeholder="Contoh: WA 08123456789"
+                                                placeholder="Contoh: WA: 081234567890"
                                             />
                                         </div>
-                                        <div>
-                                            <label className="text-xs font-bold text-slate-500 block mb-1">Info Tambahan (Header 4)</label>
-                                            <input 
-                                                type="text" 
-                                                value={localSettings.storeHeader4 || ''} 
-                                                onChange={(e) => handleChange('storeHeader4', e.target.value)}
-                                                className="w-full p-2.5 rounded-lg border border-slate-300 focus:border-sky-500 outline-none text-sm"
-                                                placeholder="Contoh: IG @toko_husna"
-                                            />
-                                        </div>
-                                    </div>
+                                    ) : (
+                                        <button 
+                                            onClick={() => setShowHeader3(true)} 
+                                            className="text-xs font-bold text-sky-600 hover:text-sky-700 flex items-center gap-1 py-1 px-2 rounded hover:bg-sky-50 border border-transparent hover:border-sky-200 transition-all"
+                                        >
+                                            <Icon name="plus" /> Tambah Baris Header
+                                        </button>
+                                    )}
 
                                     <div>
                                         <label className="text-xs font-bold text-slate-500 block mb-1">Footer (Pesan Bawah)</label>
@@ -497,7 +493,7 @@
                                                 <button key={tag} onClick={() => handleChange('waTemplate', localSettings.waTemplate + tag)} className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-bold text-slate-600 hover:bg-sky-50">{tag}</button>
                                             ))}
                                         </div>
-                                        <p className="text-[10px] text-slate-400 mt-1">Tag [ITEMS] sekarang otomatis menyertakan harga & subtotal.</p>
+                                        <p className="text-[10px] text-slate-400 mt-1">Gunakan tag di atas untuk memasukkan data dinamis.</p>
                                     </div>
                                 </div>
                             </div>
@@ -700,12 +696,8 @@
             const handleWA = () => {
                 let text = settings.waTemplate || DEFAULT_SETTINGS.waTemplate;
                 
-                // MODIFIED: Items List with Price Detail
-                const itemsList = receiptData.items.map(i => {
-                    const subtotal = i.cartQty * i.price;
-                    return `• ${i.name} (${i.cartQty}x @${formatRupiah(i.price).replace('Rp', '')}) = ${formatRupiah(subtotal)}`;
-                }).join('\n');
-                
+                // Replace Placeholders - UPDATE: Sertakan Harga Satuan
+                const itemsList = receiptData.items.map(i => `${i.name} (${i.cartQty}x @ ${formatRupiah(i.price)})`).join('\n');
                 const dateStr = new Date().toLocaleDateString('id-ID');
                 
                 text = text.replace('[STORE_NAME]', settings.storeName || APP_NAME)
@@ -1853,7 +1845,7 @@
                             </nav>
                             
                             <div className="mt-auto pt-6 border-t border-slate-100">
-                                <p className="text-[10px] text-center text-slate-400">Versi 14.0 • Auto Reset</p>
+                                <p className="text-[10px] text-center text-slate-400">Versi 12.1 • Auto Reset</p>
                             </div>
                         </div>
                     </aside>
