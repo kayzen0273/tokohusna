@@ -152,15 +152,16 @@
             lowStockThreshold: 5,
             storeName: APP_NAME,
             storeAddress: "Jl. Berkah No. 99, Indonesia",
-            storeHeader3: "", // New Header
+            storeHeader3: "", // Header Tambahan
             receiptFooter: "Terima Kasih\nBarang tidak dapat ditukar",
             waTemplate: "*[STORE_NAME]*\nTanggal: [DATE]\n\n[ITEMS]\n----------------\n*Total: [TOTAL]*\n\nTerima kasih telah berbelanja!"
         };
 
-        // --- BLUETOOTH PRINTER HELPERS ---
+        // --- BLUETOOTH PRINTER HELPERS (PERBAIKAN ENCODING) ---
         const ESC = "\u001B";
         const GS = "\u001D";
         const INIT = ESC + "@";
+        const CODE_PAGE = ESC + "t" + "\u0000"; // FORCE PC437 (Standard Latin)
         const ALIGN_CENTER = ESC + "a" + "\u0001";
         const ALIGN_LEFT = ESC + "a" + "\u0000";
         const BOLD_ON = ESC + "E" + "\u0001";
@@ -172,14 +173,19 @@
                 this.buffer = [];
             }
             
-            init() { this.buffer.push(INIT); return this; }
+            init() { 
+                this.buffer.push(INIT); 
+                this.buffer.push(CODE_PAGE); // Paksa mode huruf Latin standar
+                return this; 
+            }
             alignCenter() { this.buffer.push(ALIGN_CENTER); return this; }
             alignLeft() { this.buffer.push(ALIGN_LEFT); return this; }
             bold(on = true) { this.buffer.push(on ? BOLD_ON : BOLD_OFF); return this; }
             text(str) { 
                 if(!str) return this;
-                // Simple replacement to clean text
-                let clean = str.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                // PERBAIKAN: Hapus karakter non-ASCII untuk mencegah huruf Cina
+                // Hanya izinkan karakter ASCII standar (32-126) dan Newline
+                let clean = str.replace(/[^\x20-\x7E\n]/g, "");
                 this.buffer.push(clean); 
                 return this; 
             }
@@ -189,7 +195,7 @@
             
             encode() {
                 const combined = this.buffer.join("");
-                const encoder = new TextEncoder();
+                const encoder = new TextEncoder(); // UTF-8 Encoder
                 return encoder.encode(combined);
             }
         }
@@ -325,11 +331,12 @@
                 const characteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
 
                 const encoder = new ThermalPrinterEncoder();
-                encoder.init().alignCenter().bold(true).text(settings.storeName || APP_NAME).newline()
+                encoder.init()
+                    .alignCenter().bold(true).text(settings.storeName || APP_NAME).newline()
                     .bold(false).text(settings.storeAddress || "Indonesia").newline();
 
-                // HEADER TAMBAHAN (HEADER 3)
-                if (settings.storeHeader3) {
+                // HEADER TAMBAHAN (HEADER 3) - Pastikan data ada di settings
+                if (settings.storeHeader3 && settings.storeHeader3.trim() !== "") {
                     encoder.text(settings.storeHeader3).newline();
                 }
 
@@ -355,10 +362,11 @@
 
                 encoder.line()
                     .bold(true).text("TOTAL      " + formatRupiah(validTotal).replace('Rp','')).newline()
-                    .feed(2).alignCenter()
-                    .text(settings.receiptFooter || "Terima Kasih").newline()
+                    .feed(1) // Jarak sebelum footer
+                    .alignCenter()
+                    .bold(false).text(settings.receiptFooter || "Terima Kasih").newline() // Cetak Footer
                     .text(receipt.status === 'returned' ? "RETUR FULL" : (receipt.status === 'partial' ? "ADA RETUR SEBAGIAN" : "")).newline()
-                    .feed(3);
+                    .feed(4); // PERBAIKAN: Feed lebih panjang agar footer keluar
 
                 await characteristic.writeValue(encoder.encode());
                 return true;
@@ -782,7 +790,7 @@
         };
 
         // --- UPDATED: HISTORY VIEW WITH DASHBOARD & PARTIAL RETURN ---
-        const HistoryView = ({ user, showToast }) => {
+        const HistoryView = ({ user, showToast, settings }) => {
             const [transactions, setTransactions] = useState([]);
             const [loading, setLoading] = useState(true);
             const [selectedTx, setSelectedTx] = useState(null);
@@ -954,7 +962,7 @@
             const handlePrint = async (tx) => {
                 showToast("Menghubungkan printer...");
                 // Fetch latest settings just for printing (or pass from prop if available)
-                const connected = await printReceipt(tx, btDevice); // Using default settings if not passed, but ideal to pass actual settings
+                const connected = await printReceipt(tx, btDevice, settings); // Using default settings if not passed, but ideal to pass actual settings
                  if (connected === true || typeof connected === 'object') {
                     if (typeof connected === 'object') setBtDevice(connected); 
                 } else {
@@ -1845,7 +1853,7 @@
                             </nav>
                             
                             <div className="mt-auto pt-6 border-t border-slate-100">
-                                <p className="text-[10px] text-center text-slate-400">Versi 12.1 • Auto Reset</p>
+                                <p className="text-[10px] text-center text-slate-400">Versi 12.2 • Auto Reset</p>
                             </div>
                         </div>
                     </aside>
@@ -1867,7 +1875,7 @@
 
                         {activeTab === 'home' && (<DashboardView items={inventoryData} settings={settingsData} onShowLowStock={() => { setActiveTab('list'); setShowOnlyLowStock(true); }} />)}
                         {activeTab === 'cashier' && (<CashierView items={inventoryData} user={user} showToast={showToast} settings={settingsData} />)}
-                        {activeTab === 'history' && (<HistoryView user={user} showToast={showToast} />)}
+                        {activeTab === 'history' && (<HistoryView user={user} showToast={showToast} settings={settingsData} />)}
                         {activeTab === 'list' && (<ListView items={inventoryData} loading={loading} settings={settingsData} searchQuery={searchQuery} setSearchQuery={setSearchQuery} showOnlyLowStock={showOnlyLowStock} setShowOnlyLowStock={setShowOnlyLowStock} selectedRacks={selectedRacks} setSelectedRacks={setSelectedRacks} uniqueRacksData={uniqueRacksData} onCopySuccess={showToast} onEdit={(item) => { setFormData({...item}); setEditingItem(item); setActiveTab('add'); }} onDelete={(item) => setDeleteModal({ show: true, item: item })} onDeleteRack={(rackName) => setDeleteRackModal({ show: true, rackName })} />)}
                         {activeTab === 'add' && (<FormView formData={formData} setFormData={setFormData} onSubmit={handleSubmit} isEditing={!!editingItem} submitting={submitting} onCancel={() => { setEditingItem(null); setFormData({name:'', qty:'', unit:'Pcs', exp:'', rack:'', price:'', minStock: ''}); setActiveTab('list'); }} />)}
                         {activeTab === 'import' && (<BulkImportView user={user} onImportComplete={(count) => { showToast(`${count} Barang berhasil diimport`); setActiveTab('list'); }} />)}
