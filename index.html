@@ -152,7 +152,7 @@
             lowStockThreshold: 5,
             storeName: APP_NAME,
             storeAddress: "Jl. Berkah No. 99, Indonesia",
-            storeHeader3: "", // Header Tambahan
+            additionalHeaders: [], // Array untuk banyak header
             receiptFooter: "Terima Kasih\nBarang tidak dapat ditukar",
             waTemplate: "*[STORE_NAME]*\nTanggal: [DATE]\n\n[ITEMS]\n----------------\n*Total: [TOTAL]*\n\nTerima kasih telah berbelanja!"
         };
@@ -164,6 +164,7 @@
         const CODE_PAGE = ESC + "t" + "\u0000"; // FORCE PC437 (Standard Latin)
         const ALIGN_CENTER = ESC + "a" + "\u0001";
         const ALIGN_LEFT = ESC + "a" + "\u0000";
+        const ALIGN_RIGHT = ESC + "a" + "\u0002";
         const BOLD_ON = ESC + "E" + "\u0001";
         const BOLD_OFF = ESC + "E" + "\u0000";
         const CUT = GS + "V" + "\u0042" + "\u0000";
@@ -180,6 +181,7 @@
             }
             alignCenter() { this.buffer.push(ALIGN_CENTER); return this; }
             alignLeft() { this.buffer.push(ALIGN_LEFT); return this; }
+            alignRight() { this.buffer.push(ALIGN_RIGHT); return this; }
             bold(on = true) { this.buffer.push(on ? BOLD_ON : BOLD_OFF); return this; }
             text(str) { 
                 if(!str) return this;
@@ -335,10 +337,18 @@
                     .alignCenter().bold(true).text(settings.storeName || APP_NAME).newline()
                     .bold(false).text(settings.storeAddress || "Indonesia").newline();
 
-                // HEADER TAMBAHAN (HEADER 3)
-                if (settings.storeHeader3 && settings.storeHeader3.trim() !== "") {
+                // HEADER TAMBAHAN (Flexible Array)
+                // Support legacy single header or new array
+                const headers = settings.additionalHeaders || [];
+                // If legacy storeHeader3 exists and not in array, add it (temporary fallback)
+                if (settings.storeHeader3 && (!headers.length)) {
                     encoder.text(settings.storeHeader3).newline();
                 }
+                
+                // Print all dynamic headers
+                headers.forEach(h => {
+                    if(h && h.trim()) encoder.text(h).newline();
+                });
 
                 encoder.line()
                     .alignLeft().text(`Tgl: ${new Date(receipt.date.seconds ? receipt.date.toDate() : receipt.date).toLocaleString('id-ID')}`).newline().line();
@@ -360,9 +370,26 @@
                 // Recalculate totals for receipt based on valid items
                 const validTotal = receipt.items.reduce((acc, item) => acc + (item.price * (item.cartQty - (item.returnedQty || 0))), 0);
 
-                encoder.line()
-                    .bold(true).text("TOTAL      " + formatRupiah(validTotal).replace('Rp','')).newline()
-                    .feed(2) 
+                encoder.line();
+                
+                // FUNCTION TO PRINT ROW WITH LABEL AND VALUE ALIGNED RIGHT
+                const printRow = (label, value) => {
+                     const valStr = formatRupiah(value).replace('Rp', '');
+                     const spaces = 32 - label.length - valStr.length;
+                     encoder.text(label + " ".repeat(Math.max(1, spaces)) + valStr).newline();
+                };
+
+                encoder.bold(true);
+                printRow("TOTAL", validTotal);
+                encoder.bold(false);
+                
+                // PAYMENT DETAILS (Tunai & Kembali)
+                if (receipt.pay !== undefined && receipt.change !== undefined) {
+                    printRow("TUNAI", receipt.pay);
+                    printRow("KEMBALI", receipt.change);
+                }
+
+                encoder.feed(2) 
                     .alignCenter()
                     .bold(false);
 
@@ -381,8 +408,8 @@
                      encoder.text(receipt.status === 'returned' ? "RETUR FULL" : "ADA RETUR SEBAGIAN").newline();
                 }
 
-                // FINAL FEED AGAR KERTAS KELUAR (Dikurangi jadi 2 baris)
-                encoder.feed(2); 
+                // FINAL FEED EXACTLY 3 LINES
+                encoder.feed(3); 
 
                 // --- CHUNKED SENDING ---
                 const encodedData = encoder.encode();
@@ -404,19 +431,46 @@
         // --- SETTINGS COMPONENT ---
         const SettingsView = ({ settings, onSave, loading }) => {
             const [localSettings, setLocalSettings] = useState(settings);
-            const [showHeader3, setShowHeader3] = useState(!!settings.storeHeader3);
+            // Initialize additionalHeaders with legacy storeHeader3 if exists and array is empty
+            const [headers, setHeaders] = useState(() => {
+                if (settings.additionalHeaders && settings.additionalHeaders.length > 0) {
+                    return settings.additionalHeaders;
+                }
+                return settings.storeHeader3 ? [settings.storeHeader3] : [];
+            });
 
             useEffect(() => {
                 setLocalSettings(settings);
-                setShowHeader3(!!settings.storeHeader3);
+                if (settings.additionalHeaders && settings.additionalHeaders.length > 0) {
+                     setHeaders(settings.additionalHeaders);
+                }
             }, [settings]);
 
             const handleChange = (key, value) => {
                 setLocalSettings(prev => ({ ...prev, [key]: value }));
             };
 
+            const handleHeaderChange = (idx, val) => {
+                const newHeaders = [...headers];
+                newHeaders[idx] = val;
+                setHeaders(newHeaders);
+                handleChange('additionalHeaders', newHeaders);
+            };
+
+            const addHeader = () => {
+                const newHeaders = [...headers, ""];
+                setHeaders(newHeaders);
+                handleChange('additionalHeaders', newHeaders);
+            };
+
+            const removeHeader = (idx) => {
+                const newHeaders = headers.filter((_, i) => i !== idx);
+                setHeaders(newHeaders);
+                handleChange('additionalHeaders', newHeaders);
+            };
+
             const handleSave = () => {
-                onSave(localSettings);
+                onSave({ ...localSettings, additionalHeaders: headers });
             };
 
             return (
@@ -473,29 +527,33 @@
                                         />
                                     </div>
 
-                                    {/* HEADER 3 DENGAN TOMBOL + */}
-                                    {showHeader3 ? (
-                                        <div className="fade-in">
-                                            <div className="flex justify-between items-center mb-1">
-                                                <label className="text-xs font-bold text-slate-500">Info Tambahan (Header 3)</label>
-                                                <button onClick={() => { setShowHeader3(false); handleChange('storeHeader3', ''); }} className="text-[10px] text-red-500 hover:underline">Hapus</button>
-                                            </div>
-                                            <input 
-                                                type="text" 
-                                                value={localSettings.storeHeader3 || ''} 
-                                                onChange={(e) => handleChange('storeHeader3', e.target.value)}
-                                                className="w-full p-2.5 rounded-lg border border-slate-300 focus:border-sky-500 outline-none text-sm"
-                                                placeholder="Contoh: WA: 081234567890"
-                                            />
+                                    {/* DYNAMIC HEADERS */}
+                                    <div className="bg-slate-100 p-3 rounded-xl border border-slate-200">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <label className="text-xs font-bold text-slate-500">Baris Header Tambahan</label>
+                                            <button 
+                                                onClick={addHeader} 
+                                                className="text-[10px] font-bold text-sky-600 hover:text-sky-700 bg-sky-50 px-2 py-1 rounded border border-sky-100 flex items-center gap-1"
+                                            >
+                                                <Icon name="plus" /> Tambah Baris
+                                            </button>
                                         </div>
-                                    ) : (
-                                        <button 
-                                            onClick={() => setShowHeader3(true)} 
-                                            className="text-xs font-bold text-sky-600 hover:text-sky-700 flex items-center gap-1 py-1 px-2 rounded hover:bg-sky-50 border border-transparent hover:border-sky-200 transition-all"
-                                        >
-                                            <Icon name="plus" /> Tambah Baris Header
-                                        </button>
-                                    )}
+                                        <div className="space-y-2">
+                                            {headers.length === 0 && <p className="text-[10px] text-slate-400 italic">Belum ada header tambahan.</p>}
+                                            {headers.map((h, idx) => (
+                                                <div key={idx} className="flex gap-2">
+                                                    <input 
+                                                        type="text" 
+                                                        value={h} 
+                                                        onChange={(e) => handleHeaderChange(idx, e.target.value)}
+                                                        className="flex-1 p-2 rounded-lg border border-slate-300 focus:border-sky-500 outline-none text-sm"
+                                                        placeholder={`Info Tambahan ${idx + 1}`}
+                                                    />
+                                                    <button onClick={() => removeHeader(idx)} className="w-9 bg-red-50 text-red-500 rounded-lg border border-red-100 hover:bg-red-100 flex items-center justify-center"><Icon name="trash" /></button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
 
                                     <div>
                                         <label className="text-xs font-bold text-slate-500 block mb-1">Footer (Pesan Bawah)</label>
@@ -1878,7 +1936,7 @@
                             </nav>
                             
                             <div className="mt-auto pt-6 border-t border-slate-100">
-                                <p className="text-[10px] text-center text-slate-400">Versi 12.3 • Printer Fix</p>
+                                <p className="text-[10px] text-center text-slate-400">Versi 13.0 • Multi Header</p>
                             </div>
                         </div>
                     </aside>
