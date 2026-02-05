@@ -152,16 +152,15 @@
             lowStockThreshold: 5,
             storeName: APP_NAME,
             storeAddress: "Jl. Berkah No. 99, Indonesia",
-            additionalHeaders: [], // Array untuk banyak header
-            receiptFooter: "Terima Kasih\nBarang tidak dapat ditukar",
-            waTemplate: "*[STORE_NAME]*\nTanggal: [DATE]\n\n[ITEMS]\n----------------\n*Total: [TOTAL]*\n\nTerima kasih telah berbelanja!"
+            additionalHeaders: [], 
+            receiptFooter: "Terima Kasih\nBarang tidak dapat ditukar"
         };
 
-        // --- BLUETOOTH PRINTER HELPERS (PERBAIKAN ENCODING) ---
+        // --- BLUETOOTH PRINTER HELPERS ---
         const ESC = "\u001B";
         const GS = "\u001D";
         const INIT = ESC + "@";
-        const CODE_PAGE = ESC + "t" + "\u0000"; // FORCE PC437 (Standard Latin)
+        const CODE_PAGE = ESC + "t" + "\u0000"; 
         const ALIGN_CENTER = ESC + "a" + "\u0001";
         const ALIGN_LEFT = ESC + "a" + "\u0000";
         const ALIGN_RIGHT = ESC + "a" + "\u0002";
@@ -170,23 +169,14 @@
         const CUT = GS + "V" + "\u0042" + "\u0000";
         
         class ThermalPrinterEncoder {
-            constructor() {
-                this.buffer = [];
-            }
-            
-            init() { 
-                this.buffer.push(INIT); 
-                this.buffer.push(CODE_PAGE); // Paksa mode huruf Latin standar
-                return this; 
-            }
+            constructor() { this.buffer = []; }
+            init() { this.buffer.push(INIT); this.buffer.push(CODE_PAGE); return this; }
             alignCenter() { this.buffer.push(ALIGN_CENTER); return this; }
             alignLeft() { this.buffer.push(ALIGN_LEFT); return this; }
             alignRight() { this.buffer.push(ALIGN_RIGHT); return this; }
             bold(on = true) { this.buffer.push(on ? BOLD_ON : BOLD_OFF); return this; }
             text(str) { 
                 if(!str) return this;
-                // PERBAIKAN: Hapus karakter non-ASCII untuk mencegah huruf Cina
-                // Hanya izinkan karakter ASCII standar (32-126) dan Newline
                 let clean = str.replace(/[^\x20-\x7E\n]/g, "");
                 this.buffer.push(clean); 
                 return this; 
@@ -194,12 +184,7 @@
             newline() { this.buffer.push("\n"); return this; }
             line(char = "-") { this.buffer.push(char.repeat(32)); this.buffer.push("\n"); return this; }
             feed(n = 2) { for(let i=0; i<n; i++) this.buffer.push("\n"); return this; }
-            
-            encode() {
-                const combined = this.buffer.join("");
-                const encoder = new TextEncoder(); // UTF-8 Encoder
-                return encoder.encode(combined);
-            }
+            encode() { const combined = this.buffer.join(""); const encoder = new TextEncoder(); return encoder.encode(combined); }
         }
 
         // --- FIREWORKS UTILITY ---
@@ -211,15 +196,13 @@
                 el.classList.add('firework-particle');
                 const color = colors[Math.floor(Math.random() * colors.length)];
                 const size = Math.random() * 6 + 4; 
-                const angle = Math.random() * Math.PI * 2;
-                const velocity = Math.random() * 4 + 2; 
                 el.style.backgroundColor = color;
                 el.style.width = `${size}px`;
                 el.style.height = `${size}px`;
                 el.style.left = `${x}px`;
                 el.style.top = `${y}px`;
                 document.body.appendChild(el);
-                let posX = x, posY = y, velX = Math.cos(angle) * velocity, velY = Math.sin(angle) * velocity, gravity = 0.15, opacity = 1;
+                let posX = x, posY = y, velX = Math.cos(Math.random() * Math.PI * 2) * (Math.random() * 4 + 2), velY = Math.sin(Math.random() * Math.PI * 2) * (Math.random() * 4 + 2), gravity = 0.15, opacity = 1;
                 const animate = () => {
                     velY += gravity; posX += velX; posY += velY; opacity -= 0.015; 
                     el.style.left = `${posX}px`; el.style.top = `${posY}px`; el.style.opacity = opacity;
@@ -232,44 +215,130 @@
         const Icon = React.memo(({ name, type = "solid", className = "" }) => <i className={`fa-${type} fa-${name} ${className}`}></i>);
 
         // --- DEKORASI SYABAN ---
-        const SyabanDecor = () => {
-            return (
-                <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-                    <div className="absolute top-10 left-[10%] text-gold-400 text-[8px] animate-twinkle delay-100 opacity-60"><Icon name="star" /></div>
-                    <div className="absolute top-20 left-[25%] text-gold-300 text-[6px] animate-twinkle delay-700 opacity-40"><Icon name="star" /></div>
-                    <div className="absolute top-5 right-[15%] text-gold-500 text-[10px] animate-twinkle delay-300 opacity-70"><Icon name="star" /></div>
-                    <div className="absolute -top-4 left-4 md:left-10 z-0 animate-sway origin-top">
-                        <div className="h-16 md:h-24 w-[1px] bg-gold-400 mx-auto opacity-70"></div>
-                        <div className="text-gold-500 text-3xl md:text-4xl drop-shadow-glow relative z-10"><Icon name="mosque" /></div>
-                    </div>
-                    <div className="absolute -top-8 right-16 md:right-32 z-0 animate-sway-slow origin-top hidden md:block">
-                        <div className="h-32 w-[1px] bg-gold-400 mx-auto opacity-70"></div>
-                        <div className="text-gold-600 text-2xl drop-shadow-md"><Icon name="star-and-crescent" /></div>
-                    </div>
-                    <div className="absolute top-12 right-4 md:right-10 opacity-20 text-gold-400 animate-float"><Icon name="moon" className="text-6xl md:text-8xl" /></div>
+        const SyabanDecor = () => (
+            <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+                <div className="absolute top-10 left-[10%] text-gold-400 text-[8px] animate-twinkle delay-100 opacity-60"><Icon name="star" /></div>
+                <div className="absolute top-20 left-[25%] text-gold-300 text-[6px] animate-twinkle delay-700 opacity-40"><Icon name="star" /></div>
+                <div className="absolute top-5 right-[15%] text-gold-500 text-[10px] animate-twinkle delay-300 opacity-70"><Icon name="star" /></div>
+                <div className="absolute -top-4 left-4 md:left-10 z-0 animate-sway origin-top">
+                    <div className="h-16 md:h-24 w-[1px] bg-gold-400 mx-auto opacity-70"></div>
+                    <div className="text-gold-500 text-3xl md:text-4xl drop-shadow-glow relative z-10"><Icon name="mosque" /></div>
                 </div>
-            );
-        };
+                <div className="absolute -top-8 right-16 md:right-32 z-0 animate-sway-slow origin-top hidden md:block">
+                    <div className="h-32 w-[1px] bg-gold-400 mx-auto opacity-70"></div>
+                    <div className="text-gold-600 text-2xl drop-shadow-md"><Icon name="star-and-crescent" /></div>
+                </div>
+                <div className="absolute top-12 right-4 md:right-10 opacity-20 text-gold-400 animate-float"><Icon name="moon" className="text-6xl md:text-8xl" /></div>
+            </div>
+        );
 
         // --- UTILS ---
         const safeNumber = (val) => { if (!val) return 0; const num = parseFloat(val); return isNaN(num) ? 0 : num; };
-        
-        const formatRupiah = (angka) => {
-            const num = safeNumber(angka);
-            return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num).replace(/,00$/, '');
-        };
-
+        const formatRupiah = (angka) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(safeNumber(angka)).replace(/,00$/, '');
         const isNewItem = (createdAt) => {
             if (!createdAt) return false;
             const date = createdAt.toDate ? createdAt.toDate() : new Date(createdAt);
-            const now = new Date();
-            const diffInMs = now - date;
-            return diffInMs < (24 * 60 * 60 * 1000);
+            return (new Date() - date) < (24 * 60 * 60 * 1000);
         };
-        const formatDateIndo = (dateStr) => {
-            if (!dateStr) return "-";
-            const date = new Date(dateStr);
-            return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: '2-digit' });
+        const formatDateIndo = (dateStr) => { if (!dateStr) return "-"; return new Date(dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: '2-digit' }); };
+
+        // --- WHATSAPP RECEIPT GENERATOR (MONOSPACE) ---
+        const generateWAReceipt = (transaction, settings) => {
+            const width = 32; // Lebar karakter standar struk thermal
+            
+            // Helper untuk centering teks
+            const center = (str) => {
+                if(!str) return "";
+                const len = str.length;
+                if(len >= width) return str;
+                const pad = Math.floor((width - len) / 2);
+                return " ".repeat(pad) + str; // WhatsApp Monospace butuh spasi manual
+            };
+            
+            // Helper untuk rata kiri-kanan (Nama....Harga)
+            const space = (left, right) => {
+                const l = left.toString();
+                const r = right.toString();
+                const combined = l.length + r.length;
+                if(combined >= width) return l + " " + r;
+                return l + " ".repeat(width - combined) + r;
+            };
+            
+            // Mulai buat struk dalam block code (```)
+            let receipt = "```\n"; 
+            
+            // 1. Header
+            receipt += center(settings.storeName || "Toko Husna") + "\n";
+            receipt += center(settings.storeAddress || "Indonesia") + "\n";
+            
+            // Header Tambahan
+            if(settings.additionalHeaders && Array.isArray(settings.additionalHeaders)){
+                settings.additionalHeaders.forEach(h => {
+                    if(h && h.trim()) receipt += center(h) + "\n";
+                });
+            } else if (settings.storeHeader3) {
+                 receipt += center(settings.storeHeader3) + "\n";
+            }
+            
+            receipt += "-".repeat(width) + "\n";
+            
+            // 2. Info Transaksi
+            const dateObj = transaction.date.seconds ? transaction.date.toDate() : new Date(transaction.date);
+            receipt += `Tgl: ${dateObj.toLocaleString('id-ID')}\n`;
+            // Gunakan ID unik pendek jika ada
+            receipt += `Ref: ${transaction.id ? transaction.id.slice(-6).toUpperCase() : '-'}\n`;
+            receipt += "-".repeat(width) + "\n";
+            
+            // 3. Item Belanja
+            transaction.items.forEach(item => {
+                // Baris 1: Nama Barang
+                receipt += `${item.name}\n`;
+                
+                // Hitung Qty x Harga
+                const validQty = item.cartQty - (item.returnedQty || 0);
+                if (validQty > 0) {
+                    const priceStr = formatRupiah(item.price).replace('Rp', '').replace(/\./g, ','); // Hilangkan Rp dan ubah titik jadi koma biar pendek
+                    const subTotalStr = formatRupiah(validQty * item.price).replace('Rp', '');
+                    const qtyLine = `${validQty}x ${priceStr}`;
+                    
+                    // Baris 2: Qty x Harga .... Subtotal
+                    receipt += space(qtyLine, subTotalStr) + "\n";
+                }
+            });
+            
+            receipt += "-".repeat(width) + "\n";
+            
+            // 4. Total & Bayar
+            // Hitung ulang total valid jika ada retur
+            const currentTotal = transaction.items.reduce((acc, item) => acc + (item.price * (item.cartQty - (item.returnedQty || 0))), 0);
+            
+            receipt += space("TOTAL", formatRupiah(currentTotal).replace('Rp', '')) + "\n";
+            
+            // Hanya tampilkan bayar/kembali jika data ada
+            if (transaction.pay !== undefined) {
+                receipt += space("TUNAI", formatRupiah(transaction.pay).replace('Rp', '')) + "\n";
+            }
+            if (transaction.change !== undefined) {
+                receipt += space("KEMBALI", formatRupiah(transaction.change).replace('Rp', '')) + "\n";
+            }
+            
+            receipt += "-".repeat(width) + "\n";
+            
+            // 5. Status (Jika Retur)
+            if (transaction.status === 'returned') {
+                 receipt += center("*** TRANSAKSI DIBATALKAN ***") + "\n";
+            } else if (transaction.status === 'partial') {
+                 receipt += center("*** ADA RETUR SEBAGIAN ***") + "\n";
+            }
+
+            // 6. Footer
+            const footerText = settings.receiptFooter || "Terima Kasih";
+            footerText.split('\n').forEach(line => {
+                if(line.trim()) receipt += center(line) + "\n";
+            });
+            
+            receipt += "\n```"; // Tutup Monospace
+            return receipt;
         };
 
         const Toast = ({ message, show, onClose, type = "success" }) => {
@@ -295,9 +364,7 @@
                         <div className={`w-14 h-14 ${iconBg} rounded-full flex items-center justify-center mb-5 mx-auto`}><Icon name={iconName} className="text-2xl" /></div>
                         <h3 className="text-xl font-bold text-center text-slate-800 mb-2">{title}</h3>
                         <p className="text-slate-500 text-center text-sm mb-4 leading-relaxed">{message}</p>
-                        
                         {children && <div className="mb-6">{children}</div>}
-
                         <div className="flex gap-3 mt-4">
                             <button onClick={onCancel} className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50 transition-colors">Batal</button>
                             <button onClick={onConfirm} className={`flex-1 py-3 rounded-xl ${btnColorClass} text-white font-semibold text-sm shadow-lg active:scale-95 transition-all`}>{confirmText}</button>
@@ -310,54 +377,26 @@
         // --- HELPERS FOR PRINTER (GLOBAL) ---
         const connectBluetooth = async () => {
             try {
-                const device = await navigator.bluetooth.requestDevice({
-                    filters: [{ services: ['000018f0-0000-1000-8000-00805f9b34fb'] }]
-                });
+                const device = await navigator.bluetooth.requestDevice({ filters: [{ services: ['000018f0-0000-1000-8000-00805f9b34fb'] }] });
                 const server = await device.gatt.connect();
                 return device;
-            } catch (error) {
-                console.error(error);
-                return null;
-            }
+            } catch (error) { console.error(error); return null; }
         };
 
         const printReceipt = async (receipt, device, settings = DEFAULT_SETTINGS) => {
-            if (!device || !device.gatt.connected) {
-                device = await connectBluetooth();
-                if (!device) return false;
-            }
-
+            if (!device || !device.gatt.connected) { device = await connectBluetooth(); if (!device) return false; }
             try {
                 const server = await device.gatt.connect();
                 const service = await server.getPrimaryService('000018f0-0000-1000-8000-00805f9b34fb');
                 const characteristic = await service.getCharacteristic('00002af1-0000-1000-8000-00805f9b34fb');
-
                 const encoder = new ThermalPrinterEncoder();
-                encoder.init()
-                    .alignCenter().bold(true).text(settings.storeName || APP_NAME).newline()
-                    .bold(false).text(settings.storeAddress || "Indonesia").newline();
-
-                // HEADER TAMBAHAN (Flexible Array)
-                // Support legacy single header or new array
+                encoder.init().alignCenter().bold(true).text(settings.storeName || APP_NAME).newline().bold(false).text(settings.storeAddress || "Indonesia").newline();
                 const headers = settings.additionalHeaders || [];
-                // If legacy storeHeader3 exists and not in array, add it (temporary fallback)
-                if (settings.storeHeader3 && (!headers.length)) {
-                    encoder.text(settings.storeHeader3).newline();
-                }
-                
-                // Print all dynamic headers
-                headers.forEach(h => {
-                    if(h && h.trim()) encoder.text(h).newline();
-                });
-
-                encoder.line()
-                    .alignLeft().text(`Tgl: ${new Date(receipt.date.seconds ? receipt.date.toDate() : receipt.date).toLocaleString('id-ID')}`).newline().line();
-                
+                if (settings.storeHeader3 && (!headers.length)) { encoder.text(settings.storeHeader3).newline(); }
+                headers.forEach(h => { if(h && h.trim()) encoder.text(h).newline(); });
+                encoder.line().alignLeft().text(`Tgl: ${new Date(receipt.date.seconds ? receipt.date.toDate() : receipt.date).toLocaleString('id-ID')}`).newline().line();
                 receipt.items.forEach(item => {
-                    const originalQty = item.cartQty;
-                    const returnedQty = item.returnedQty || 0;
-                    const validQty = originalQty - returnedQty;
-
+                    const validQty = item.cartQty - (item.returnedQty || 0);
                     if (validQty > 0) {
                         encoder.text(item.name).newline();
                         const qtyPrice = `${validQty} x ${formatRupiah(item.price).replace('Rp', '')}`;
@@ -366,112 +405,34 @@
                         encoder.text(qtyPrice + " ".repeat(Math.max(1, spaces)) + subTotal).newline();
                     }
                 });
-
-                // Recalculate totals for receipt based on valid items
                 const validTotal = receipt.items.reduce((acc, item) => acc + (item.price * (item.cartQty - (item.returnedQty || 0))), 0);
-
                 encoder.line();
-                
-                // FUNCTION TO PRINT ROW WITH LABEL AND VALUE ALIGNED RIGHT
-                const printRow = (label, value) => {
-                     const valStr = formatRupiah(value).replace('Rp', '');
-                     const spaces = 32 - label.length - valStr.length;
-                     encoder.text(label + " ".repeat(Math.max(1, spaces)) + valStr).newline();
-                };
-
-                encoder.bold(true);
-                printRow("TOTAL", validTotal);
-                encoder.bold(false);
-                
-                // PAYMENT DETAILS (Tunai & Kembali)
-                if (receipt.pay !== undefined && receipt.change !== undefined) {
-                    printRow("TUNAI", receipt.pay);
-                    printRow("KEMBALI", receipt.change);
-                }
-
-                encoder.feed(2) 
-                    .alignCenter()
-                    .bold(false);
-
-                // FOOTER LOGIC - Split by newline to ensure it prints correctly
+                const printRow = (label, value) => { const valStr = formatRupiah(value).replace('Rp', ''); const spaces = 32 - label.length - valStr.length; encoder.text(label + " ".repeat(Math.max(1, spaces)) + valStr).newline(); };
+                encoder.bold(true); printRow("TOTAL", validTotal); encoder.bold(false);
+                if (receipt.pay !== undefined && receipt.change !== undefined) { printRow("TUNAI", receipt.pay); printRow("KEMBALI", receipt.change); }
+                encoder.feed(2).alignCenter().bold(false);
                 const footerText = settings.receiptFooter || "Terima Kasih\nBarang tidak dapat ditukar";
                 const footerLines = footerText.split('\n');
-                
-                footerLines.forEach(line => {
-                    if(line && line.trim() !== "") {
-                        encoder.text(line.trim()).newline();
-                    }
-                });
-
-                // Status Retur
-                if (receipt.status === 'returned' || receipt.status === 'partial') {
-                     encoder.text(receipt.status === 'returned' ? "RETUR FULL" : "ADA RETUR SEBAGIAN").newline();
-                }
-
-                // FINAL FEED EXACTLY 3 LINES
-                encoder.feed(3); 
-
-                // --- CHUNKED SENDING ---
+                footerLines.forEach(line => { if(line && line.trim() !== "") { encoder.text(line.trim()).newline(); } });
+                if (receipt.status === 'returned' || receipt.status === 'partial') { encoder.text(receipt.status === 'returned' ? "RETUR FULL" : "ADA RETUR SEBAGIAN").newline(); }
+                encoder.feed(3);
                 const encodedData = encoder.encode();
                 const MAX_CHUNK_SIZE = 50; 
-                
-                for (let i = 0; i < encodedData.length; i += MAX_CHUNK_SIZE) {
-                    const chunk = encodedData.slice(i, i + MAX_CHUNK_SIZE);
-                    await characteristic.writeValue(chunk);
-                    await new Promise(r => setTimeout(r, 40)); 
-                }
-
+                for (let i = 0; i < encodedData.length; i += MAX_CHUNK_SIZE) { const chunk = encodedData.slice(i, i + MAX_CHUNK_SIZE); await characteristic.writeValue(chunk); await new Promise(r => setTimeout(r, 40)); }
                 return true;
-            } catch (error) {
-                console.error("Print Error", error);
-                return false;
-            }
+            } catch (error) { console.error("Print Error", error); return false; }
         };
 
         // --- SETTINGS COMPONENT ---
         const SettingsView = ({ settings, onSave, loading }) => {
             const [localSettings, setLocalSettings] = useState(settings);
-            // Initialize additionalHeaders with legacy storeHeader3 if exists and array is empty
-            const [headers, setHeaders] = useState(() => {
-                if (settings.additionalHeaders && settings.additionalHeaders.length > 0) {
-                    return settings.additionalHeaders;
-                }
-                return settings.storeHeader3 ? [settings.storeHeader3] : [];
-            });
-
-            useEffect(() => {
-                setLocalSettings(settings);
-                if (settings.additionalHeaders && settings.additionalHeaders.length > 0) {
-                     setHeaders(settings.additionalHeaders);
-                }
-            }, [settings]);
-
-            const handleChange = (key, value) => {
-                setLocalSettings(prev => ({ ...prev, [key]: value }));
-            };
-
-            const handleHeaderChange = (idx, val) => {
-                const newHeaders = [...headers];
-                newHeaders[idx] = val;
-                setHeaders(newHeaders);
-                handleChange('additionalHeaders', newHeaders);
-            };
-
-            const addHeader = () => {
-                const newHeaders = [...headers, ""];
-                setHeaders(newHeaders);
-                handleChange('additionalHeaders', newHeaders);
-            };
-
-            const removeHeader = (idx) => {
-                const newHeaders = headers.filter((_, i) => i !== idx);
-                setHeaders(newHeaders);
-                handleChange('additionalHeaders', newHeaders);
-            };
-
-            const handleSave = () => {
-                onSave({ ...localSettings, additionalHeaders: headers });
-            };
+            const [headers, setHeaders] = useState(() => settings.additionalHeaders && settings.additionalHeaders.length > 0 ? settings.additionalHeaders : (settings.storeHeader3 ? [settings.storeHeader3] : []));
+            useEffect(() => { setLocalSettings(settings); if (settings.additionalHeaders && settings.additionalHeaders.length > 0) { setHeaders(settings.additionalHeaders); } }, [settings]);
+            const handleChange = (key, value) => { setLocalSettings(prev => ({ ...prev, [key]: value })); };
+            const handleHeaderChange = (idx, val) => { const newHeaders = [...headers]; newHeaders[idx] = val; setHeaders(newHeaders); handleChange('additionalHeaders', newHeaders); };
+            const addHeader = () => { const newHeaders = [...headers, ""]; setHeaders(newHeaders); handleChange('additionalHeaders', newHeaders); };
+            const removeHeader = (idx) => { const newHeaders = headers.filter((_, i) => i !== idx); setHeaders(newHeaders); handleChange('additionalHeaders', newHeaders); };
+            const handleSave = () => { onSave({ ...localSettings, additionalHeaders: headers }); };
 
             return (
                  <div className="fade-in max-w-2xl mx-auto w-full pt-4 md:pt-10 pb-20">
@@ -480,339 +441,126 @@
                             <div className="w-12 h-12 bg-slate-800 text-white rounded-2xl flex items-center justify-center text-xl shadow-sm"><Icon name="gears" /></div>
                             <div><h2 className="text-xl font-bold text-slate-800">Pengaturan Aplikasi</h2><p className="text-xs text-slate-400">Atur preferensi sistem & printer</p></div>
                         </header>
-
                         <div className="space-y-6">
-                            {/* SECTION 1: STOCK SETTINGS */}
                             <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50">
                                 <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Icon name="boxes-stacked" className="text-sky-600" /> Pengaturan Stok</h3>
                                 <div className="space-y-3">
                                     <div>
                                         <label className="text-xs font-bold text-slate-500 block mb-1">Batas Stok Menipis (Global)</label>
                                         <div className="flex items-center gap-3">
-                                            <input 
-                                                type="number" 
-                                                value={localSettings.lowStockThreshold} 
-                                                onChange={(e) => handleChange('lowStockThreshold', parseInt(e.target.value) || 0)}
-                                                className="w-24 p-2 rounded-lg border border-slate-300 focus:border-sky-500 outline-none text-center font-bold"
-                                            />
+                                            <input type="number" value={localSettings.lowStockThreshold} onChange={(e) => handleChange('lowStockThreshold', parseInt(e.target.value) || 0)} className="w-24 p-2 rounded-lg border border-slate-300 focus:border-sky-500 outline-none text-center font-bold" />
                                             <span className="text-xs text-slate-400">Unit (Default)</span>
                                         </div>
-                                        <p className="text-[10px] text-slate-400 mt-1">Jika barang memiliki pengaturan "Minimum Stok" sendiri, angka ini akan diabaikan untuk barang tersebut.</p>
                                     </div>
                                 </div>
                             </div>
-
-                            {/* SECTION 2: RECEIPT SETTINGS */}
                             <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50">
                                 <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Icon name="print" className="text-sky-600" /> Format Cetak Struk</h3>
                                 <div className="space-y-3">
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500 block mb-1">Nama Toko (Header 1)</label>
-                                        <input 
-                                            type="text" 
-                                            value={localSettings.storeName} 
-                                            onChange={(e) => handleChange('storeName', e.target.value)}
-                                            className="w-full p-2.5 rounded-lg border border-slate-300 focus:border-sky-500 outline-none text-sm"
-                                            placeholder="Contoh: Toko Husna"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500 block mb-1">Alamat/Info (Header 2)</label>
-                                        <input 
-                                            type="text" 
-                                            value={localSettings.storeAddress} 
-                                            onChange={(e) => handleChange('storeAddress', e.target.value)}
-                                            className="w-full p-2.5 rounded-lg border border-slate-300 focus:border-sky-500 outline-none text-sm"
-                                            placeholder="Contoh: Jl. Raya No. 1"
-                                        />
-                                    </div>
-
-                                    {/* DYNAMIC HEADERS */}
+                                    <div><label className="text-xs font-bold text-slate-500 block mb-1">Nama Toko (Header 1)</label><input type="text" value={localSettings.storeName} onChange={(e) => handleChange('storeName', e.target.value)} className="w-full p-2.5 rounded-lg border border-slate-300 focus:border-sky-500 outline-none text-sm" placeholder="Contoh: Toko Husna" /></div>
+                                    <div><label className="text-xs font-bold text-slate-500 block mb-1">Alamat/Info (Header 2)</label><input type="text" value={localSettings.storeAddress} onChange={(e) => handleChange('storeAddress', e.target.value)} className="w-full p-2.5 rounded-lg border border-slate-300 focus:border-sky-500 outline-none text-sm" placeholder="Contoh: Jl. Raya No. 1" /></div>
                                     <div className="bg-slate-100 p-3 rounded-xl border border-slate-200">
-                                        <div className="flex justify-between items-center mb-2">
-                                            <label className="text-xs font-bold text-slate-500">Baris Header Tambahan</label>
-                                            <button 
-                                                onClick={addHeader} 
-                                                className="text-[10px] font-bold text-sky-600 hover:text-sky-700 bg-sky-50 px-2 py-1 rounded border border-sky-100 flex items-center gap-1"
-                                            >
-                                                <Icon name="plus" /> Tambah Baris
-                                            </button>
-                                        </div>
-                                        <div className="space-y-2">
-                                            {headers.length === 0 && <p className="text-[10px] text-slate-400 italic">Belum ada header tambahan.</p>}
-                                            {headers.map((h, idx) => (
-                                                <div key={idx} className="flex gap-2">
-                                                    <input 
-                                                        type="text" 
-                                                        value={h} 
-                                                        onChange={(e) => handleHeaderChange(idx, e.target.value)}
-                                                        className="flex-1 p-2 rounded-lg border border-slate-300 focus:border-sky-500 outline-none text-sm"
-                                                        placeholder={`Info Tambahan ${idx + 1}`}
-                                                    />
-                                                    <button onClick={() => removeHeader(idx)} className="w-9 bg-red-50 text-red-500 rounded-lg border border-red-100 hover:bg-red-100 flex items-center justify-center"><Icon name="trash" /></button>
-                                                </div>
-                                            ))}
-                                        </div>
+                                        <div className="flex justify-between items-center mb-2"><label className="text-xs font-bold text-slate-500">Baris Header Tambahan</label><button onClick={addHeader} className="text-[10px] font-bold text-sky-600 hover:text-sky-700 bg-sky-50 px-2 py-1 rounded border border-sky-100 flex items-center gap-1"><Icon name="plus" /> Tambah Baris</button></div>
+                                        <div className="space-y-2">{headers.length === 0 && <p className="text-[10px] text-slate-400 italic">Belum ada header tambahan.</p>}{headers.map((h, idx) => (<div key={idx} className="flex gap-2"><input type="text" value={h} onChange={(e) => handleHeaderChange(idx, e.target.value)} className="flex-1 p-2 rounded-lg border border-slate-300 focus:border-sky-500 outline-none text-sm" placeholder={`Info Tambahan ${idx + 1}`} /><button onClick={() => removeHeader(idx)} className="w-9 bg-red-50 text-red-500 rounded-lg border border-red-100 hover:bg-red-100 flex items-center justify-center"><Icon name="trash" /></button></div>))}</div>
                                     </div>
-
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500 block mb-1">Footer (Pesan Bawah)</label>
-                                        <textarea 
-                                            value={localSettings.receiptFooter} 
-                                            onChange={(e) => handleChange('receiptFooter', e.target.value)}
-                                            className="w-full p-2.5 rounded-lg border border-slate-300 focus:border-sky-500 outline-none text-sm h-20"
-                                            placeholder="Pesan di bagian bawah struk..."
-                                        ></textarea>
-                                    </div>
+                                    <div><label className="text-xs font-bold text-slate-500 block mb-1">Footer (Pesan Bawah)</label><textarea value={localSettings.receiptFooter} onChange={(e) => handleChange('receiptFooter', e.target.value)} className="w-full p-2.5 rounded-lg border border-slate-300 focus:border-sky-500 outline-none text-sm h-20" placeholder="Pesan di bagian bawah struk..."></textarea></div>
                                 </div>
                             </div>
-
-                            {/* SECTION 3: WHATSAPP SETTINGS */}
-                            <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50">
-                                <h3 className="font-bold text-slate-700 mb-3 flex items-center gap-2"><Icon name="whatsapp" type="brands" className="text-green-600" /> Template WhatsApp</h3>
-                                <div className="space-y-3">
-                                    <div>
-                                        <label className="text-xs font-bold text-slate-500 block mb-1">Template Pesan</label>
-                                        <textarea 
-                                            value={localSettings.waTemplate} 
-                                            onChange={(e) => handleChange('waTemplate', e.target.value)}
-                                            className="w-full p-2.5 rounded-lg border border-slate-300 focus:border-sky-500 outline-none text-sm font-mono h-32"
-                                            placeholder="Ketik template pesan..."
-                                        ></textarea>
-                                        <div className="flex gap-2 mt-2 flex-wrap">
-                                            {['[STORE_NAME]', '[DATE]', '[TOTAL]', '[ITEMS]'].map(tag => (
-                                                <button key={tag} onClick={() => handleChange('waTemplate', localSettings.waTemplate + tag)} className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-bold text-slate-600 hover:bg-sky-50">{tag}</button>
-                                            ))}
-                                        </div>
-                                        <p className="text-[10px] text-slate-400 mt-1">Gunakan tag di atas untuk memasukkan data dinamis.</p>
-                                    </div>
-                                </div>
+                            
+                            {/* NOTE: Template WA lama dihapus, sekarang otomatis menggunakan format Struk Digital */}
+                            <div className="p-4 rounded-2xl border border-green-200 bg-green-50">
+                                <h3 className="font-bold text-green-800 mb-2 flex items-center gap-2"><Icon name="whatsapp" type="brands" /> Format WhatsApp</h3>
+                                <p className="text-xs text-green-700">Aplikasi sekarang menggunakan format <b>Struk Digital Otomatis</b> untuk WhatsApp agar tampilan rapi (center/rata tengah) seperti struk asli. Nama Toko, Header, dan Footer akan diambil dari pengaturan di atas.</p>
                             </div>
 
-                            <button onClick={handleSave} disabled={loading} className="w-full py-4 bg-slate-800 text-white rounded-xl font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">
-                                {loading ? <div className="typing-dot bg-white"></div> : <Icon name="floppy-disk" />} Simpan Pengaturan
-                            </button>
+                            <button onClick={handleSave} disabled={loading} className="w-full py-4 bg-slate-800 text-white rounded-xl font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">{loading ? <div className="typing-dot bg-white"></div> : <Icon name="floppy-disk" />} Simpan Pengaturan</button>
                         </div>
                     </div>
                  </div>
             );
         };
 
-        // --- CASHIER COMPONENT (Modified to use Settings) ---
+        // --- CASHIER COMPONENT ---
         const CashierView = ({ items, user, showToast, settings }) => {
             const [isSessionActive, setIsSessionActive] = useState(false);
             const [search, setSearch] = useState('');
             const [cart, setCart] = useState([]);
             const [paymentAmount, setPaymentAmount] = useState('');
-            
-            // Checkout & Success Logic
             const [checkoutModal, setCheckoutModal] = useState(false);
             const [isProcessing, setIsProcessing] = useState(false);
             const [paymentSuccess, setPaymentSuccess] = useState(false);
             const [receiptData, setReceiptData] = useState(null);
-
-            // Cancel Confirmation
             const [cancelModal, setCancelModal] = useState(false);
-
-            // Bluetooth State (Local)
             const [btDevice, setBtDevice] = useState(null);
-            
-            // Pending Transaction State (Persistent via LocalStorage)
-            const [pendingCarts, setPendingCarts] = useState(() => {
-                const saved = localStorage.getItem('husna_pending_carts');
-                return saved ? JSON.parse(saved) : [];
-            });
+            const [pendingCarts, setPendingCarts] = useState(() => { const saved = localStorage.getItem('husna_pending_carts'); return saved ? JSON.parse(saved) : []; });
 
-            useEffect(() => {
-                localStorage.setItem('husna_pending_carts', JSON.stringify(pendingCarts));
-            }, [pendingCarts]);
+            useEffect(() => { localStorage.setItem('husna_pending_carts', JSON.stringify(pendingCarts)); }, [pendingCarts]);
 
-            // Filter items for cashier search
             const fuse = useMemo(() => new Fuse(items, { keys: ['name', 'rack'], threshold: 0.3 }), [items]);
-            
-            const filteredItems = useMemo(() => {
-                if (!search) return []; 
-                return fuse.search(search).map(r => r.item).slice(0, 30);
-            }, [items, search, fuse]);
+            const filteredItems = useMemo(() => { if (!search) return []; return fuse.search(search).map(r => r.item).slice(0, 30); }, [items, search, fuse]);
 
             const addToCart = (item) => {
-                if (safeNumber(item.qty) <= 0) {
-                    showToast("Stok Habis!", "error");
-                    return;
-                }
+                if (safeNumber(item.qty) <= 0) { showToast("Stok Habis!", "error"); return; }
                 setCart(prev => {
                     const existing = prev.find(c => c.id === item.id);
-                    if (existing) {
-                        if (existing.cartQty >= item.qty) {
-                            showToast("Stok tidak cukup!", "error");
-                            return prev;
-                        }
-                        return prev.map(c => c.id === item.id ? { ...c, cartQty: c.cartQty + 1 } : c);
-                    }
+                    if (existing) { if (existing.cartQty >= item.qty) { showToast("Stok tidak cukup!", "error"); return prev; } return prev.map(c => c.id === item.id ? { ...c, cartQty: c.cartQty + 1 } : c); }
                     return [...prev, { ...item, cartQty: 1 }];
                 });
             };
-
             const removeFromCart = (id) => setCart(prev => prev.filter(c => c.id !== id));
-
             const updateQty = (id, delta) => {
                 setCart(prev => prev.map(c => {
-                    if (c.id === id) {
-                        const newQty = c.cartQty + delta;
-                        if (newQty > c.qty) { showToast("Stok mentok!", "error"); return c; }
-                        if (newQty < 1) return c;
-                        return { ...c, cartQty: newQty };
-                    }
+                    if (c.id === id) { const newQty = c.cartQty + delta; if (newQty > c.qty) { showToast("Stok mentok!", "error"); return c; } if (newQty < 1) return c; return { ...c, cartQty: newQty }; }
                     return c;
                 }));
             };
-
             const grandTotal = cart.reduce((acc, item) => acc + (safeNumber(item.price) * item.cartQty), 0);
             const change = safeNumber(paymentAmount) - grandTotal;
-
-            // SMART MONEY SUGGESTIONS
             const getPaymentSuggestions = useMemo(() => {
-                const suggestions = new Set();
-                suggestions.add(grandTotal); 
-                const next1k = Math.ceil(grandTotal / 1000) * 1000;
-                if (next1k > grandTotal) suggestions.add(next1k);
-                const next2k = Math.ceil(grandTotal / 2000) * 2000;
-                if (next2k > grandTotal) suggestions.add(next2k);
-                const next5k = Math.ceil(grandTotal / 5000) * 5000;
-                if (next5k > grandTotal) suggestions.add(next5k);
-                const next10k = Math.ceil(grandTotal / 10000) * 10000;
-                if (next10k > grandTotal) suggestions.add(next10k);
-                 const next50k = Math.ceil(grandTotal / 50000) * 50000;
-                if (next50k > grandTotal) suggestions.add(next50k);
-                const bills = [2000, 5000, 10000, 20000, 50000, 100000];
-                bills.forEach(bill => {
-                    if (bill > grandTotal) suggestions.add(bill);
-                });
+                const suggestions = new Set(); suggestions.add(grandTotal); 
+                [1000, 2000, 5000, 10000, 20000, 50000, 100000].forEach(denom => { const nextVal = Math.ceil(grandTotal / denom) * denom; if (nextVal > grandTotal) suggestions.add(nextVal); });
+                [2000, 5000, 10000, 20000, 50000, 100000].forEach(bill => { if (bill > grandTotal) suggestions.add(bill); });
                 return Array.from(suggestions).sort((a,b) => a-b).slice(0, 6);
             }, [grandTotal]);
 
-            const handleBack = () => {
-                if (cart.length > 0) {
-                    const newPending = {
-                        id: Date.now(),
-                        date: new Date().toISOString(),
-                        items: cart,
-                        total: grandTotal
-                    };
-                    setPendingCarts(prev => [newPending, ...prev]);
-                    showToast("Transaksi disimpan sementara", "success");
-                }
-                setIsSessionActive(false);
-                setSearch('');
-                setCart([]);
-            };
-
-            const confirmCancel = () => {
-                setCart([]);
-                setPaymentAmount('');
-                setSearch('');
-                setCancelModal(false);
-                showToast("Transaksi dibatalkan & keranjang dikosongkan", "info");
-            };
-
-            const resumeTransaction = (pendingItem) => {
-                setCart(pendingItem.items);
-                setPendingCarts(prev => prev.filter(p => p.id !== pendingItem.id));
-                setIsSessionActive(true);
-            };
+            const handleBack = () => { if (cart.length > 0) { const newPending = { id: Date.now(), date: new Date().toISOString(), items: cart, total: grandTotal }; setPendingCarts(prev => [newPending, ...prev]); showToast("Transaksi disimpan sementara", "success"); } setIsSessionActive(false); setSearch(''); setCart([]); };
+            const confirmCancel = () => { setCart([]); setPaymentAmount(''); setSearch(''); setCancelModal(false); showToast("Transaksi dibatalkan & keranjang dikosongkan", "info"); };
+            const resumeTransaction = (pendingItem) => { setCart(pendingItem.items); setPendingCarts(prev => prev.filter(p => p.id !== pendingItem.id)); setIsSessionActive(true); };
 
             const handleCheckout = async () => {
                 if (!user) return;
                 if (cart.length === 0) return;
                 if (safeNumber(paymentAmount) < grandTotal) { showToast("Uang kurang!", "error"); return; }
-                
                 setIsProcessing(true);
                 try {
                     const batch = window.writeBatch(window.db);
-                    
-                    // 1. Deduct stock from inventory
-                    cart.forEach(item => {
-                        const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id);
-                        batch.update(docRef, { 
-                            qty: window.increment(-item.cartQty), 
-                            updatedAt: window.serverTimestamp() 
-                        });
-                    });
-
-                    // 2. Save Transaction History
+                    cart.forEach(item => { const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id); batch.update(docRef, { qty: window.increment(-item.cartQty), updatedAt: window.serverTimestamp() }); });
                     const transactionRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions');
-                    const newTransaction = {
-                        date: window.serverTimestamp(),
-                        items: cart,
-                        total: grandTotal,
-                        pay: safeNumber(paymentAmount),
-                        change: change,
-                        status: 'success', // success, returned, partial
-                        cashierName: user.email || 'Admin'
-                    };
-                    batch.set(window.doc(transactionRef), newTransaction);
-
+                    const newTransaction = { date: window.serverTimestamp(), items: cart, total: grandTotal, pay: safeNumber(paymentAmount), change: change, status: 'success', cashierName: user.email || 'Admin' };
+                    const docRef = window.doc(transactionRef);
+                    batch.set(docRef, newTransaction);
                     await batch.commit();
-
-                    setReceiptData({ ...newTransaction, date: new Date() }); // Local date for display
-                    setPaymentSuccess(true);
-                    showToast("Transaksi Berhasil!");
-                } catch (error) {
-                    console.error(error);
-                    showToast("Transaksi Gagal", "error");
-                } finally {
-                    setIsProcessing(false);
-                }
+                    setReceiptData({ ...newTransaction, id: docRef.id, date: new Date() }); 
+                    setPaymentSuccess(true); showToast("Transaksi Berhasil!");
+                } catch (error) { console.error(error); showToast("Transaksi Gagal", "error"); } finally { setIsProcessing(false); }
             };
 
-            const handleCloseSuccess = () => {
-                setCheckoutModal(false);
-                setPaymentSuccess(false);
-                setReceiptData(null);
-                setCart([]);
-                setPaymentAmount('');
-                setIsSessionActive(false); 
-            };
+            const handleCloseSuccess = () => { setCheckoutModal(false); setPaymentSuccess(false); setReceiptData(null); setCart([]); setPaymentAmount(''); setIsSessionActive(false); };
+            const handlePrintAction = async () => { const connected = await printReceipt(receiptData, btDevice, settings); if (connected === true || typeof connected === 'object') { if (typeof connected === 'object') setBtDevice(connected); showToast("Mencetak..."); } else { showToast("Gagal Cetak / Bluetooth Mati", "error"); } };
 
-            const handlePrintAction = async () => {
-                const connected = await printReceipt(receiptData, btDevice, settings);
-                if (connected === true || typeof connected === 'object') {
-                    if (typeof connected === 'object') setBtDevice(connected); // update if new device
-                    showToast("Mencetak...");
-                } else {
-                    showToast("Gagal Cetak / Bluetooth Mati", "error");
-                }
-            };
-
+            // --- FUNGSI WA DIPERBARUI ---
             const handleWA = () => {
-                let text = settings.waTemplate || DEFAULT_SETTINGS.waTemplate;
-                
-                // Replace Placeholders - UPDATE: Sertakan Harga Satuan
-                const itemsList = receiptData.items.map(i => `${i.name} (${i.cartQty}x @ ${formatRupiah(i.price)})`).join('\n');
-                const dateStr = new Date().toLocaleDateString('id-ID');
-                
-                text = text.replace('[STORE_NAME]', settings.storeName || APP_NAME)
-                           .replace('[DATE]', dateStr)
-                           .replace('[TOTAL]', formatRupiah(receiptData.total))
-                           .replace('[ITEMS]', itemsList);
-
-                window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+                if(!receiptData) return;
+                const text = generateWAReceipt(receiptData, settings);
+                const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+                window.open(url, '_blank');
             };
 
-            // START SCREEN & ACTIVE CASHIER SCREEN (SAME AS BEFORE)
             if (!isSessionActive) {
                 return (
                     <div className="fade-in h-full overflow-y-auto pb-20 md:pb-0 flex flex-col items-center justify-center relative z-10">
                         <div className="w-full max-w-sm px-4 flex flex-col items-center">
-                             {pendingCarts.length > 0 && (
-                                <div className="w-full mb-8 fade-in">
-                                    <div className="flex items-center justify-between mb-3 px-1">
-                                        <div className="flex items-center gap-2"><Icon name="clock-rotate-left" className="text-sky-600" /><h3 className="font-bold text-slate-700 text-sm">Lanjutkan Transaksi</h3></div>
-                                        <span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-bold">{pendingCarts.length} tertunda</span>
-                                    </div>
-                                    <div className="space-y-3">{pendingCarts.map(pending => (<button key={pending.id} onClick={() => resumeTransaction(pending)} className="w-full bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-sky-300 transition-all flex items-center justify-between group relative overflow-hidden"><div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-sky-400 to-sky-600"></div><div className="text-left pl-2"><p className="font-black text-slate-800 text-lg">{formatRupiah(pending.total)}</p><p className="text-xs text-slate-500 font-medium mt-0.5">{pending.items.length} Barang • {new Date(pending.date).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}</p></div><div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-sky-50 group-hover:text-sky-600 transition-colors"><Icon name="chevron-right" /></div></button>))}</div>
-                                </div>
-                            )}
+                             {pendingCarts.length > 0 && (<div className="w-full mb-8 fade-in"><div className="flex items-center justify-between mb-3 px-1"><div className="flex items-center gap-2"><Icon name="clock-rotate-left" className="text-sky-600" /><h3 className="font-bold text-slate-700 text-sm">Lanjutkan Transaksi</h3></div><span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-bold">{pendingCarts.length} tertunda</span></div><div className="space-y-3">{pendingCarts.map(pending => (<button key={pending.id} onClick={() => resumeTransaction(pending)} className="w-full bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-sky-300 transition-all flex items-center justify-between group relative overflow-hidden"><div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-sky-400 to-sky-600"></div><div className="text-left pl-2"><p className="font-black text-slate-800 text-lg">{formatRupiah(pending.total)}</p><p className="text-xs text-slate-500 font-medium mt-0.5">{pending.items.length} Barang • {new Date(pending.date).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}</p></div><div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-sky-50 group-hover:text-sky-600 transition-colors"><Icon name="chevron-right" /></div></button>))}</div></div>)}
                             <button onClick={() => setIsSessionActive(true)} className="group relative w-full aspect-square md:aspect-video rounded-3xl border-4 border-dashed border-sky-300 bg-sky-50/50 hover:bg-sky-100 hover:border-sky-400 transition-all flex flex-col items-center justify-center gap-4 active:scale-95"><div className="w-20 h-20 rounded-full bg-white text-sky-500 shadow-soft flex items-center justify-center text-4xl group-hover:scale-110 transition-transform"><Icon name="cart-plus" /></div><div className="text-center"><h2 className="text-2xl font-black text-slate-700 group-hover:text-sky-700">+ Penjualan Baru</h2><p className="text-sm text-slate-500 font-medium mt-1">Klik untuk mulai transaksi kasir</p></div></button>
                         </div>
                     </div>
@@ -824,9 +572,7 @@
                     <div className="flex-1 flex flex-col h-full min-h-0">
                         <div className="flex items-center gap-3 mb-4"><button onClick={handleBack} className="w-10 h-10 rounded-xl bg-white text-slate-400 hover:text-sky-600 hover:border-sky-300 border border-slate-200 flex items-center justify-center shadow-sm transition-colors" title="Kembali & Simpan Sementara"><Icon name="arrow-left" /></button><div className="relative group flex-1"><input autoFocus type="text" placeholder="Ketik nama barang disini..." className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-white border border-slate-200 shadow-soft focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition-all font-bold text-lg text-slate-700 placeholder:font-normal placeholder:text-slate-400" value={search} onChange={e => setSearch(e.target.value)} /><Icon name="magnifying-glass" className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl group-focus-within:text-sky-500" /></div></div>
                         <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 pb-2">
-                            {search === '' ? (<div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60"><Icon name="magnifying-glass" className="text-6xl mb-4 text-slate-300" /><p className="font-semibold text-lg">Mulai ketik untuk mencari barang...</p><p className="text-xs mt-1">Hasil pencarian akan muncul di sini</p></div>) : (
-                                <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">{filteredItems.map(item => { const inCart = cart.find(c => c.id === item.id); const currentStock = safeNumber(item.qty) - (inCart ? inCart.cartQty : 0); const isOOS = currentStock <= 0; return (<button key={item.id} onClick={() => addToCart(item)} disabled={isOOS} className={`text-left p-3 rounded-xl border transition-all relative overflow-hidden group ${isOOS ? 'bg-slate-100 border-slate-200 opacity-70' : 'bg-white border-slate-200 hover:border-sky-300 hover:shadow-md'}`}>{isNewItem(item.createdAt) && !isOOS && <span className="absolute top-0 right-0 bg-rose-500 text-white text-[8px] font-bold px-1.5 rounded-bl-lg">NEW</span>}<h4 className="font-bold text-slate-800 text-xs line-clamp-2 h-8 leading-snug">{item.name}</h4><div className="mt-2 flex justify-between items-end"><div><p className="text-[10px] text-slate-500 font-medium">{item.unit}</p><p className="text-xs font-bold text-sky-600">{formatRupiah(item.price)}</p></div><div className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${isOOS ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>Stok: {currentStock}</div></div>{!isOOS && <div className="absolute inset-0 bg-sky-500/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Icon name="plus" className="text-sky-600 text-xl" /></div>}</button>)})}{filteredItems.length === 0 && <div className="col-span-full py-10 text-center text-slate-400 text-sm">Barang tidak ditemukan</div>}</div>
-                            )}
+                            {search === '' ? (<div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60"><Icon name="magnifying-glass" className="text-6xl mb-4 text-slate-300" /><p className="font-semibold text-lg">Mulai ketik untuk mencari barang...</p><p className="text-xs mt-1">Hasil pencarian akan muncul di sini</p></div>) : (<div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">{filteredItems.map(item => { const inCart = cart.find(c => c.id === item.id); const currentStock = safeNumber(item.qty) - (inCart ? inCart.cartQty : 0); const isOOS = currentStock <= 0; return (<button key={item.id} onClick={() => addToCart(item)} disabled={isOOS} className={`text-left p-3 rounded-xl border transition-all relative overflow-hidden group ${isOOS ? 'bg-slate-100 border-slate-200 opacity-70' : 'bg-white border-slate-200 hover:border-sky-300 hover:shadow-md'}`}>{isNewItem(item.createdAt) && !isOOS && <span className="absolute top-0 right-0 bg-rose-500 text-white text-[8px] font-bold px-1.5 rounded-bl-lg">NEW</span>}<h4 className="font-bold text-slate-800 text-xs line-clamp-2 h-8 leading-snug">{item.name}</h4><div className="mt-2 flex justify-between items-end"><div><p className="text-[10px] text-slate-500 font-medium">{item.unit}</p><p className="text-xs font-bold text-sky-600">{formatRupiah(item.price)}</p></div><div className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${isOOS ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>Stok: {currentStock}</div></div>{!isOOS && <div className="absolute inset-0 bg-sky-500/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Icon name="plus" className="text-sky-600 text-xl" /></div>}</button>)})}{filteredItems.length === 0 && <div className="col-span-full py-10 text-center text-slate-400 text-sm">Barang tidak ditemukan</div>}</div>)}
                         </div>
                     </div>
                     <div className="w-full md:w-80 lg:w-96 flex flex-col bg-white rounded-3xl shadow-soft border border-slate-100 h-fit md:h-full max-h-[calc(100vh-100px)]">
@@ -835,7 +581,6 @@
                         <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-3xl">
                             <div className="flex justify-between items-end mb-4"><span className="text-xs text-slate-500 font-medium">Total Tagihan</span><span className="text-xl font-black text-slate-800">{formatRupiah(grandTotal)}</span></div>
                             <button onClick={() => { setPaymentAmount(''); setCheckoutModal(true); }} disabled={cart.length === 0} className="w-full py-3.5 bg-gradient-to-r from-sky-600 to-sky-500 text-white rounded-xl font-bold shadow-lg shadow-sky-200 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-2"><Icon name="money-bill-wave" /> Bayar Sekarang</button>
-                            {/* Tombol Batalkan Transaksi */}
                             <button onClick={() => setCancelModal(true)} disabled={cart.length === 0} className="w-full mt-3 py-3 rounded-xl border border-red-200 text-red-500 font-bold hover:bg-red-50 transition-all text-sm disabled:opacity-50 disabled:border-slate-200 disabled:text-slate-400 active:scale-95">Batalkan Transaksi</button>
                         </div>
                     </div>
@@ -850,375 +595,112 @@
                                 </div>
                             ) : (
                                 <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 relative flex flex-col items-center text-center pop-in">
-                                    <div className="w-24 h-24 relative mb-4"><svg className="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52"><circle className="checkmark__circle" cx="26" cy="26" r="25" fill="none"/><path className="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/></svg></div>
+                                    <div className="w-24 h-24 relative mb-4"><svg className="checkmark" xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" viewBox="0 0 52 52"><circle className="checkmark__circle" cx="26" cy="26" r="25" fill="none"/><path className="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/></svg></div>
                                     <h2 className="text-2xl font-black text-slate-800 mb-1">Transaksi Selesai</h2><p className="text-slate-500 text-sm mb-8">Kembalian: <span className="font-bold text-slate-800">{formatRupiah(receiptData.change)}</span></p>
-                                    <div className="w-full space-y-3"><button onClick={handlePrintAction} className="w-full py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><Icon name="print" /> Cetak Bluetooth</button><button onClick={handleWA} className="w-full py-3 rounded-xl bg-[#25D366] text-white font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><Icon name="whatsapp" type="brands" /> Kirim Struk via WhatsApp</button><button onClick={handleCloseSuccess} className="w-full py-3 rounded-xl border-2 border-slate-100 text-slate-600 font-bold hover:bg-slate-50 active:scale-95 transition-all">Selesaikan Tanpa Struk</button></div>
+                                    <div className="w-full space-y-3"><button onClick={handlePrintAction} className="w-full py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><Icon name="print" /> Cetak Bluetooth</button><button onClick={handleWA} className="w-full py-3 rounded-xl bg-[#25D366] text-white font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><Icon name="whatsapp" type="brands" /> Kirim Struk Digital (WA)</button><button onClick={handleCloseSuccess} className="w-full py-3 rounded-xl border-2 border-slate-100 text-slate-600 font-bold hover:bg-slate-50 active:scale-95 transition-all">Selesaikan Tanpa Struk</button></div>
                                 </div>
                             )}
                         </div>
                     )}
-
-                    {/* Konfirmasi Batalkan Transaksi */}
-                    <ConfirmModal 
-                        isOpen={cancelModal} 
-                        title="Batalkan Transaksi?" 
-                        message="Keranjang akan dikosongkan dan semua item akan dihapus dari sesi ini." 
-                        onConfirm={confirmCancel} 
-                        onCancel={() => setCancelModal(false)} 
-                        confirmText="Ya, Batalkan"
-                        confirmColor="red"
-                    />
+                    <ConfirmModal isOpen={cancelModal} title="Batalkan Transaksi?" message="Keranjang akan dikosongkan dan semua item akan dihapus dari sesi ini." onConfirm={confirmCancel} onCancel={() => setCancelModal(false)} confirmText="Ya, Batalkan" confirmColor="red" />
                 </div>
             );
         };
 
-        // --- UPDATED: HISTORY VIEW WITH DASHBOARD & PARTIAL RETURN ---
+        // --- HISTORY VIEW WITH WA BUTTON ---
         const HistoryView = ({ user, showToast, settings }) => {
             const [transactions, setTransactions] = useState([]);
             const [loading, setLoading] = useState(true);
             const [selectedTx, setSelectedTx] = useState(null);
-            
-            // Retur State
             const [returModal, setReturModal] = useState({ show: false, tx: null, item: null, index: -1 });
             const [qtyToRetur, setQtyToRetur] = useState(1);
             const [processingRetur, setProcessingRetur] = useState(false);
-            
             const [btDevice, setBtDevice] = useState(null);
             const [selectedDate, setSelectedDate] = useState(new Date());
 
             useEffect(() => {
                 if (!user) return;
-                // Increase limit to 500 to cover more days for client-side filtering
-                const q = window.query(
-                    window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions'),
-                    window.orderBy('date', 'desc'),
-                    window.limit(500) 
-                );
-
-                const unsub = window.onSnapshot(q, (snapshot) => {
-                    setTransactions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-                    setLoading(false);
-                });
+                const q = window.query(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions'), window.orderBy('date', 'desc'), window.limit(500));
+                const unsub = window.onSnapshot(q, (snapshot) => { setTransactions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))); setLoading(false); });
                 return () => unsub();
             }, [user]);
 
-            // Date Navigation Helpers
-            const changeDate = (days) => {
-                const newDate = new Date(selectedDate);
-                newDate.setDate(selectedDate.getDate() + days);
-                setSelectedDate(newDate);
-            };
-
-            const isSameDay = (d1, d2) => {
-                return d1.getDate() === d2.getDate() &&
-                       d1.getMonth() === d2.getMonth() &&
-                       d1.getFullYear() === d2.getFullYear();
-            };
-
-            // Filter transactions for selected date
-            const dailyTransactions = useMemo(() => {
-                return transactions.filter(tx => {
-                    const txDate = tx.date.seconds ? tx.date.toDate() : new Date(tx.date);
-                    return isSameDay(txDate, selectedDate);
-                });
-            }, [transactions, selectedDate]);
-
-            // Calculate Stats for Dashboard (Including Partial Returns)
+            const changeDate = (days) => { const newDate = new Date(selectedDate); newDate.setDate(selectedDate.getDate() + days); setSelectedDate(newDate); };
+            const isSameDay = (d1, d2) => { return d1.getDate() === d2.getDate() && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear(); };
+            const dailyTransactions = useMemo(() => { return transactions.filter(tx => { const txDate = tx.date.seconds ? tx.date.toDate() : new Date(tx.date); return isSameDay(txDate, selectedDate); }); }, [transactions, selectedDate]);
             const stats = useMemo(() => {
-                let grossSales = 0; // Total nilai awal transaksi (sebelum retur)
-                let grossCount = 0;
-                let returnsValue = 0; // Total nilai barang yang diretur (partial atau full)
-                let returnTxCount = 0; // Jumlah transaksi yang ada returnya
-
+                let grossSales = 0, grossCount = 0, returnsValue = 0, returnTxCount = 0;
                 dailyTransactions.forEach(tx => {
-                    // Hitung Gross Sales (Total asli saat transaksi dibuat)
-                    const txGross = tx.items.reduce((sum, item) => sum + (item.price * item.cartQty), 0);
-                    grossSales += txGross;
-                    grossCount++;
-
-                    // Hitung Return Value (Nilai barang yang sudah diretur)
-                    let txReturnVal = 0;
-                    let hasReturn = false;
-
-                    tx.items.forEach(item => {
-                        if (item.returnedQty && item.returnedQty > 0) {
-                            txReturnVal += (item.returnedQty * item.price);
-                            hasReturn = true;
-                        } else if (tx.status === 'returned') {
-                             // Fallback untuk backward compatibility (data lama yang statusnya returned tapi tidak ada returnedQty di item)
-                             txReturnVal += (item.cartQty * item.price);
-                             hasReturn = true;
-                        }
-                    });
-
-                    returnsValue += txReturnVal;
-                    if (hasReturn) returnTxCount++;
+                    grossSales += tx.items.reduce((sum, item) => sum + (item.price * item.cartQty), 0); grossCount++;
+                    let txReturnVal = 0, hasReturn = false;
+                    tx.items.forEach(item => { if (item.returnedQty && item.returnedQty > 0) { txReturnVal += (item.returnedQty * item.price); hasReturn = true; } else if (tx.status === 'returned') { txReturnVal += (item.cartQty * item.price); hasReturn = true; } });
+                    returnsValue += txReturnVal; if (hasReturn) returnTxCount++;
                 });
-
-                const netSales = grossSales - returnsValue; // Uang yang benar-benar diterima
-                const avgSale = grossCount > 0 ? grossSales / grossCount : 0;
-
-                return {
-                    netSales,
-                    grossSales,
-                    grossCount,
-                    returnsValue,
-                    returnTxCount,
-                    avgSale
-                };
+                return { netSales: grossSales - returnsValue, grossSales, grossCount, returnsValue, returnTxCount, avgSale: grossCount > 0 ? grossSales / grossCount : 0 };
             }, [dailyTransactions]);
 
-            const openReturModal = (tx, item, index) => {
-                const alreadyReturned = item.returnedQty || 0;
-                const maxRetur = item.cartQty - alreadyReturned;
-                
-                if (maxRetur <= 0) {
-                    showToast("Barang ini sudah diretur semua", "error");
-                    return;
-                }
-
-                setReturModal({ show: true, tx, item, index, max: maxRetur });
-                setQtyToRetur(maxRetur); // Default ke max
-            };
-
+            const openReturModal = (tx, item, index) => { const maxRetur = item.cartQty - (item.returnedQty || 0); if (maxRetur <= 0) { showToast("Barang ini sudah diretur semua", "error"); return; } setReturModal({ show: true, tx, item, index, max: maxRetur }); setQtyToRetur(maxRetur); };
             const handleProcessRetur = async () => {
                 const { tx, item, index, max } = returModal;
                 if (!tx || !user) return;
-                
-                if (qtyToRetur <= 0 || qtyToRetur > max) {
-                    showToast("Jumlah retur tidak valid", "error");
-                    return;
-                }
-
                 setProcessingRetur(true);
                 try {
                     const batch = window.writeBatch(window.db);
-                    
-                    // 1. Update Inventory (Kembalikan stok)
                     const invRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id);
                     batch.update(invRef, { qty: window.increment(qtyToRetur) });
-
-                    // 2. Update Transaction Item
                     const txRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions', tx.id);
-                    
-                    // Clone items array to mutate
                     const updatedItems = [...tx.items];
-                    const currentItem = updatedItems[index];
-                    
-                    // Add/Update returnedQty
-                    currentItem.returnedQty = (currentItem.returnedQty || 0) + qtyToRetur;
-                    updatedItems[index] = currentItem;
-
-                    // Determine Status
-                    let totalItemsCount = 0;
-                    let totalReturnedCount = 0;
-                    updatedItems.forEach(i => {
-                        totalItemsCount += i.cartQty;
-                        totalReturnedCount += (i.returnedQty || 0);
-                    });
-
+                    updatedItems[index].returnedQty = (updatedItems[index].returnedQty || 0) + qtyToRetur;
+                    let totalItemsCount = 0, totalReturnedCount = 0;
+                    updatedItems.forEach(i => { totalItemsCount += i.cartQty; totalReturnedCount += (i.returnedQty || 0); });
                     let newStatus = tx.status;
-                    if (totalReturnedCount === totalItemsCount) {
-                        newStatus = 'returned'; // Full Retur
-                    } else if (totalReturnedCount > 0) {
-                        newStatus = 'partial'; // Partial Retur
-                    }
-
-                    batch.update(txRef, { 
-                        items: updatedItems,
-                        status: newStatus,
-                        returnedAt: window.serverTimestamp() // Update timestamp of last return
-                    });
-
+                    if (totalReturnedCount === totalItemsCount) newStatus = 'returned'; else if (totalReturnedCount > 0) newStatus = 'partial';
+                    batch.update(txRef, { items: updatedItems, status: newStatus, returnedAt: window.serverTimestamp() });
                     await batch.commit();
                     showToast(`Berhasil meretur ${qtyToRetur} ${item.unit}`, "success");
-                    setReturModal({ show: false, tx: null, item: null, index: -1 });
-                    setSelectedTx(null); // Close detail to refresh
-                } catch (error) {
-                    console.error("Retur error", error);
-                    showToast("Gagal melakukan retur", "error");
-                } finally {
-                    setProcessingRetur(false);
-                }
+                    setReturModal({ show: false, tx: null, item: null, index: -1 }); setSelectedTx(null);
+                } catch (error) { console.error("Retur error", error); showToast("Gagal melakukan retur", "error"); } finally { setProcessingRetur(false); }
             };
 
-            const handlePrint = async (tx) => {
-                showToast("Menghubungkan printer...");
-                // Fetch latest settings just for printing (or pass from prop if available)
-                const connected = await printReceipt(tx, btDevice, settings); // Using default settings if not passed, but ideal to pass actual settings
-                 if (connected === true || typeof connected === 'object') {
-                    if (typeof connected === 'object') setBtDevice(connected); 
-                } else {
-                    showToast("Gagal Cetak", "error");
-                }
+            const handlePrint = async (tx) => { const connected = await printReceipt(tx, btDevice, settings); if (connected === true || typeof connected === 'object') { if (typeof connected === 'object') setBtDevice(connected); showToast("Mencetak..."); } else { showToast("Gagal Cetak", "error"); } };
+            
+            // --- WA BUTTON FOR HISTORY ---
+            const handleWAHistory = (tx) => {
+                const text = generateWAReceipt(tx, settings);
+                const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+                window.open(url, '_blank');
             };
 
             return (
                 <div className="fade-in pb-20 md:pb-0 h-full flex flex-col relative z-10">
                     <header className="mb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div>
-                            <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Riwayat Kasir</h2>
-                            <p className="text-slate-500 text-xs mt-1">Laporan harian & retur</p>
-                        </div>
-                        <div className="flex items-center gap-3 bg-white p-1 rounded-xl border border-slate-200 shadow-sm self-start md:self-auto">
-                            <button onClick={() => changeDate(-1)} className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-50 text-slate-500 transition-colors"><Icon name="chevron-left" /></button>
-                            <div className="flex items-center gap-2 px-2 text-slate-700 font-bold text-sm min-w-[120px] justify-center">
-                                <Icon name="calendar-days" className="text-sky-500" />
-                                {selectedDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-                            </div>
-                            <button onClick={() => changeDate(1)} disabled={isSameDay(selectedDate, new Date())} className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-50 text-slate-500 transition-colors disabled:opacity-30"><Icon name="chevron-right" /></button>
-                        </div>
+                        <div><h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Riwayat Kasir</h2><p className="text-slate-500 text-xs mt-1">Laporan harian & retur</p></div>
+                        <div className="flex items-center gap-3 bg-white p-1 rounded-xl border border-slate-200 shadow-sm self-start md:self-auto"><button onClick={() => changeDate(-1)} className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-50 text-slate-500 transition-colors"><Icon name="chevron-left" /></button><div className="flex items-center gap-2 px-2 text-slate-700 font-bold text-sm min-w-[120px] justify-center"><Icon name="calendar-days" className="text-sky-500" />{selectedDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</div><button onClick={() => changeDate(1)} disabled={isSameDay(selectedDate, new Date())} className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-50 text-slate-500 transition-colors disabled:opacity-30"><Icon name="chevron-right" /></button></div>
                     </header>
-
-                    {/* DASHBOARD STATS */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                        {/* Total Transaksi Kasir (Net) */}
-                        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-                            <div className="flex items-center gap-1 mb-1 border-b-2 border-dashed border-slate-200 w-fit pb-0.5">
-                                <h4 className="font-bold text-slate-800 text-sm">Total transaksi kasir</h4>
-                                <Icon name="circle-question" className="text-[10px] text-sky-500 mb-2" />
-                            </div>
-                            <div className="text-2xl font-black text-slate-800 mt-2">{formatRupiah(stats.netSales)}</div>
-                            <p className="text-xs text-slate-400 mt-1">Net setelah retur</p>
-                        </div>
-
-                        {/* Total Penjualan Kasir (Gross) */}
-                        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-                            <div className="flex items-center gap-1 mb-1 border-b-2 border-dashed border-slate-200 w-fit pb-0.5">
-                                <h4 className="font-bold text-slate-800 text-sm">Total penjualan kasir</h4>
-                                <Icon name="circle-question" className="text-[10px] text-sky-500 mb-2" />
-                            </div>
-                            <div className="text-2xl font-black text-slate-800 mt-2">{formatRupiah(stats.grossSales)}</div>
-                            <p className="text-xs text-slate-400 mt-1">Dari {stats.grossCount} transaksi</p>
-                        </div>
-
-                         {/* Total Retur */}
-                         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-                            <div className="flex items-center gap-1 mb-1 border-b-2 border-dashed border-slate-200 w-fit pb-0.5">
-                                <h4 className="font-bold text-slate-800 text-sm">Total retur kasir</h4>
-                                <Icon name="circle-question" className="text-[10px] text-sky-500 mb-2" />
-                            </div>
-                            <div className="text-2xl font-black text-red-600 mt-2">-{formatRupiah(stats.returnsValue).replace('Rp','Rp ')}</div>
-                            <p className="text-xs text-slate-400 mt-1">Dari {stats.returnTxCount} transaksi bermasalah</p>
-                        </div>
-
-                         {/* Rata-rata Penjualan */}
-                         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-                            <h4 className="font-bold text-slate-800 text-sm mb-1">Rata-rata penjualan kasir</h4>
-                            <div className="text-2xl font-black text-slate-800 mt-2">{formatRupiah(stats.avgSale)}</div>
-                        </div>
+                        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="flex items-center gap-1 mb-1 border-b-2 border-dashed border-slate-200 w-fit pb-0.5"><h4 className="font-bold text-slate-800 text-sm">Total transaksi kasir</h4><Icon name="circle-question" className="text-[10px] text-sky-500 mb-2" /></div><div className="text-2xl font-black text-slate-800 mt-2">{formatRupiah(stats.netSales)}</div><p className="text-xs text-slate-400 mt-1">Net setelah retur</p></div>
+                        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="flex items-center gap-1 mb-1 border-b-2 border-dashed border-slate-200 w-fit pb-0.5"><h4 className="font-bold text-slate-800 text-sm">Total penjualan kasir</h4><Icon name="circle-question" className="text-[10px] text-sky-500 mb-2" /></div><div className="text-2xl font-black text-slate-800 mt-2">{formatRupiah(stats.grossSales)}</div><p className="text-xs text-slate-400 mt-1">Dari {stats.grossCount} transaksi</p></div>
+                        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="flex items-center gap-1 mb-1 border-b-2 border-dashed border-slate-200 w-fit pb-0.5"><h4 className="font-bold text-slate-800 text-sm">Total retur kasir</h4><Icon name="circle-question" className="text-[10px] text-sky-500 mb-2" /></div><div className="text-2xl font-black text-red-600 mt-2">-{formatRupiah(stats.returnsValue).replace('Rp','Rp ')}</div><p className="text-xs text-slate-400 mt-1">Dari {stats.returnTxCount} transaksi bermasalah</p></div>
+                        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><h4 className="font-bold text-slate-800 text-sm mb-1">Rata-rata penjualan kasir</h4><div className="text-2xl font-black text-slate-800 mt-2">{formatRupiah(stats.avgSale)}</div></div>
                     </div>
-
                     <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1">
-                        {loading ? <div className="text-center py-10 text-slate-400"><div className="typing-dot bg-sky-500"></div> Loading...</div> : 
-                        dailyTransactions.length === 0 ? (
-                            <div className="text-center py-12 flex flex-col items-center opacity-60">
-                                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3"><Icon name="calendar-xmark" className="text-2xl text-slate-400" /></div>
-                                <p className="font-semibold text-slate-500">Tidak ada transaksi</p>
-                                <p className="text-xs text-slate-400">Pada tanggal ini</p>
-                            </div>
-                        ) :
-                        dailyTransactions.map(tx => (
-                            <div key={tx.id} onClick={() => setSelectedTx(tx)} className={`p-4 rounded-2xl border shadow-sm cursor-pointer transition-all hover:shadow-md ${tx.status === 'returned' ? 'bg-red-50 border-red-100 opacity-80' : 'bg-white border-slate-100 hover:border-sky-300'}`}>
-                                <div className="flex justify-between items-start mb-2">
-                                    <div>
-                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{new Date(tx.date.seconds ? tx.date.toDate() : tx.date).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})} WIB</p>
-                                        <h4 className={`font-black text-lg ${tx.status === 'returned' ? 'text-red-500 line-through' : 'text-slate-800'}`}>{formatRupiah(tx.total)}</h4>
-                                    </div>
-                                    {tx.status === 'returned' ? 
-                                        <span className="bg-red-100 text-red-600 text-[10px] font-bold px-2 py-1 rounded-full">BATAL</span> : 
-                                        (tx.status === 'partial' ? 
-                                            <span className="bg-amber-100 text-amber-600 text-[10px] font-bold px-2 py-1 rounded-full">SEBAGIAN</span> : 
-                                            <span className="bg-green-100 text-green-600 text-[10px] font-bold px-2 py-1 rounded-full">SUKSES</span>
-                                        )
-                                    }
-                                </div>
-                                <div className="text-xs text-slate-500 truncate">{tx.items.map(i => i.name).join(', ')}</div>
-                                <div className="mt-3 flex justify-between items-center border-t border-dashed border-slate-200 pt-2">
-                                    <span className="text-[10px] font-bold text-slate-400">{tx.items.length} Barang</span>
-                                    <span className="text-[10px] text-sky-600 font-bold flex items-center gap-1">Lihat Detail <Icon name="chevron-right" /></span>
-                                </div>
-                            </div>
+                        {loading ? <div className="text-center py-10 text-slate-400"><div className="typing-dot bg-sky-500"></div> Loading...</div> : dailyTransactions.length === 0 ? (<div className="text-center py-12 flex flex-col items-center opacity-60"><div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3"><Icon name="calendar-xmark" className="text-2xl text-slate-400" /></div><p className="font-semibold text-slate-500">Tidak ada transaksi</p><p className="text-xs text-slate-400">Pada tanggal ini</p></div>) : dailyTransactions.map(tx => (
+                            <div key={tx.id} onClick={() => setSelectedTx(tx)} className={`p-4 rounded-2xl border shadow-sm cursor-pointer transition-all hover:shadow-md ${tx.status === 'returned' ? 'bg-red-50 border-red-100 opacity-80' : 'bg-white border-slate-100 hover:border-sky-300'}`}><div className="flex justify-between items-start mb-2"><div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{new Date(tx.date.seconds ? tx.date.toDate() : tx.date).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})} WIB</p><h4 className={`font-black text-lg ${tx.status === 'returned' ? 'text-red-500 line-through' : 'text-slate-800'}`}>{formatRupiah(tx.total)}</h4></div>{tx.status === 'returned' ? <span className="bg-red-100 text-red-600 text-[10px] font-bold px-2 py-1 rounded-full">BATAL</span> : (tx.status === 'partial' ? <span className="bg-amber-100 text-amber-600 text-[10px] font-bold px-2 py-1 rounded-full">SEBAGIAN</span> : <span className="bg-green-100 text-green-600 text-[10px] font-bold px-2 py-1 rounded-full">SUKSES</span>)}</div><div className="text-xs text-slate-500 truncate">{tx.items.map(i => i.name).join(', ')}</div><div className="mt-3 flex justify-between items-center border-t border-dashed border-slate-200 pt-2"><span className="text-[10px] font-bold text-slate-400">{tx.items.length} Barang</span><span className="text-[10px] text-sky-600 font-bold flex items-center gap-1">Lihat Detail <Icon name="chevron-right" /></span></div></div>
                         ))}
                     </div>
-
-                    {/* Detail Modal */}
                     {selectedTx && (
                         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
                             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-0 overflow-hidden flex flex-col max-h-[90vh]">
-                                <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                                    <div><h3 className="font-bold text-slate-800">Detail Transaksi</h3><p className="text-[10px] text-slate-500">{selectedTx.id}</p></div>
-                                    <button onClick={() => setSelectedTx(null)} className="w-8 h-8 rounded-full bg-white text-slate-400 hover:text-slate-600 flex items-center justify-center shadow-sm"><Icon name="xmark" /></button>
-                                </div>
-                                <div className="p-5 overflow-y-auto flex-1">
-                                    <div className="space-y-4">
-                                        {selectedTx.items.map((item, idx) => {
-                                            const returnedQty = item.returnedQty || 0;
-                                            const remainingQty = item.cartQty - returnedQty;
-                                            const isFullyReturned = remainingQty === 0;
-
-                                            return (
-                                                <div key={idx} className={`p-3 rounded-xl border ${isFullyReturned ? 'bg-red-50 border-red-100' : 'bg-slate-50 border-slate-100'}`}>
-                                                    <div className="flex justify-between items-start mb-2">
-                                                        <div className="flex-1">
-                                                            <p className={`font-bold text-sm ${isFullyReturned ? 'text-red-600 line-through' : 'text-slate-700'}`}>{item.name}</p>
-                                                            <p className="text-[10px] text-slate-500">{item.cartQty} x {formatRupiah(item.price)}</p>
-                                                            {returnedQty > 0 && <span className="text-[9px] font-bold text-red-500 bg-red-100 px-1.5 py-0.5 rounded-sm">Sudah Retur: {returnedQty}</span>}
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <p className="font-bold text-slate-800 text-sm">{formatRupiah(item.cartQty * item.price)}</p>
-                                                            {selectedTx.status !== 'returned' && remainingQty > 0 && (
-                                                                <button 
-                                                                    onClick={() => openReturModal(selectedTx, item, idx)} 
-                                                                    className="mt-2 bg-white border border-red-200 text-red-500 text-[10px] font-bold px-2 py-1 rounded-lg hover:bg-red-50 transition-colors shadow-sm"
-                                                                >
-                                                                    Retur Item
-                                                                </button>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                    <div className="my-4 border-t border-dashed border-slate-300"></div>
-                                    <div className="flex justify-between text-sm mb-1"><span className="text-slate-500">Total</span><span className="font-bold text-slate-800">{formatRupiah(selectedTx.total)}</span></div>
-                                    <div className="flex justify-between text-sm mb-1"><span className="text-slate-500">Bayar</span><span className="font-bold text-slate-800">{formatRupiah(selectedTx.pay)}</span></div>
-                                    <div className="flex justify-between text-sm"><span className="text-slate-500">Kembali</span><span className="font-bold text-green-600">{formatRupiah(selectedTx.change)}</span></div>
-                                </div>
-                                <div className="p-5 bg-slate-50 border-t border-slate-100">
-                                    <button onClick={() => handlePrint(selectedTx)} className="w-full py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg active:scale-95 text-sm flex items-center justify-center gap-2"><Icon name="print" /> Cetak Struk</button>
+                                <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center"><div><h3 className="font-bold text-slate-800">Detail Transaksi</h3><p className="text-[10px] text-slate-500">{selectedTx.id}</p></div><button onClick={() => setSelectedTx(null)} className="w-8 h-8 rounded-full bg-white text-slate-400 hover:text-slate-600 flex items-center justify-center shadow-sm"><Icon name="xmark" /></button></div>
+                                <div className="p-5 overflow-y-auto flex-1"><div className="space-y-4">{selectedTx.items.map((item, idx) => { const returnedQty = item.returnedQty || 0; const remainingQty = item.cartQty - returnedQty; const isFullyReturned = remainingQty === 0; return (<div key={idx} className={`p-3 rounded-xl border ${isFullyReturned ? 'bg-red-50 border-red-100' : 'bg-slate-50 border-slate-100'}`}><div className="flex justify-between items-start mb-2"><div className="flex-1"><p className={`font-bold text-sm ${isFullyReturned ? 'text-red-600 line-through' : 'text-slate-700'}`}>{item.name}</p><p className="text-[10px] text-slate-500">{item.cartQty} x {formatRupiah(item.price)}</p>{returnedQty > 0 && <span className="text-[9px] font-bold text-red-500 bg-red-100 px-1.5 py-0.5 rounded-sm">Sudah Retur: {returnedQty}</span>}</div><div className="text-right"><p className="font-bold text-slate-800 text-sm">{formatRupiah(item.cartQty * item.price)}</p>{selectedTx.status !== 'returned' && remainingQty > 0 && (<button onClick={() => openReturModal(selectedTx, item, idx)} className="mt-2 bg-white border border-red-200 text-red-500 text-[10px] font-bold px-2 py-1 rounded-lg hover:bg-red-50 transition-colors shadow-sm">Retur Item</button>)}</div></div></div>); })}</div><div className="my-4 border-t border-dashed border-slate-300"></div><div className="flex justify-between text-sm mb-1"><span className="text-slate-500">Total</span><span className="font-bold text-slate-800">{formatRupiah(selectedTx.total)}</span></div><div className="flex justify-between text-sm mb-1"><span className="text-slate-500">Bayar</span><span className="font-bold text-slate-800">{formatRupiah(selectedTx.pay)}</span></div><div className="flex justify-between text-sm"><span className="text-slate-500">Kembali</span><span className="font-bold text-green-600">{formatRupiah(selectedTx.change)}</span></div></div>
+                                <div className="p-5 bg-slate-50 border-t border-slate-100 flex gap-3">
+                                    <button onClick={() => handleWAHistory(selectedTx)} className="flex-1 py-3 rounded-xl bg-white border border-green-200 text-green-600 hover:bg-green-50 font-bold shadow-sm active:scale-95 text-sm flex items-center justify-center gap-2"><Icon name="whatsapp" type="brands" /> Struk WA</button>
+                                    <button onClick={() => handlePrint(selectedTx)} className="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg active:scale-95 text-sm flex items-center justify-center gap-2"><Icon name="print" /> Cetak Struk</button>
                                 </div>
                             </div>
                         </div>
                     )}
-
-                    {/* Retur Item Modal */}
-                    <ConfirmModal 
-                        isOpen={returModal.show} 
-                        title="Retur Barang" 
-                        message={`Berapa banyak "${returModal.item?.name}" yang ingin diretur?`} 
-                        onConfirm={handleProcessRetur} 
-                        onCancel={() => setReturModal({ show: false, tx: null, item: null, index: -1 })} 
-                        confirmText={processingRetur ? "Memproses..." : "Konfirmasi Retur"}
-                    >
-                        {returModal.item && (
-                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                <div className="flex items-center justify-between">
-                                    <button onClick={() => setQtyToRetur(Math.max(1, qtyToRetur - 1))} className="w-10 h-10 bg-white border border-slate-300 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100"><Icon name="minus" /></button>
-                                    <div className="flex flex-col items-center">
-                                        <span className="text-2xl font-black text-slate-800">{qtyToRetur}</span>
-                                        <span className="text-[10px] text-slate-400 font-bold uppercase">Maks: {returModal.max}</span>
-                                    </div>
-                                    <button onClick={() => setQtyToRetur(Math.min(returModal.max, qtyToRetur + 1))} className="w-10 h-10 bg-white border border-slate-300 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100"><Icon name="plus" /></button>
-                                </div>
-                                <div className="mt-3 text-center">
-                                    <p className="text-xs text-slate-500">Nilai Pengembalian:</p>
-                                    <p className="text-lg font-bold text-red-600">{formatRupiah(qtyToRetur * returModal.item.price)}</p>
-                                </div>
-                            </div>
-                        )}
-                    </ConfirmModal>
+                    <ConfirmModal isOpen={returModal.show} title="Retur Barang" message={`Berapa banyak "${returModal.item?.name}" yang ingin diretur?`} onConfirm={handleProcessRetur} onCancel={() => setReturModal({ show: false, tx: null, item: null, index: -1 })} confirmText={processingRetur ? "Memproses..." : "Konfirmasi Retur"}> {returModal.item && (<div className="bg-slate-50 p-4 rounded-xl border border-slate-200"><div className="flex items-center justify-between"><button onClick={() => setQtyToRetur(Math.max(1, qtyToRetur - 1))} className="w-10 h-10 bg-white border border-slate-300 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100"><Icon name="minus" /></button><div className="flex flex-col items-center"><span className="text-2xl font-black text-slate-800">{qtyToRetur}</span><span className="text-[10px] text-slate-400 font-bold uppercase">Maks: {returModal.max}</span></div><button onClick={() => setQtyToRetur(Math.min(returModal.max, qtyToRetur + 1))} className="w-10 h-10 bg-white border border-slate-300 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100"><Icon name="plus" /></button></div><div className="mt-3 text-center"><p className="text-xs text-slate-500">Nilai Pengembalian:</p><p className="text-lg font-bold text-red-600">{formatRupiah(qtyToRetur * returModal.item.price)}</p></div></div>)}</ConfirmModal>
                 </div>
             );
         };
@@ -1332,20 +814,9 @@
 
         const DashboardView = ({ items, onShowLowStock, settings }) => {
             const lowStockThreshold = settings.lowStockThreshold || DEFAULT_SETTINGS.lowStockThreshold;
-            
-            const lowStockCount = items.filter(i => {
-                const threshold = i.minStock ? safeNumber(i.minStock) : lowStockThreshold;
-                return safeNumber(i.qty) < threshold;
-            }).length;
-
+            const lowStockCount = items.filter(i => { const threshold = i.minStock ? safeNumber(i.minStock) : lowStockThreshold; return safeNumber(i.qty) < threshold; }).length;
             const totalStock = items.reduce((a,b)=> a + safeNumber(b.qty), 0);
-            
-            const expiringItems = useMemo(() => {
-                const today = new Date(); today.setHours(0,0,0,0);
-                const threeMonthsLater = new Date(today); threeMonthsLater.setMonth(today.getMonth() + 3);
-                return items.filter(i => { if (!i.exp) return false; const expDate = new Date(i.exp); return expDate <= threeMonthsLater; }).sort((a,b) => new Date(a.exp) - new Date(b.exp));
-            }, [items]);
-
+            const expiringItems = useMemo(() => { const today = new Date(); today.setHours(0,0,0,0); const threeMonthsLater = new Date(today); threeMonthsLater.setMonth(today.getMonth() + 3); return items.filter(i => { if (!i.exp) return false; const expDate = new Date(i.exp); return expDate <= threeMonthsLater; }).sort((a,b) => new Date(a.exp) - new Date(b.exp)); }, [items]);
             const getDaysRemaining = (dateStr) => { const today = new Date(); today.setHours(0,0,0,0); const exp = new Date(dateStr); return Math.ceil((exp - today) / (1000 * 60 * 60 * 24)); };
 
             return (
@@ -1697,7 +1168,7 @@
 
         const App = () => {
             const [inventoryData, setInventoryData] = useState([]);
-            const [settingsData, setSettingsData] = useState(DEFAULT_SETTINGS); // State for Settings
+            const [settingsData, setSettingsData] = useState(DEFAULT_SETTINGS); 
             const [loading, setLoading] = useState(true);
             const [activeTab, setActiveTab] = useState('cashier'); 
             const [searchQuery, setSearchQuery] = useState('');
@@ -1712,58 +1183,28 @@
             const [user, setUser] = useState(null);
             const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-            // --- FIREBASE INIT ---
             useEffect(() => {
-                const initAuth = async () => {
-                    if (window.initialAuthToken) {
-                        await window.signInWithCustomToken(window.auth, window.initialAuthToken);
-                    } else {
-                        await window.signInAnonymously(window.auth);
-                    }
-                };
+                const initAuth = async () => { if (window.initialAuthToken) { await window.signInWithCustomToken(window.auth, window.initialAuthToken); } else { await window.signInAnonymously(window.auth); } };
                 initAuth();
-
-                const unsubscribeAuth = window.onAuthStateChanged(window.auth, (currentUser) => {
-                    setUser(currentUser);
-                    if (!currentUser) setLoading(true);
-                });
+                const unsubscribeAuth = window.onAuthStateChanged(window.auth, (currentUser) => { setUser(currentUser); if (!currentUser) setLoading(true); });
                 return () => unsubscribeAuth();
             }, []);
 
-            // --- FETCH SETTINGS (One-time or Listener) ---
             useEffect(() => {
                 if(!user) return;
                 const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'settings', 'global');
-                const unsub = window.onSnapshot(docRef, (docSnap) => {
-                    if(docSnap.exists()){
-                        setSettingsData({ ...DEFAULT_SETTINGS, ...docSnap.data() });
-                    }
-                });
+                const unsub = window.onSnapshot(docRef, (docSnap) => { if(docSnap.exists()){ setSettingsData({ ...DEFAULT_SETTINGS, ...docSnap.data() }); } });
                 return () => unsub();
             }, [user]);
 
-            // --- FIRESTORE LISTENER ---
             useEffect(() => {
                 if (!user) return;
-                
-                const q = window.query(
-                    window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory')
-                );
-
+                const q = window.query(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory'));
                 const unsubscribeSnapshot = window.onSnapshot(q, (snapshot) => {
-                    const data = snapshot.docs.map(doc => ({
-                        id: doc.id,
-                        ...doc.data()
-                    }));
-                    // Sort locally
+                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     data.sort((a, b) => a.name.localeCompare(b.name));
-                    setInventoryData(data);
-                    setLoading(false);
-                }, (error) => {
-                    console.error("Firestore Error:", error);
-                    showToast("Gagal memuat data live", "error");
-                });
-
+                    setInventoryData(data); setLoading(false);
+                }, (error) => { console.error("Firestore Error:", error); showToast("Gagal memuat data live", "error"); });
                 return () => unsubscribeSnapshot();
             }, [user]);
 
@@ -1773,68 +1214,31 @@
                     if (item.rack && item.rack !== '-') {
                         const racks = item.rack.split(',').map(r => r.trim());
                         let isItemNew = isNewItem(item.createdAt);
-                        racks.forEach(r => {
-                            if (!r) return;
-                            if (!rackMap.has(r)) rackMap.set(r, { name: r, hasNew: false });
-                            if (isItemNew) rackMap.get(r).hasNew = true;
-                        });
+                        racks.forEach(r => { if (!r) return; if (!rackMap.has(r)) rackMap.set(r, { name: r, hasNew: false }); if (isItemNew) rackMap.get(r).hasNew = true; });
                     }
                 });
                 return Array.from(rackMap.values()).sort((a, b) => a.name.localeCompare(b.name));
             }, [inventoryData]);
 
-            const showToast = useCallback((message, type = "success") => {
-                setToast({ show: true, message, type });
-                setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3000);
-            }, []);
+            const showToast = useCallback((message, type = "success") => { setToast({ show: true, message, type }); setTimeout(() => setToast({ show: false, message: '', type: 'success' }), 3000); }, []);
 
             const handleSubmit = async (e) => {
                 if (e) e.preventDefault();
                 if (!formData.name?.trim() || !user) return;
                 setSubmitting(true);
-
                 try {
                     const collectionRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory');
-                    
-                    const itemData = {
-                        name: formData.name,
-                        qty: safeNumber(formData.qty),
-                        unit: formData.unit || 'Pcs',
-                        rack: formData.rack || '-',
-                        exp: formData.exp || '',
-                        price: safeNumber(formData.price),
-                        minStock: formData.minStock ? safeNumber(formData.minStock) : null, // Save per-item min stock
-                        updatedAt: window.serverTimestamp()
-                    };
-
+                    const itemData = { name: formData.name, qty: safeNumber(formData.qty), unit: formData.unit || 'Pcs', rack: formData.rack || '-', exp: formData.exp || '', price: safeNumber(formData.price), minStock: formData.minStock ? safeNumber(formData.minStock) : null, updatedAt: window.serverTimestamp() };
                     if (editingItem) {
                         const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', editingItem.id);
-                        await window.updateDoc(docRef, itemData);
-                        showToast("Data diperbarui");
+                        await window.updateDoc(docRef, itemData); showToast("Data diperbarui");
                     } else {
-                        // Check duplicate
                         const isExist = inventoryData.some(item => item.name.trim().toLowerCase() === formData.name.trim().toLowerCase());
-                        if (isExist) {
-                            showToast("Nama barang sudah ada!", "error");
-                            setSubmitting(false);
-                            return;
-                        }
-                        await window.addDoc(collectionRef, {
-                            ...itemData,
-                            createdAt: window.serverTimestamp()
-                        });
-                        showToast("Barang ditambahkan");
+                        if (isExist) { showToast("Nama barang sudah ada!", "error"); setSubmitting(false); return; }
+                        await window.addDoc(collectionRef, { ...itemData, createdAt: window.serverTimestamp() }); showToast("Barang ditambahkan");
                     }
-                    
-                    setEditingItem(null); 
-                    setFormData({ name: '', qty: '', unit: 'Pcs', exp: '', rack: '', price: '', minStock: '' }); 
-                    setActiveTab('list');
-
-                } catch (error) { 
-                    console.error("Error saving:", error); 
-                    showToast("Gagal menyimpan ke database", "error"); 
-                } 
-                finally { setSubmitting(false); }
+                    setEditingItem(null); setFormData({ name: '', qty: '', unit: 'Pcs', exp: '', rack: '', price: '', minStock: '' }); setActiveTab('list');
+                } catch (error) { console.error("Error saving:", error); showToast("Gagal menyimpan ke database", "error"); } finally { setSubmitting(false); }
             };
 
             const handleSaveSettings = async (newSettings) => {
@@ -1842,25 +1246,11 @@
                 setSubmitting(true);
                 try {
                     const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'settings', 'global');
-                    await window.setDoc(docRef, newSettings);
-                    showToast("Pengaturan disimpan");
-                } catch(error) {
-                    console.error(error);
-                    showToast("Gagal simpan pengaturan", "error");
-                } finally {
-                    setSubmitting(false);
-                }
+                    await window.setDoc(docRef, newSettings); showToast("Pengaturan disimpan");
+                } catch(error) { console.error(error); showToast("Gagal simpan pengaturan", "error"); } finally { setSubmitting(false); }
             };
 
-            const handleDelete = async () => {
-                if (!deleteModal.item || !user) return;
-                try {
-                    const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', deleteModal.item.id);
-                    await window.deleteDoc(docRef);
-                    showToast("Barang dihapus"); 
-                } catch (error) { showToast("Gagal menghapus", "error"); } 
-                finally { setDeleteModal({ show: false, item: null }); }
-            };
+            const handleDelete = async () => { if (!deleteModal.item || !user) return; try { const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', deleteModal.item.id); await window.deleteDoc(docRef); showToast("Barang dihapus"); } catch (error) { showToast("Gagal menghapus", "error"); } finally { setDeleteModal({ show: false, item: null }); } };
 
             const handleConfirmDeleteRack = async () => {
                 if (!deleteRackModal.rackName || !user) return;
@@ -1868,94 +1258,31 @@
                 try {
                     const batch = window.writeBatch(window.db);
                     const itemsToUpdate = inventoryData.filter(item => item.rack && item.rack.includes(rackName));
-                    
-                    if (itemsToUpdate.length === 0) {
-                        showToast("Tidak ada item di rak ini");
-                        setDeleteRackModal({ show: false, rackName: null });
-                        return;
-                    }
-
-                    itemsToUpdate.forEach(item => {
-                        const newRacks = item.rack.split(',').map(r => r.trim()).filter(r => r !== rackName);
-                        const newRackString = newRacks.length > 0 ? newRacks.join(', ') : '-';
-                        const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id);
-                        batch.update(docRef, { rack: newRackString });
-                    });
-
-                    await batch.commit();
-                    showToast(`Rak "${rackName}" berhasil dihapus`); setSelectedRacks([]);
+                    if (itemsToUpdate.length === 0) { showToast("Tidak ada item di rak ini"); setDeleteRackModal({ show: false, rackName: null }); return; }
+                    itemsToUpdate.forEach(item => { const newRacks = item.rack.split(',').map(r => r.trim()).filter(r => r !== rackName); const newRackString = newRacks.length > 0 ? newRacks.join(', ') : '-'; const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id); batch.update(docRef, { rack: newRackString }); });
+                    await batch.commit(); showToast(`Rak "${rackName}" berhasil dihapus`); setSelectedRacks([]);
                 } catch (err) { console.error("Failed delete rack", err); showToast("Gagal menghapus rak", "error"); } finally { setDeleteRackModal({ show: false, rackName: null }); }
             };
 
-            const handleNavClick = (tabId, event) => {
-                if (event && tabId === 'home') triggerFireworks(event.clientX, event.clientY);
-                setActiveTab(tabId);
-                if (tabId !== 'list') setShowOnlyLowStock(false);
-                setIsSidebarOpen(false); 
-            };
-
-            // MENU ITEMS REORDERED
-            const menuItems = [
-                { id: 'cashier', label: 'Kasir', icon: 'cash-register' }, // Cashier First
-                { id: 'history', label: 'Riwayat', icon: 'clock-rotate-left' }, 
-                { id: 'home', label: 'Dashboard', icon: 'chart-pie' },
-                { id: 'list', label: 'Stok Barang', icon: 'boxes-stacked' },
-                { id: 'add', label: 'Input Manual', icon: 'pen-to-square' },
-                { id: 'import', label: 'Import Masal', icon: 'file-import' },
-                { id: 'settings', label: 'Pengaturan', icon: 'gears' } // NEW MENU
-            ];
+            const handleNavClick = (tabId, event) => { if (event && tabId === 'home') triggerFireworks(event.clientX, event.clientY); setActiveTab(tabId); if (tabId !== 'list') setShowOnlyLowStock(false); setIsSidebarOpen(false); };
+            const menuItems = [ { id: 'cashier', label: 'Kasir', icon: 'cash-register' }, { id: 'history', label: 'Riwayat', icon: 'clock-rotate-left' }, { id: 'home', label: 'Dashboard', icon: 'chart-pie' }, { id: 'list', label: 'Stok Barang', icon: 'boxes-stacked' }, { id: 'add', label: 'Input Manual', icon: 'pen-to-square' }, { id: 'import', label: 'Import Masal', icon: 'file-import' }, { id: 'settings', label: 'Pengaturan', icon: 'gears' } ];
 
             return (
                 <div className={`min-h-screen flex flex-col md:flex-row bg-sky-50/50 transition-colors duration-500`}>
                     <SyabanDecor /> 
                     <Toast show={toast.show} message={toast.message} type={toast.type} />
-                    
-                    {/* OVERLAY for Mobile */}
-                    {isSidebarOpen && (
-                        <div 
-                            className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm fade-in"
-                            onClick={() => setIsSidebarOpen(false)}
-                        ></div>
-                    )}
-
-                    {/* SIDEBAR (Drawer Mode on Mobile, Fixed on Desktop) */}
+                    {isSidebarOpen && (<div className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm fade-in" onClick={() => setIsSidebarOpen(false)}></div>)}
                     <aside className={`fixed top-0 left-0 h-full z-50 w-72 md:w-80 bg-white/95 backdrop-blur-xl md:backdrop-blur-md border-r border-slate-200 md:border-white/20 shadow-2xl md:shadow-soft transform transition-transform duration-300 ease-in-out md:translate-x-0 md:static ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
                         <div className="p-6 pb-4 h-full flex flex-col">
                             <div className="flex items-center justify-between mb-8">
-                                <div className="flex items-center gap-3">
-                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-lg transition-all duration-500 bg-sky-600`}><Icon name="shop" className="text-lg" /></div>
-                                    <div><h1 className="font-black text-lg text-slate-800 leading-none tracking-tight">{settingsData.storeName || APP_NAME}</h1><p className="text-[9px] font-bold uppercase tracking-widest mt-1 text-slate-400">Inventory App (Online)</p></div>
-                                </div>
-                                <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600 p-2"><Icon name="xmark" className="text-xl" /></button>
+                                <div className="flex items-center gap-3"><div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-lg transition-all duration-500 bg-sky-600`}><Icon name="shop" className="text-lg" /></div><div><h1 className="font-black text-lg text-slate-800 leading-none tracking-tight">{settingsData.storeName || APP_NAME}</h1><p className="text-[9px] font-bold uppercase tracking-widest mt-1 text-slate-400">Inventory App (Online)</p></div></div><button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600 p-2"><Icon name="xmark" className="text-xl" /></button>
                             </div>
-                            
-                            <nav className="space-y-2 flex-1">
-                                {menuItems.map(menu => (
-                                    <button key={menu.id} onClick={(e) => handleNavClick(menu.id, e)} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold transition-all duration-300 relative overflow-hidden group ${activeTab === menu.id ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}><Icon name={menu.icon} className={`w-5 text-base ${activeTab === menu.id ? 'text-white' : 'text-slate-400'}`} /> {menu.label}</button>
-                                ))}
-                            </nav>
-                            
-                            <div className="mt-auto pt-6 border-t border-slate-100">
-                                <p className="text-[10px] text-center text-slate-400">Versi 13.0 • Multi Header</p>
-                            </div>
+                            <nav className="space-y-2 flex-1">{menuItems.map(menu => (<button key={menu.id} onClick={(e) => handleNavClick(menu.id, e)} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold transition-all duration-300 relative overflow-hidden group ${activeTab === menu.id ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}><Icon name={menu.icon} className={`w-5 text-base ${activeTab === menu.id ? 'text-white' : 'text-slate-400'}`} /> {menu.label}</button>))}</nav>
+                            <div className="mt-auto pt-6 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400">Versi 13.0 • Multi Header</p></div>
                         </div>
                     </aside>
-
                     <main className="flex-1 md:ml-0 p-4 md:p-8 max-w-7xl mx-auto w-full mb-0 relative z-20">
-                        {/* MOBILE HEADER with MENU Button */}
-                        <div className="md:hidden mb-6 flex items-center justify-between gap-4 relative z-30">
-                            <div className="flex items-center gap-2">
-                                <div className="w-9 h-9 rounded-lg flex items-center justify-center text-white bg-sky-600 shadow-md"><Icon name="shop" /></div>
-                                <h1 className="font-bold text-slate-800 text-lg">{settingsData.storeName || APP_NAME}</h1>
-                            </div>
-                            <button 
-                                onClick={() => setIsSidebarOpen(true)}
-                                className="bg-white/90 backdrop-blur-md px-4 py-2.5 rounded-xl text-slate-700 font-bold text-sm shadow-sm border border-slate-200 active:scale-95 transition-all flex items-center gap-2"
-                            >
-                                <Icon name="bars" className="text-sky-600" /> Menu
-                            </button>
-                        </div>
-
+                        <div className="md:hidden mb-6 flex items-center justify-between gap-4 relative z-30"><div className="flex items-center gap-2"><div className="w-9 h-9 rounded-lg flex items-center justify-center text-white bg-sky-600 shadow-md"><Icon name="shop" /></div><h1 className="font-bold text-slate-800 text-lg">{settingsData.storeName || APP_NAME}</h1></div><button onClick={() => setIsSidebarOpen(true)} className="bg-white/90 backdrop-blur-md px-4 py-2.5 rounded-xl text-slate-700 font-bold text-sm shadow-sm border border-slate-200 active:scale-95 transition-all flex items-center gap-2"><Icon name="bars" className="text-sky-600" /> Menu</button></div>
                         {activeTab === 'home' && (<DashboardView items={inventoryData} settings={settingsData} onShowLowStock={() => { setActiveTab('list'); setShowOnlyLowStock(true); }} />)}
                         {activeTab === 'cashier' && (<CashierView items={inventoryData} user={user} showToast={showToast} settings={settingsData} />)}
                         {activeTab === 'history' && (<HistoryView user={user} showToast={showToast} settings={settingsData} />)}
@@ -1964,7 +1291,6 @@
                         {activeTab === 'import' && (<BulkImportView user={user} onImportComplete={(count) => { showToast(`${count} Barang berhasil diimport`); setActiveTab('list'); }} />)}
                         {activeTab === 'settings' && (<SettingsView settings={settingsData} onSave={handleSaveSettings} loading={submitting} />)}
                     </main>
-
                     <ConfirmModal isOpen={deleteModal.show} title="Hapus Barang?" message={`Yakin ingin menghapus permanen "${deleteModal.item?.name}"?`} onConfirm={handleDelete} onCancel={() => setDeleteModal({ show: false, item: null })} />
                     <ConfirmModal isOpen={deleteRackModal.show} title="Hapus Rak?" message={`Yakin ingin menghapus rak "${deleteRackModal.rackName}"? Semua barang di rak ini akan menjadi 'No Rack' (-).`} onConfirm={handleConfirmDeleteRack} onCancel={() => setDeleteRackModal({ show: false, rackName: null })} confirmText="Ya, Hapus Rak" />
                 </div>
