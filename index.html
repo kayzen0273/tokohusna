@@ -362,11 +362,27 @@
 
                 encoder.line()
                     .bold(true).text("TOTAL      " + formatRupiah(validTotal).replace('Rp','')).newline()
-                    .feed(1) // Jarak sebelum footer
+                    .feed(2) // Jarak sebelum footer
                     .alignCenter()
-                    .bold(false).text(settings.receiptFooter || "Terima Kasih").newline() // Cetak Footer
-                    .text(receipt.status === 'returned' ? "RETUR FULL" : (receipt.status === 'partial' ? "ADA RETUR SEBAGIAN" : "")).newline()
-                    .feed(4); // PERBAIKAN: Feed lebih panjang agar footer keluar
+                    .bold(false);
+
+                // FOOTER LOGIC - Split by newline to ensure it prints correctly
+                const footerText = settings.receiptFooter || "Terima Kasih\nBarang tidak dapat ditukar";
+                const footerLines = footerText.split('\n');
+                
+                footerLines.forEach(line => {
+                    if(line && line.trim() !== "") {
+                        encoder.text(line.trim()).newline();
+                    }
+                });
+
+                // Status Retur
+                if (receipt.status === 'returned' || receipt.status === 'partial') {
+                     encoder.text(receipt.status === 'returned' ? "RETUR FULL" : "ADA RETUR SEBAGIAN").newline();
+                }
+
+                // FINAL FEED AGAR KERTAS KELUAR (Cukup Panjang)
+                encoder.feed(6); 
 
                 await characteristic.writeValue(encoder.encode());
                 return true;
@@ -1853,7 +1869,7 @@
                             </nav>
                             
                             <div className="mt-auto pt-6 border-t border-slate-100">
-                                <p className="text-[10px] text-center text-slate-400">Versi 12.2 • Auto Reset</p>
+                                <p className="text-[10px] text-center text-slate-400">Versi 12.3 • Printer Fix</p>
                             </div>
                         </div>
                     </aside>
