@@ -244,100 +244,29 @@
 
         // --- WHATSAPP RECEIPT GENERATOR (MONOSPACE) ---
         const generateWAReceipt = (transaction, settings) => {
-            const width = 32; // Lebar karakter standar struk thermal
-            
-            // Helper untuk centering teks
-            const center = (str) => {
-                if(!str) return "";
-                const len = str.length;
-                if(len >= width) return str;
-                const pad = Math.floor((width - len) / 2);
-                return " ".repeat(pad) + str; // WhatsApp Monospace butuh spasi manual
-            };
-            
-            // Helper untuk rata kiri-kanan (Nama....Harga)
-            const space = (left, right) => {
-                const l = left.toString();
-                const r = right.toString();
-                const combined = l.length + r.length;
-                if(combined >= width) return l + " " + r;
-                return l + " ".repeat(width - combined) + r;
-            };
-            
-            // Mulai buat struk dalam block code (```)
+            const width = 32; 
+            const center = (str) => { if(!str) return ""; const len = str.length; if(len >= width) return str; const pad = Math.floor((width - len) / 2); return " ".repeat(pad) + str; };
+            const space = (left, right) => { const l = left.toString(); const r = right.toString(); const combined = l.length + r.length; if(combined >= width) return l + " " + r; return l + " ".repeat(width - combined) + r; };
             let receipt = "```\n"; 
-            
-            // 1. Header
             receipt += center(settings.storeName || "Toko Husna") + "\n";
             receipt += center(settings.storeAddress || "Indonesia") + "\n";
-            
-            // Header Tambahan
-            if(settings.additionalHeaders && Array.isArray(settings.additionalHeaders)){
-                settings.additionalHeaders.forEach(h => {
-                    if(h && h.trim()) receipt += center(h) + "\n";
-                });
-            } else if (settings.storeHeader3) {
-                 receipt += center(settings.storeHeader3) + "\n";
-            }
-            
+            if(settings.additionalHeaders && Array.isArray(settings.additionalHeaders)){ settings.additionalHeaders.forEach(h => { if(h && h.trim()) receipt += center(h) + "\n"; }); } else if (settings.storeHeader3) { receipt += center(settings.storeHeader3) + "\n"; }
             receipt += "-".repeat(width) + "\n";
-            
-            // 2. Info Transaksi
             const dateObj = transaction.date.seconds ? transaction.date.toDate() : new Date(transaction.date);
             receipt += `Tgl: ${dateObj.toLocaleString('id-ID')}\n`;
-            // Gunakan ID unik pendek jika ada
             receipt += `Ref: ${transaction.id ? transaction.id.slice(-6).toUpperCase() : '-'}\n`;
             receipt += "-".repeat(width) + "\n";
-            
-            // 3. Item Belanja
-            transaction.items.forEach(item => {
-                // Baris 1: Nama Barang
-                receipt += `${item.name}\n`;
-                
-                // Hitung Qty x Harga
-                const validQty = item.cartQty - (item.returnedQty || 0);
-                if (validQty > 0) {
-                    const priceStr = formatRupiah(item.price).replace('Rp', '').replace(/\./g, ','); // Hilangkan Rp dan ubah titik jadi koma biar pendek
-                    const subTotalStr = formatRupiah(validQty * item.price).replace('Rp', '');
-                    const qtyLine = `${validQty}x ${priceStr}`;
-                    
-                    // Baris 2: Qty x Harga .... Subtotal
-                    receipt += space(qtyLine, subTotalStr) + "\n";
-                }
-            });
-            
+            transaction.items.forEach(item => { receipt += `${item.name}\n`; const validQty = item.cartQty - (item.returnedQty || 0); if (validQty > 0) { const priceStr = formatRupiah(item.price).replace('Rp', '').replace(/\./g, ','); const subTotalStr = formatRupiah(validQty * item.price).replace('Rp', ''); const qtyLine = `${validQty}x ${priceStr}`; receipt += space(qtyLine, subTotalStr) + "\n"; } });
             receipt += "-".repeat(width) + "\n";
-            
-            // 4. Total & Bayar
-            // Hitung ulang total valid jika ada retur
             const currentTotal = transaction.items.reduce((acc, item) => acc + (item.price * (item.cartQty - (item.returnedQty || 0))), 0);
-            
             receipt += space("TOTAL", formatRupiah(currentTotal).replace('Rp', '')) + "\n";
-            
-            // Hanya tampilkan bayar/kembali jika data ada
-            if (transaction.pay !== undefined) {
-                receipt += space("TUNAI", formatRupiah(transaction.pay).replace('Rp', '')) + "\n";
-            }
-            if (transaction.change !== undefined) {
-                receipt += space("KEMBALI", formatRupiah(transaction.change).replace('Rp', '')) + "\n";
-            }
-            
+            if (transaction.pay !== undefined) { receipt += space("TUNAI", formatRupiah(transaction.pay).replace('Rp', '')) + "\n"; }
+            if (transaction.change !== undefined) { receipt += space("KEMBALI", formatRupiah(transaction.change).replace('Rp', '')) + "\n"; }
             receipt += "-".repeat(width) + "\n";
-            
-            // 5. Status (Jika Retur)
-            if (transaction.status === 'returned') {
-                 receipt += center("*** TRANSAKSI DIBATALKAN ***") + "\n";
-            } else if (transaction.status === 'partial') {
-                 receipt += center("*** ADA RETUR SEBAGIAN ***") + "\n";
-            }
-
-            // 6. Footer
+            if (transaction.status === 'returned') { receipt += center("*** TRANSAKSI DIBATALKAN ***") + "\n"; } else if (transaction.status === 'partial') { receipt += center("*** ADA RETUR SEBAGIAN ***") + "\n"; }
             const footerText = settings.receiptFooter || "Terima Kasih";
-            footerText.split('\n').forEach(line => {
-                if(line.trim()) receipt += center(line) + "\n";
-            });
-            
-            receipt += "\n```"; // Tutup Monospace
+            footerText.split('\n').forEach(line => { if(line.trim()) receipt += center(line) + "\n"; });
+            receipt += "\n```"; 
             return receipt;
         };
 
@@ -467,7 +396,6 @@
                                 </div>
                             </div>
                             
-                            {/* NOTE: Template WA lama dihapus, sekarang otomatis menggunakan format Struk Digital */}
                             <div className="p-4 rounded-2xl border border-green-200 bg-green-50">
                                 <h3 className="font-bold text-green-800 mb-2 flex items-center gap-2"><Icon name="whatsapp" type="brands" /> Format WhatsApp</h3>
                                 <p className="text-xs text-green-700">Aplikasi sekarang menggunakan format <b>Struk Digital Otomatis</b> untuk WhatsApp agar tampilan rapi (center/rata tengah) seperti struk asli. Nama Toko, Header, dan Footer akan diambil dari pengaturan di atas.</p>
@@ -548,7 +476,6 @@
             const handleCloseSuccess = () => { setCheckoutModal(false); setPaymentSuccess(false); setReceiptData(null); setCart([]); setPaymentAmount(''); setIsSessionActive(false); };
             const handlePrintAction = async () => { const connected = await printReceipt(receiptData, btDevice, settings); if (connected === true || typeof connected === 'object') { if (typeof connected === 'object') setBtDevice(connected); showToast("Mencetak..."); } else { showToast("Gagal Cetak / Bluetooth Mati", "error"); } };
 
-            // --- FUNGSI WA DIPERBARUI ---
             const handleWA = () => {
                 if(!receiptData) return;
                 const text = generateWAReceipt(receiptData, settings);
@@ -595,7 +522,7 @@
                                 </div>
                             ) : (
                                 <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 relative flex flex-col items-center text-center pop-in">
-                                    <div className="w-24 h-24 relative mb-4"><svg className="checkmark" xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" viewBox="0 0 52 52"><circle className="checkmark__circle" cx="26" cy="26" r="25" fill="none"/><path className="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/></svg></div>
+                                    <div className="w-24 h-24 relative mb-4"><svg className="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52"><circle className="checkmark__circle" cx="26" cy="26" r="25" fill="none"/><path className="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/></svg></div>
                                     <h2 className="text-2xl font-black text-slate-800 mb-1">Transaksi Selesai</h2><p className="text-slate-500 text-sm mb-8">Kembalian: <span className="font-bold text-slate-800">{formatRupiah(receiptData.change)}</span></p>
                                     <div className="w-full space-y-3"><button onClick={handlePrintAction} className="w-full py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><Icon name="print" /> Cetak Bluetooth</button><button onClick={handleWA} className="w-full py-3 rounded-xl bg-[#25D366] text-white font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><Icon name="whatsapp" type="brands" /> Kirim Struk Digital (WA)</button><button onClick={handleCloseSuccess} className="w-full py-3 rounded-xl border-2 border-slate-100 text-slate-600 font-bold hover:bg-slate-50 active:scale-95 transition-all">Selesaikan Tanpa Struk</button></div>
                                 </div>
@@ -607,16 +534,24 @@
             );
         };
 
-        // --- HISTORY VIEW WITH WA BUTTON ---
+        // --- UPDATED: HISTORY VIEW WITH SEARCH, FILTER, SORT ---
         const HistoryView = ({ user, showToast, settings }) => {
             const [transactions, setTransactions] = useState([]);
             const [loading, setLoading] = useState(true);
             const [selectedTx, setSelectedTx] = useState(null);
+            
+            // Retur State
             const [returModal, setReturModal] = useState({ show: false, tx: null, item: null, index: -1 });
             const [qtyToRetur, setQtyToRetur] = useState(1);
             const [processingRetur, setProcessingRetur] = useState(false);
+            
             const [btDevice, setBtDevice] = useState(null);
             const [selectedDate, setSelectedDate] = useState(new Date());
+
+            // --- NEW: SEARCH & FILTER STATES ---
+            const [historySearch, setHistorySearch] = useState('');
+            const [filterStatus, setFilterStatus] = useState('all'); // all, success, partial, returned
+            const [sortOrder, setSortOrder] = useState('newest'); // newest, oldest, highest, lowest
 
             useEffect(() => {
                 if (!user) return;
@@ -627,7 +562,44 @@
 
             const changeDate = (days) => { const newDate = new Date(selectedDate); newDate.setDate(selectedDate.getDate() + days); setSelectedDate(newDate); };
             const isSameDay = (d1, d2) => { return d1.getDate() === d2.getDate() && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear(); };
+            
+            // Raw Daily Transactions (Untuk Statistik)
             const dailyTransactions = useMemo(() => { return transactions.filter(tx => { const txDate = tx.date.seconds ? tx.date.toDate() : new Date(tx.date); return isSameDay(txDate, selectedDate); }); }, [transactions, selectedDate]);
+            
+            // Processed Transactions (Untuk List View: Search, Filter, Sort)
+            const processedTransactions = useMemo(() => {
+                let data = [...dailyTransactions];
+
+                // 1. Search (ID or Items)
+                if (historySearch) {
+                    const lowerQ = historySearch.toLowerCase();
+                    data = data.filter(tx => 
+                        (tx.id && tx.id.toLowerCase().includes(lowerQ)) ||
+                        (tx.items && tx.items.some(i => i.name.toLowerCase().includes(lowerQ)))
+                    );
+                }
+
+                // 2. Filter Status
+                if (filterStatus !== 'all') {
+                    data = data.filter(tx => tx.status === filterStatus);
+                }
+
+                // 3. Sort
+                data.sort((a, b) => {
+                    const dateA = a.date.seconds ? a.date.toDate() : new Date(a.date);
+                    const dateB = b.date.seconds ? b.date.toDate() : new Date(b.date);
+                    
+                    switch (sortOrder) {
+                        case 'oldest': return dateA - dateB;
+                        case 'highest': return b.total - a.total;
+                        case 'lowest': return a.total - b.total;
+                        case 'newest': default: return dateB - dateA;
+                    }
+                });
+
+                return data;
+            }, [dailyTransactions, historySearch, filterStatus, sortOrder]);
+
             const stats = useMemo(() => {
                 let grossSales = 0, grossCount = 0, returnsValue = 0, returnTxCount = 0;
                 dailyTransactions.forEach(tx => {
@@ -663,13 +635,7 @@
             };
 
             const handlePrint = async (tx) => { const connected = await printReceipt(tx, btDevice, settings); if (connected === true || typeof connected === 'object') { if (typeof connected === 'object') setBtDevice(connected); showToast("Mencetak..."); } else { showToast("Gagal Cetak", "error"); } };
-            
-            // --- WA BUTTON FOR HISTORY ---
-            const handleWAHistory = (tx) => {
-                const text = generateWAReceipt(tx, settings);
-                const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
-                window.open(url, '_blank');
-            };
+            const handleWAHistory = (tx) => { const text = generateWAReceipt(tx, settings); window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank'); };
 
             return (
                 <div className="fade-in pb-20 md:pb-0 h-full flex flex-col relative z-10">
@@ -677,14 +643,61 @@
                         <div><h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Riwayat Kasir</h2><p className="text-slate-500 text-xs mt-1">Laporan harian & retur</p></div>
                         <div className="flex items-center gap-3 bg-white p-1 rounded-xl border border-slate-200 shadow-sm self-start md:self-auto"><button onClick={() => changeDate(-1)} className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-50 text-slate-500 transition-colors"><Icon name="chevron-left" /></button><div className="flex items-center gap-2 px-2 text-slate-700 font-bold text-sm min-w-[120px] justify-center"><Icon name="calendar-days" className="text-sky-500" />{selectedDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</div><button onClick={() => changeDate(1)} disabled={isSameDay(selectedDate, new Date())} className="w-9 h-9 flex items-center justify-center rounded-lg hover:bg-slate-50 text-slate-500 transition-colors disabled:opacity-30"><Icon name="chevron-right" /></button></div>
                     </header>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    
+                    {/* STATS */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="flex items-center gap-1 mb-1 border-b-2 border-dashed border-slate-200 w-fit pb-0.5"><h4 className="font-bold text-slate-800 text-sm">Total transaksi kasir</h4><Icon name="circle-question" className="text-[10px] text-sky-500 mb-2" /></div><div className="text-2xl font-black text-slate-800 mt-2">{formatRupiah(stats.netSales)}</div><p className="text-xs text-slate-400 mt-1">Net setelah retur</p></div>
                         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="flex items-center gap-1 mb-1 border-b-2 border-dashed border-slate-200 w-fit pb-0.5"><h4 className="font-bold text-slate-800 text-sm">Total penjualan kasir</h4><Icon name="circle-question" className="text-[10px] text-sky-500 mb-2" /></div><div className="text-2xl font-black text-slate-800 mt-2">{formatRupiah(stats.grossSales)}</div><p className="text-xs text-slate-400 mt-1">Dari {stats.grossCount} transaksi</p></div>
                         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="flex items-center gap-1 mb-1 border-b-2 border-dashed border-slate-200 w-fit pb-0.5"><h4 className="font-bold text-slate-800 text-sm">Total retur kasir</h4><Icon name="circle-question" className="text-[10px] text-sky-500 mb-2" /></div><div className="text-2xl font-black text-red-600 mt-2">-{formatRupiah(stats.returnsValue).replace('Rp','Rp ')}</div><p className="text-xs text-slate-400 mt-1">Dari {stats.returnTxCount} transaksi bermasalah</p></div>
                         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><h4 className="font-bold text-slate-800 text-sm mb-1">Rata-rata penjualan kasir</h4><div className="text-2xl font-black text-slate-800 mt-2">{formatRupiah(stats.avgSale)}</div></div>
                     </div>
+
+                    {/* SEARCH & FILTER CONTROLS */}
+                    <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm mb-4 space-y-3">
+                         <div className="relative">
+                            <input 
+                                type="text" 
+                                placeholder="Cari Ref Transaksi / Nama Barang..." 
+                                className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none text-sm font-medium"
+                                value={historySearch}
+                                onChange={(e) => setHistorySearch(e.target.value)}
+                            />
+                            <Icon name="magnifying-glass" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
+                        </div>
+                        <div className="flex gap-2">
+                             <div className="relative flex-1">
+                                <select 
+                                    className="w-full appearance-none pl-3 pr-8 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-sky-500"
+                                    value={filterStatus}
+                                    onChange={(e) => setFilterStatus(e.target.value)}
+                                >
+                                    <option value="all">Semua Status</option>
+                                    <option value="success">Sukses</option>
+                                    <option value="partial">Retur Sebagian</option>
+                                    <option value="returned">Retur Full (Batal)</option>
+                                </select>
+                                <Icon name="filter" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
+                            </div>
+                            <div className="relative flex-1">
+                                <select 
+                                    className="w-full appearance-none pl-3 pr-8 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-sky-500"
+                                    value={sortOrder}
+                                    onChange={(e) => setSortOrder(e.target.value)}
+                                >
+                                    <option value="newest">Terbaru</option>
+                                    <option value="oldest">Terlama</option>
+                                    <option value="highest">Total Terbanyak</option>
+                                    <option value="lowest">Total Tersedikit</option>
+                                </select>
+                                <Icon name="arrow-down-wide-short" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" />
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1">
-                        {loading ? <div className="text-center py-10 text-slate-400"><div className="typing-dot bg-sky-500"></div> Loading...</div> : dailyTransactions.length === 0 ? (<div className="text-center py-12 flex flex-col items-center opacity-60"><div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3"><Icon name="calendar-xmark" className="text-2xl text-slate-400" /></div><p className="font-semibold text-slate-500">Tidak ada transaksi</p><p className="text-xs text-slate-400">Pada tanggal ini</p></div>) : dailyTransactions.map(tx => (
+                        {loading ? <div className="text-center py-10 text-slate-400"><div className="typing-dot bg-sky-500"></div> Loading...</div> : 
+                        processedTransactions.length === 0 ? (<div className="text-center py-12 flex flex-col items-center opacity-60"><div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3"><Icon name="calendar-xmark" className="text-2xl text-slate-400" /></div><p className="font-semibold text-slate-500">Tidak ada transaksi</p><p className="text-xs text-slate-400">Sesuai filter pencarian</p></div>) : 
+                        processedTransactions.map(tx => (
                             <div key={tx.id} onClick={() => setSelectedTx(tx)} className={`p-4 rounded-2xl border shadow-sm cursor-pointer transition-all hover:shadow-md ${tx.status === 'returned' ? 'bg-red-50 border-red-100 opacity-80' : 'bg-white border-slate-100 hover:border-sky-300'}`}><div className="flex justify-between items-start mb-2"><div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{new Date(tx.date.seconds ? tx.date.toDate() : tx.date).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})} WIB</p><h4 className={`font-black text-lg ${tx.status === 'returned' ? 'text-red-500 line-through' : 'text-slate-800'}`}>{formatRupiah(tx.total)}</h4></div>{tx.status === 'returned' ? <span className="bg-red-100 text-red-600 text-[10px] font-bold px-2 py-1 rounded-full">BATAL</span> : (tx.status === 'partial' ? <span className="bg-amber-100 text-amber-600 text-[10px] font-bold px-2 py-1 rounded-full">SEBAGIAN</span> : <span className="bg-green-100 text-green-600 text-[10px] font-bold px-2 py-1 rounded-full">SUKSES</span>)}</div><div className="text-xs text-slate-500 truncate">{tx.items.map(i => i.name).join(', ')}</div><div className="mt-3 flex justify-between items-center border-t border-dashed border-slate-200 pt-2"><span className="text-[10px] font-bold text-slate-400">{tx.items.length} Barang</span><span className="text-[10px] text-sky-600 font-bold flex items-center gap-1">Lihat Detail <Icon name="chevron-right" /></span></div></div>
                         ))}
                     </div>
