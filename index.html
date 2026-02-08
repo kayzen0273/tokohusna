@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistem Kasir Toko Husna (V23 - Full Breakdown)</title>
+    <title>Sistem Kasir Toko Husna (V24 - Import Fixed)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -986,13 +986,18 @@
                         const batch = window.writeBatch(window.db);
                         chunks[i].forEach(item => {
                             const docRef = window.doc(collectionRef);
+                            // FIXED: Create a map for stocks, not a string key with dot
+                            const stockMap = {};
+                            stockMap[currentProfile.id] = item.qty;
+
                             batch.set(docRef, {
                                 name: item.name,
                                 unit: item.unit,
                                 rack: item.rack,
                                 exp: item.exp,
                                 price: item.price,
-                                [`stocks.${currentProfile.id}`]: item.qty,
+                                stocks: stockMap, // Create proper map
+                                qty: item.qty,    // Fallback/Legacy
                                 createdAt: window.serverTimestamp(),
                                 updatedAt: window.serverTimestamp()
                             });
