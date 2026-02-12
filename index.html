@@ -354,7 +354,9 @@
                 const headers = settings.additionalHeaders || [];
                 if (settings.storeHeader3 && (!headers.length)) { encoder.text(settings.storeHeader3).newline(); }
                 headers.forEach(h => { if(h && h.trim()) encoder.text(h).newline(); });
-                encoder.line().alignLeft().text(`Tgl: ${new Date(receipt.date.seconds ? receipt.date.toDate() : receipt.date).toLocaleString('id-ID')}`).newline().line();
+                encoder.line().alignLeft().text(`Tgl: ${new Date(receipt.date.seconds ? receipt.date.toDate() : receipt.date).toLocaleString('id-ID')}`).newline();
+                if (receipt.cashierName) { encoder.text(`Kasir: ${receipt.cashierName}`).newline(); }
+                encoder.line();
                 receipt.items.forEach(item => {
                     const validQty = item.cartQty - (item.returnedQty || 0);
                     if (validQty > 0) {
@@ -618,6 +620,9 @@
             const [cancelModal, setCancelModal] = useState(false);
             const [btDevice, setBtDevice] = useState(null);
             const [pendingCarts, setPendingCarts] = useState([]);
+            const [cashierName, setCashierName] = useState(localStorage.getItem('cashierName') || '');
+            const [showCashierLogin, setShowCashierLogin] = useState(false);
+            const [tempCashierName, setTempCashierName] = useState('');
 
             useEffect(() => {
                 if (!user) return;
@@ -682,7 +687,7 @@
                             date: new Date().toISOString(),
                             items: cart,
                             total: grandTotal,
-                            cashierName: user.email || 'Kasir',
+                            cashierName: cashierName || 'Kasir',
                             device: navigator.userAgent,
                             storeProfile: currentProfile.name, 
                             storeId: currentProfile.id, // SAVE ID TO FILTER LATER
@@ -735,7 +740,7 @@
                         pay: safeNumber(paymentAmount), 
                         change: change, 
                         status: 'success', 
-                        cashierName: user.email || 'Admin',
+                        cashierName: cashierName || 'Kasir',
                         storeId: currentProfile.id || 'default', // Save Store ID
                         storeName: currentProfile.name // Save Store Name
                     };
@@ -752,6 +757,33 @@
                 const printSettings = { ...settings, storeName: currentProfile.name, storeAddress: currentProfile.address };
                 const connected = await printReceipt(receiptData, btDevice, printSettings); 
                 if (connected === true || typeof connected === 'object') { if (typeof connected === 'object') setBtDevice(connected); showToast("Mencetak..."); } else { showToast("Gagal Cetak / Bluetooth Mati", "error"); } 
+            };
+
+            
+            const handleCashierLogin = () => {
+                if (tempCashierName.trim()) {
+                    setCashierName(tempCashierName.trim());
+                    localStorage.setItem('cashierName', tempCashierName.trim());
+                    setShowCashierLogin(false);
+                    setIsSessionActive(true);
+                    setTempCashierName('');
+                    showToast(`Selamat datang, ${tempCashierName.trim()}!`, "success");
+                } else {
+                    showToast("Nama kasir tidak boleh kosong", "error");
+                }
+            };
+
+            const handleStartSession = () => {
+                if (!cashierName) {
+                    setShowCashierLogin(true);
+                } else {
+                    setIsSessionActive(true);
+                }
+            };
+
+            const handleChangeCashier = () => {
+                setShowCashierLogin(true);
+                setTempCashierName(cashierName);
             };
 
             const handleWA = () => { if(receiptData) { onGenerateImage(receiptData); } };
@@ -771,10 +803,15 @@
                              {pendingCarts.length > 0 && (
                                 <div className="w-full mb-8 fade-in">
                                     <div className="flex items-center justify-between mb-3 px-1"><div className="flex items-center gap-2"><Icon name="clock-rotate-left" className="text-sky-600" /><h3 className="font-bold text-slate-700 text-sm">Tertunda di {currentProfile.name}</h3></div><span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-bold">{pendingCarts.length} sesi</span></div>
-                                    <div className="space-y-3">{pendingCarts.map(pending => (<button key={pending.id} onClick={() => resumeTransaction(pending)} className="w-full bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-sky-300 transition-all flex items-center justify-between group relative overflow-hidden"><div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-sky-400 to-sky-600"></div><div className="text-left pl-2"><p className="font-black text-slate-800 text-lg">{formatRupiah(pending.total)}</p><p className="text-xs text-slate-500 font-medium mt-0.5">{pending.items.length} Barang • {new Date(pending.date).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}</p><span className="inline-block mt-2 text-[9px] font-bold text-sky-600 bg-sky-50 px-2 py-0.5 rounded border border-sky-100">Klik untuk lanjut</span></div><div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-sky-50 group-hover:text-sky-600 transition-colors"><Icon name="chevron-right" /></div></button>))}</div>
+                                    <div className="space-y-3">{pendingCarts.map(pending => (<button key={pending.id} onClick={() => resumeTransaction(pending)} className="w-full bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-sky-300 transition-all flex items-center justify-between group relative overflow-hidden"><div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-sky-400 to-sky-600"></div><div className="text-left pl-2"><p className="font-black text-slate-800 text-lg">{formatRupiah(pending.total)}</p><p className="text-xs text-slate-500 font-medium mt-0.5">{pending.items.length} Barang • {new Date(pending.date).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}</p>{pending.cashierName && <p className="text-[10px] text-sky-700 font-bold mt-1 bg-sky-50 px-2 py-0.5 rounded inline-block">Kasir: {pending.cashierName}</p>}<span className="inline-block mt-2 text-[9px] font-bold text-sky-600 bg-sky-50 px-2 py-0.5 rounded border border-sky-100">Klik untuk lanjut</span></div><div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-sky-50 group-hover:text-sky-600 transition-colors"><Icon name="chevron-right" /></div></button>))}</div>
                                 </div>
                              )}
-                            <button onClick={() => setIsSessionActive(true)} className="group relative w-full aspect-square md:aspect-video rounded-3xl border-4 border-dashed border-sky-300 bg-sky-50/50 hover:bg-sky-100 hover:border-sky-400 transition-all flex flex-col items-center justify-center gap-4 active:scale-95"><div className="w-20 h-20 rounded-full bg-white text-sky-500 shadow-soft flex items-center justify-center text-4xl group-hover:scale-110 transition-transform"><Icon name="cart-plus" /></div><div className="text-center"><h2 className="text-2xl font-black text-slate-700 group-hover:text-sky-700">+ Penjualan Baru</h2><p className="text-sm text-slate-500 font-medium mt-1">Mulai sesi kasir di toko ini</p></div></button>
+                            <button onClick={handleStartSession} className="group relative w-full aspect-square md:aspect-video rounded-3xl border-4 border-dashed border-sky-300 bg-sky-50/50 hover:bg-sky-100 hover:border-sky-400 transition-all flex flex-col items-center justify-center gap-4 active:scale-95"><div className="w-20 h-20 rounded-full bg-white text-sky-500 shadow-soft flex items-center justify-center text-4xl group-hover:scale-110 transition-transform"><Icon name="cart-plus" /></div><div className="text-center"><h2 className="text-2xl font-black text-slate-700 group-hover:text-sky-700">+ Penjualan Baru</h2><p className="text-sm text-slate-500 font-medium mt-1">Mulai sesi kasir di toko ini</p>{cashierName && <p className="text-xs text-sky-600 font-bold mt-2">Kasir: {cashierName}</p>}</div></button>
+                            {cashierName && (
+                                <button onClick={handleChangeCashier} className="mt-3 text-xs text-slate-500 hover:text-sky-600 font-medium underline">
+                                    Ganti Kasir
+                                </button>
+                            )}
                         </div>
                     </div>
                 );
@@ -799,6 +836,50 @@
                     </div>
                     {checkoutModal && ( <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in"> {!paymentSuccess ? ( <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 relative"> <button onClick={() => setCheckoutModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><Icon name="xmark" /></button><h3 className="text-lg font-bold text-slate-800 mb-4 text-center">Pembayaran</h3> <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-4"><div className="flex justify-between mb-2 text-sm text-slate-500"><span>Total Belanja</span><span className="font-bold text-slate-800">{formatRupiah(grandTotal)}</span></div><div className="h-px bg-slate-200 my-2"></div><label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Pilih Nominal Cepat</label><div className="grid grid-cols-2 gap-2 mb-4">{getPaymentSuggestions.map((amount, idx) => (<button key={idx} onClick={() => setPaymentAmount(amount.toString())} className={`py-2 px-1 rounded-lg text-xs font-bold border transition-all active:scale-95 ${safeNumber(paymentAmount) === amount ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-sky-50 hover:border-sky-300'}`}>{amount === grandTotal ? 'Uang Pas' : formatRupiah(amount)}</button>))}</div><div className="space-y-1"><label className="text-[10px] font-bold text-slate-400 uppercase">Atau Ketik Manual</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">Rp</span><input autoFocus type="number" className="w-full pl-10 pr-3 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-sky-500 outline-none font-bold text-lg text-slate-800" placeholder="0" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} /></div></div><div className={`mt-3 flex justify-between text-sm transition-colors ${change < 0 ? 'text-red-500' : 'text-green-600'}`}><span className="font-medium">Kembalian</span><span className="font-bold">{change < 0 ? '-' : formatRupiah(change)}</span></div></div> <button onClick={handleCheckout} disabled={change < 0 || isProcessing} className="w-full py-3.5 bg-sky-600 text-white rounded-xl font-bold shadow-lg disabled:opacity-50 disabled:bg-slate-400 flex justify-center items-center gap-2">{isProcessing ? <div className="typing-dot bg-white"></div> : <><Icon name="wallet" /> BAYAR</>}</button> </div> ) : ( <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 relative flex flex-col items-center text-center pop-in"> <div className="w-24 h-24 relative mb-4"><svg className="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52"><circle className="checkmark__circle" cx="26" cy="26" r="25" fill="none"/><path className="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/></svg></div> <h2 className="text-2xl font-black text-slate-800 mb-1">Transaksi Selesai</h2><p className="text-slate-500 text-sm mb-8">Kembalian: <span className="font-bold text-slate-800">{formatRupiah(receiptData.change)}</span></p> <div className="w-full space-y-3"><button onClick={handlePrintAction} className="w-full py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><Icon name="print" /> Cetak Bluetooth</button><button onClick={handleWA} className="w-full py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><Icon name="image" /> Kirim Gambar Struk (WA)</button><button onClick={handleCloseSuccess} className="w-full py-3 rounded-xl border-2 border-slate-100 text-slate-600 font-bold hover:bg-slate-50 active:scale-95 transition-all">Selesaikan Tanpa Struk</button></div> </div> )} </div> )}
                     <ConfirmModal isOpen={cancelModal} title="Batalkan Transaksi?" message="Keranjang akan dikosongkan dan semua item akan dihapus dari sesi ini." onConfirm={confirmCancel} onCancel={() => setCancelModal(false)} confirmText="Ya, Batalkan" confirmColor="red" />
+                    
+                    {/* Modal Login Kasir */}
+                    {showCashierLogin && (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
+                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 relative">
+                                <div className="w-16 h-16 bg-sky-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                    <Icon name="user-tie" className="text-3xl text-sky-600" />
+                                </div>
+                                <h3 className="text-xl font-bold text-center text-slate-800 mb-2">Login Kasir</h3>
+                                <p className="text-slate-500 text-center text-sm mb-6">Masukkan nama Anda untuk memulai sesi kasir</p>
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Nama Kasir</label>
+                                        <input
+                                            autoFocus
+                                            type="text"
+                                            className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none font-semibold text-slate-700"
+                                            placeholder="Contoh: Budi"
+                                            value={tempCashierName}
+                                            onChange={e => setTempCashierName(e.target.value)}
+                                            onKeyPress={e => e.key === 'Enter' && handleCashierLogin()}
+                                        />
+                                    </div>
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => {
+                                                setShowCashierLogin(false);
+                                                setTempCashierName('');
+                                            }}
+                                            className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors"
+                                        >
+                                            Batal
+                                        </button>
+                                        <button
+                                            onClick={handleCashierLogin}
+                                            className="flex-1 py-3 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold shadow-lg active:scale-95 transition-all"
+                                        >
+                                            Masuk
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         };
