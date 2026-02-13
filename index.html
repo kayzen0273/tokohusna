@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistem Kasir Toko Husna (V33 - Mode Bantu Keranjang Real-Time)</title>
+    <title>Sistem Kasir Toko Husna (V33 - Keranjang Aktif Live View)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -906,23 +906,6 @@
                 } catch (e) { showToast("Gagal hapus item", "error"); }
             };
 
-            // Ubah qty item di keranjang kasir lain (real-time via Firestore)
-            const updateItemQtyInActiveCart = async (cartId, itemIndex, delta) => {
-                const cart = activeCarts.find(c => c.id === cartId);
-                if (!cart) return;
-                const newItems = [...cart.items];
-                const newQty = newItems[itemIndex].cartQty + delta;
-                if (newQty < 1) { removeItemFromActiveCart(cartId, itemIndex); return; }
-                if (newQty > newItems[itemIndex].qty) { showToast("Stok tidak cukup!", "error"); return; }
-                newItems[itemIndex] = { ...newItems[itemIndex], cartQty: newQty };
-                const newTotal = newItems.reduce((acc, i) => acc + (safeNumber(i.price) * i.cartQty), 0);
-                try {
-                    await window.updateDoc(
-                        window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', cartId),
-                        { items: newItems, total: newTotal, updatedAt: window.serverTimestamp() }
-                    );
-                } catch (e) { showToast("Gagal update qty", "error"); }
-            };
             if (currentProfile.id === 'all_stores') {
                 return (
                     <div className="fade-in h-full flex flex-col items-center justify-center text-center p-6 relative z-10">
@@ -1170,7 +1153,7 @@
                                         </div>
                                         <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-bold animate-pulse">{activeCarts.length} LIVE</span>
                                     </div>
-                                    <p className="text-[10px] text-slate-400 px-1 mb-3">💡 Kamu bisa bantu edit keranjang kasir lain secara real-time — mereka tidak perlu ganti posisi.</p>
+                                    <p className="text-[10px] text-slate-400 px-1 mb-3">💡 Lihat & edit keranjang kasir lain secara real-time, atau ambil alih untuk melanjutkan transaksinya.</p>
                                     <div className="space-y-4">
                                         {activeCarts.map(activeCart => (
                                             <div key={activeCart.id} className="bg-white rounded-2xl border-2 border-orange-200 shadow-sm overflow-hidden">
@@ -1194,50 +1177,39 @@
                                                     </div>
                                                 </div>
 
-                                                {/* Daftar item — X di sudut kiri atas item */}
+                                                {/* Daftar item real-time — read-only + hapus per barang */}
                                                 <div className="px-3 py-2">
                                                     {(activeCart.items||[]).length === 0 ? (
                                                         <div className="py-4 text-center text-xs text-slate-400 italic">Keranjang masih kosong...</div>
                                                     ) : (
-                                                        <div className="space-y-2">
+                                                        <div className="space-y-1.5">
                                                             {(activeCart.items||[]).map((item, idx) => (
-                                                                <div key={idx} className="relative flex items-center gap-2 pl-2 pr-3 py-2 bg-slate-50 rounded-xl border border-slate-100">
-                                                                    {/* X di sudut kiri atas */}
-                                                                    <button
-                                                                        onClick={() => removeItemFromActiveCart(activeCart.id, idx)}
-                                                                        className="absolute -top-1.5 -left-1.5 w-5 h-5 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-sm active:scale-95 transition-all z-10"
-                                                                    >
-                                                                        <Icon name="xmark" className="text-[8px]" />
-                                                                    </button>
-                                                                    {/* Info barang */}
+                                                                <div key={idx} className="flex items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-100">
+                                                                    {/* Badge qty */}
+                                                                    <div className="w-7 h-7 bg-orange-100 rounded-lg flex items-center justify-center text-orange-700 text-xs font-black flex-shrink-0">
+                                                                        {item.cartQty}×
+                                                                    </div>
                                                                     <div className="flex-1 min-w-0">
                                                                         <p className="text-xs font-bold text-slate-700 truncate">{item.name}</p>
-                                                                        <p className="text-[10px] text-slate-400">{formatRupiah(item.price)} × {item.cartQty} = <span className="font-bold text-slate-600">{formatRupiah(item.price * item.cartQty)}</span></p>
+                                                                        <p className="text-[10px] text-slate-400 font-medium">{formatRupiah(item.price * item.cartQty)}</p>
                                                                     </div>
-                                                                    {/* Kontrol qty */}
-                                                                    <div className="flex items-center gap-1 bg-white rounded-lg border border-slate-200 shadow-sm px-1 py-0.5 flex-shrink-0">
-                                                                        <button onClick={() => updateItemQtyInActiveCart(activeCart.id, idx, -1)} className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors">
-                                                                            <Icon name="minus" className="text-[9px]" />
-                                                                        </button>
-                                                                        <span className="text-xs font-black text-slate-700 w-5 text-center">{item.cartQty}</span>
-                                                                        <button onClick={() => updateItemQtyInActiveCart(activeCart.id, idx, 1)} className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-green-500 hover:bg-green-50 rounded transition-colors">
-                                                                            <Icon name="plus" className="text-[9px]" />
-                                                                        </button>
-                                                                    </div>
+                                                                    {/* Hapus 1 barang */}
+                                                                    <button onClick={() => removeItemFromActiveCart(activeCart.id, idx)} className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0" title="Hapus barang ini">
+                                                                        <Icon name="xmark" className="text-xs" />
+                                                                    </button>
                                                                 </div>
                                                             ))}
                                                         </div>
                                                     )}
                                                 </div>
 
-                                                {/* Footer: ambil alih sebagai opsi sekunder */}
-                                                <div className="px-3 pb-3 pt-1 border-t border-slate-100">
-                                                    <p className="text-[10px] text-slate-400 text-center mb-2">Kasir {activeCart.cashierName} tetap bertugas. Edit di atas langsung tersinkron ke layarnya.</p>
+                                                {/* Footer: tombol ambil alih */}
+                                                <div className="px-3 pb-3">
                                                     <button
                                                         onClick={() => takeoverCart(activeCart)}
-                                                        className="w-full py-2 border-2 border-orange-300 text-orange-600 hover:bg-orange-50 rounded-xl text-xs font-bold active:scale-95 transition-all flex items-center justify-center gap-2"
+                                                        className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-bold shadow-md active:scale-95 transition-all flex items-center justify-center gap-2"
                                                     >
-                                                        <Icon name="right-to-bracket" /> Gantikan & Bayarkan Sendiri
+                                                        <Icon name="right-to-bracket" /> Ambil Alih & Bayarkan
                                                     </button>
                                                 </div>
                                             </div>
@@ -2112,7 +2084,7 @@
                                 <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600 p-2"><Icon name="xmark" className="text-xl" /></button>
                             </div>
                             <nav className="space-y-2 flex-1">{visibleMenuItems.map(menu => (<button key={menu.id} onClick={(e) => handleNavClick(menu.id, e)} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold transition-all duration-300 relative overflow-hidden group ${activeTab === menu.id ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}><div className="relative w-5 flex-shrink-0"><Icon name={menu.icon} className={`text-base ${activeTab === menu.id ? 'text-white' : 'text-slate-400'}`} />{menu.badge > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center leading-none shadow-sm animate-pulse">{menu.badge > 9 ? '9+' : menu.badge}</span>}</div><span className="flex-1 text-left">{menu.label}</span>{menu.badge > 0 && activeTab !== menu.id && <span className="text-[9px] bg-red-100 text-red-600 font-black px-1.5 py-0.5 rounded-full border border-red-200">{menu.badge} baru</span>}</button>))}</nav>
-                            <div className="mt-auto pt-6 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400">Versi 33.0 • Mode Bantu Keranjang Real-Time</p></div>
+                            <div className="mt-auto pt-6 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400">Versi 33.0 • Live View Keranjang Aktif</p></div>
                         </div>
                     </aside>
                     <main className="flex-1 md:ml-0 p-4 md:p-8 max-w-7xl mx-auto w-full mb-0 relative z-20">
