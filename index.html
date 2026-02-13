@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistem Kasir Toko Husna (V27 - Struk Per Cabang)</title>
+    <title>Sistem Kasir Toko Husna (V28 - Real-Time Cart & Nama Kasir)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -700,6 +700,13 @@
             const [cancelModal, setCancelModal] = useState(false);
             const [btDevice, setBtDevice] = useState(null);
             const [pendingCarts, setPendingCarts] = useState([]);
+            
+            // NEW: State untuk nama kasir dan modal
+            const [showCashierModal, setShowCashierModal] = useState(false);
+            const [cashierName, setCashierName] = useState('');
+            const [editingCashierName, setEditingCashierName] = useState(false);
+            const [activeCartId, setActiveCartId] = useState(null);
+            const [activeCarts, setActiveCarts] = useState([]); // Cart real-time dari user lain
 
             useEffect(() => {
                 if (!user) return;
@@ -716,6 +723,52 @@
                 return () => unsub();
             }, [user, currentProfile]);
 
+            // NEW: Listen untuk active carts real-time dari semua user
+            useEffect(() => {
+                if (!user) return;
+                const q = window.query(
+                    window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts'),
+                    window.orderBy('updatedAt', 'desc')
+                );
+                const unsub = window.onSnapshot(q, (snapshot) => {
+                    const allActiveCarts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    // Filter: hanya tampilkan cart dari toko yang sama dan bukan cart milik sendiri
+                    const filtered = allActiveCarts.filter(c => 
+                        (c.storeId === currentProfile.id) && 
+                        (c.id !== activeCartId) &&
+                        c.isActive
+                    );
+                    setActiveCarts(filtered);
+                });
+                return () => unsub();
+            }, [user, currentProfile, activeCartId]);
+
+            // NEW: Sync cart ke Firestore setiap kali cart berubah
+            useEffect(() => {
+                if (!isSessionActive || !activeCartId || !cashierName) return;
+                
+                const syncCart = async () => {
+                    try {
+                        const cartRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', activeCartId);
+                        await window.setDoc(cartRef, {
+                            cashierName: cashierName,
+                            storeId: currentProfile.id,
+                            storeName: currentProfile.name,
+                            items: cart,
+                            total: cart.reduce((acc, item) => acc + (safeNumber(item.price) * item.cartQty), 0),
+                            updatedAt: window.serverTimestamp(),
+                            isActive: true
+                        }, { merge: true });
+                    } catch (error) {
+                        console.error('Error syncing cart:', error);
+                    }
+                };
+
+                // Debounce sync untuk menghindari terlalu banyak write
+                const timeoutId = setTimeout(syncCart, 500);
+                return () => clearTimeout(timeoutId);
+            }, [cart, isSessionActive, activeCartId, cashierName, currentProfile]);
+
             // Prevent interaction if in All Stores Mode
             if (currentProfile.id === 'all_stores') {
                 return (
@@ -729,6 +782,61 @@
                     </div>
                 );
             }
+            
+            // NEW: Fungsi untuk memulai sesi kasir dengan nama kasir
+            const startCashierSession = async () => {
+                if (!cashierName.trim()) {
+                    showToast("Masukkan nama kasir!", "error");
+                    return;
+                }
+                
+                try {
+                    // Buat active cart di Firestore
+                    const cartRef = await window.addDoc(
+                        window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts'),
+                        {
+                            cashierName: cashierName.trim(),
+                            storeId: currentProfile.id,
+                            storeName: currentProfile.name,
+                            items: [],
+                            total: 0,
+                            updatedAt: window.serverTimestamp(),
+                            isActive: true
+                        }
+                    );
+                    
+                    setActiveCartId(cartRef.id);
+                    setIsSessionActive(true);
+                    setShowCashierModal(false);
+                    showToast(`Selamat bekerja, ${cashierName}! 🎉`);
+                } catch (error) {
+                    console.error('Error starting session:', error);
+                    showToast("Gagal memulai sesi", "error");
+                }
+            };
+
+            // NEW: Fungsi untuk update nama kasir
+            const handleUpdateCashierName = async () => {
+                if (!cashierName.trim()) {
+                    showToast("Nama tidak boleh kosong!", "error");
+                    return;
+                }
+                
+                try {
+                    if (activeCartId) {
+                        const cartRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', activeCartId);
+                        await window.updateDoc(cartRef, {
+                            cashierName: cashierName.trim(),
+                            updatedAt: window.serverTimestamp()
+                        });
+                    }
+                    setEditingCashierName(false);
+                    showToast("Nama kasir diperbarui!");
+                } catch (error) {
+                    console.error('Error updating cashier name:', error);
+                    showToast("Gagal update nama", "error");
+                }
+            };
 
             const fuse = useMemo(() => new Fuse(items, { keys: ['name', 'rack'], threshold: 0.3 }), [items]);
             const filteredItems = useMemo(() => { if (!search) return []; return fuse.search(search).map(r => r.item).slice(0, 30); }, [items, search, fuse]);
@@ -764,7 +872,7 @@
                             date: new Date().toISOString(),
                             items: cart,
                             total: grandTotal,
-                            cashierName: user.email || 'Kasir',
+                            cashierName: cashierName || user.email || 'Kasir',
                             device: navigator.userAgent,
                             storeProfile: currentProfile.name, 
                             storeId: currentProfile.id, // SAVE ID TO FILTER LATER
@@ -775,17 +883,64 @@
                         console.error(error);
                         showToast("Gagal menyimpan transaksi tunda", "error");
                     }
-                } 
+                }
+                
+                // NEW: Hapus active cart dari Firestore
+                if (activeCartId) {
+                    try {
+                        await window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', activeCartId));
+                    } catch (error) {
+                        console.error('Error deleting active cart:', error);
+                    }
+                }
+                
                 setIsSessionActive(false); 
                 setSearch(''); 
-                setCart([]); 
+                setCart([]);
+                setActiveCartId(null);
+                setCashierName('');
             };
             
-            const confirmCancel = () => { setCart([]); setPaymentAmount(''); setSearch(''); setCancelModal(false); showToast("Transaksi dibatalkan & keranjang dikosongkan", "info"); };
+            const confirmCancel = async () => { 
+                // NEW: Hapus active cart dari Firestore
+                if (activeCartId) {
+                    try {
+                        await window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', activeCartId));
+                    } catch (error) {
+                        console.error('Error deleting active cart:', error);
+                    }
+                }
+                
+                setCart([]); 
+                setPaymentAmount(''); 
+                setSearch(''); 
+                setCancelModal(false); 
+                setActiveCartId(null);
+                showToast("Transaksi dibatalkan & keranjang dikosongkan", "info"); 
+            };
             
             const resumeTransaction = async (pendingItem) => { 
                 try {
                     await window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'pending_carts', pendingItem.id));
+                    
+                    // Set nama kasir dari pending cart
+                    setCashierName(pendingItem.cashierName || 'Kasir');
+                    
+                    // Buat active cart baru
+                    const cartRef = await window.addDoc(
+                        window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts'),
+                        {
+                            cashierName: pendingItem.cashierName || 'Kasir',
+                            storeId: currentProfile.id,
+                            storeName: currentProfile.name,
+                            items: pendingItem.items,
+                            total: pendingItem.total,
+                            updatedAt: window.serverTimestamp(),
+                            isActive: true
+                        }
+                    );
+                    
+                    setActiveCartId(cartRef.id);
                     setCart(pendingItem.items); 
                     setIsSessionActive(true);
                     showToast("Transaksi dilanjutkan");
@@ -817,19 +972,38 @@
                         pay: safeNumber(paymentAmount), 
                         change: change, 
                         status: 'success', 
-                        cashierName: user.email || 'Admin',
+                        cashierName: cashierName || user.email || 'Admin', // NEW: Gunakan nama kasir
                         storeId: currentProfile.id || 'default', // Save Store ID
                         storeName: currentProfile.name // Save Store Name
                     };
                     const docRef = window.doc(transactionRef);
                     batch.set(docRef, newTransaction);
                     await batch.commit();
+                    
+                    // NEW: Hapus active cart setelah checkout berhasil
+                    if (activeCartId) {
+                        try {
+                            await window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', activeCartId));
+                        } catch (error) {
+                            console.error('Error deleting active cart:', error);
+                        }
+                    }
+                    
                     setReceiptData({ ...newTransaction, id: docRef.id, date: new Date() }); 
                     setPaymentSuccess(true); showToast("Transaksi Berhasil!");
                 } catch (error) { console.error(error); showToast("Transaksi Gagal", "error"); } finally { setIsProcessing(false); }
             };
 
-            const handleCloseSuccess = () => { setCheckoutModal(false); setPaymentSuccess(false); setReceiptData(null); setCart([]); setPaymentAmount(''); setIsSessionActive(false); };
+            const handleCloseSuccess = () => { 
+                setCheckoutModal(false); 
+                setPaymentSuccess(false); 
+                setReceiptData(null); 
+                setCart([]); 
+                setPaymentAmount(''); 
+                setIsSessionActive(false); 
+                setActiveCartId(null);
+                setCashierName('');
+            };
             
             const handlePrintAction = async () => { 
                 // LOOKUP FULL PROFILE CONFIG FOR THIS STORE
@@ -866,7 +1040,103 @@
                                     <div className="space-y-3">{pendingCarts.map(pending => (<button key={pending.id} onClick={() => resumeTransaction(pending)} className="w-full bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-sky-300 transition-all flex items-center justify-between group relative overflow-hidden"><div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-sky-400 to-sky-600"></div><div className="text-left pl-2"><p className="font-black text-slate-800 text-lg">{formatRupiah(pending.total)}</p><p className="text-xs text-slate-500 font-medium mt-0.5">{pending.items.length} Barang • {new Date(pending.date).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}</p><span className="inline-block mt-2 text-[9px] font-bold text-sky-600 bg-sky-50 px-2 py-0.5 rounded border border-sky-100">Klik untuk lanjut</span></div><div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-sky-50 group-hover:text-sky-600 transition-colors"><Icon name="chevron-right" /></div></button>))}</div>
                                 </div>
                              )}
-                            <button onClick={() => setIsSessionActive(true)} className="group relative w-full aspect-square md:aspect-video rounded-3xl border-4 border-dashed border-sky-300 bg-sky-50/50 hover:bg-sky-100 hover:border-sky-400 transition-all flex flex-col items-center justify-center gap-4 active:scale-95"><div className="w-20 h-20 rounded-full bg-white text-sky-500 shadow-soft flex items-center justify-center text-4xl group-hover:scale-110 transition-transform"><Icon name="cart-plus" /></div><div className="text-center"><h2 className="text-2xl font-black text-slate-700 group-hover:text-sky-700">+ Penjualan Baru</h2><p className="text-sm text-slate-500 font-medium mt-1">Mulai sesi kasir di toko ini</p></div></button>
+                            <button onClick={() => setShowCashierModal(true)} className="group relative w-full aspect-square md:aspect-video rounded-3xl border-4 border-dashed border-sky-300 bg-sky-50/50 hover:bg-sky-100 hover:border-sky-400 transition-all flex flex-col items-center justify-center gap-4 active:scale-95"><div className="w-20 h-20 rounded-full bg-white text-sky-500 shadow-soft flex items-center justify-center text-4xl group-hover:scale-110 transition-transform"><Icon name="cart-plus" /></div><div className="text-center"><h2 className="text-2xl font-black text-slate-700 group-hover:text-sky-700">+ Penjualan Baru</h2><p className="text-sm text-slate-500 font-medium mt-1">Mulai sesi kasir di toko ini</p></div></button>
+                            
+                            {/* NEW: Active Carts dari User Lain */}
+                            {activeCarts.length > 0 && (
+                                <div className="w-full mt-8 fade-in">
+                                    <div className="flex items-center justify-between mb-3 px-1">
+                                        <div className="flex items-center gap-2">
+                                            <Icon name="users" className="text-green-600 animate-pulse-subtle" />
+                                            <h3 className="font-bold text-slate-700 text-sm">Kasir Aktif Lainnya</h3>
+                                        </div>
+                                        <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold animate-pulse-subtle">{activeCarts.length} LIVE</span>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {activeCarts.map(activeCart => (
+                                            <div key={activeCart.id} className="bg-gradient-to-r from-green-50 to-emerald-50 p-4 rounded-2xl border-2 border-green-200 shadow-sm relative overflow-hidden">
+                                                <div className="absolute left-0 top-0 bottom-0 w-2 bg-gradient-to-b from-green-400 to-green-600 animate-pulse-subtle"></div>
+                                                <div className="pl-2">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white text-sm font-bold">
+                                                                {activeCart.cashierName.charAt(0).toUpperCase()}
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-black text-slate-800 text-sm">{activeCart.cashierName}</p>
+                                                                <p className="text-[10px] text-green-600 font-bold">● SEDANG MELAYANI</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            <p className="font-black text-green-700 text-lg">{formatRupiah(activeCart.total)}</p>
+                                                            <p className="text-[9px] text-slate-500 font-medium">{activeCart.items.length} barang</p>
+                                                        </div>
+                                                    </div>
+                                                    {activeCart.items.length > 0 && (
+                                                        <div className="mt-3 pt-3 border-t border-green-200/50">
+                                                            <div className="space-y-1">
+                                                                {activeCart.items.slice(0, 3).map((item, idx) => (
+                                                                    <div key={idx} className="flex justify-between text-xs">
+                                                                        <span className="text-slate-600 truncate flex-1 mr-2">{item.name}</span>
+                                                                        <span className="font-bold text-slate-700">{item.cartQty}x</span>
+                                                                    </div>
+                                                                ))}
+                                                                {activeCart.items.length > 3 && (
+                                                                    <p className="text-[10px] text-slate-400 italic">+{activeCart.items.length - 3} barang lainnya</p>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            }
+
+            // NEW: Modal Input Nama Kasir
+            if (showCashierModal) {
+                return (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
+                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative">
+                            <button onClick={() => setShowCashierModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+                                <Icon name="xmark" className="text-xl" />
+                            </button>
+                            
+                            <div className="text-center mb-6">
+                                <div className="w-20 h-20 bg-sky-100 rounded-full flex items-center justify-center text-sky-600 text-3xl mx-auto mb-4">
+                                    <Icon name="user-circle" />
+                                </div>
+                                <h3 className="text-2xl font-black text-slate-800">Siapa Nama Anda?</h3>
+                                <p className="text-sm text-slate-500 mt-2">Nama akan ditampilkan di struk dan keranjang real-time</p>
+                            </div>
+                            
+                            <form onSubmit={(e) => { e.preventDefault(); startCashierSession(); }} className="space-y-4">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Nama Kasir</label>
+                                    <input 
+                                        autoFocus
+                                        type="text" 
+                                        className="w-full p-4 rounded-xl bg-slate-50 border-2 border-slate-200 text-lg font-bold text-center outline-none focus:border-sky-500 focus:bg-white transition-all" 
+                                        placeholder="Contoh: Andi" 
+                                        value={cashierName} 
+                                        onChange={e => setCashierName(e.target.value)}
+                                        maxLength={30}
+                                    />
+                                    <p className="text-[10px] text-slate-400 mt-1 text-center">Gunakan nama panggilan Anda</p>
+                                </div>
+                                
+                                <button 
+                                    type="submit"
+                                    className="w-full py-4 bg-sky-600 text-white rounded-xl font-bold shadow-lg shadow-sky-100 flex items-center justify-center gap-2 hover:bg-sky-700 active:scale-95 transition-all text-lg"
+                                >
+                                    <Icon name="rocket" /> Mulai Kasir
+                                </button>
+                            </form>
                         </div>
                     </div>
                 );
@@ -875,6 +1145,54 @@
             return (
                 <div className="fade-in h-full flex flex-col md:flex-row gap-4 pb-20 md:pb-0 relative z-10">
                     <div className="flex-1 flex flex-col h-full min-h-0">
+                        {/* NEW: Header dengan info nama kasir */}
+                        <div className="flex items-center gap-2 mb-3 bg-gradient-to-r from-sky-50 to-blue-50 p-3 rounded-xl border border-sky-200">
+                            <div className="w-10 h-10 bg-sky-500 rounded-full flex items-center justify-center text-white font-bold shadow-md">
+                                {cashierName.charAt(0).toUpperCase()}
+                            </div>
+                            {!editingCashierName ? (
+                                <>
+                                    <div className="flex-1">
+                                        <p className="text-[10px] text-sky-600 font-bold uppercase">Kasir Aktif</p>
+                                        <p className="font-black text-slate-800">{cashierName}</p>
+                                    </div>
+                                    <button 
+                                        onClick={() => setEditingCashierName(true)} 
+                                        className="px-3 py-1.5 bg-white border border-sky-200 text-sky-600 rounded-lg text-xs font-bold hover:bg-sky-50 transition-all"
+                                    >
+                                        <Icon name="pen" className="mr-1" /> Ubah
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    <input 
+                                        autoFocus
+                                        type="text" 
+                                        className="flex-1 px-3 py-2 rounded-lg border-2 border-sky-300 font-bold outline-none focus:border-sky-500" 
+                                        value={cashierName} 
+                                        onChange={e => setCashierName(e.target.value)}
+                                        maxLength={30}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter') handleUpdateCashierName();
+                                            if (e.key === 'Escape') setEditingCashierName(false);
+                                        }}
+                                    />
+                                    <button 
+                                        onClick={handleUpdateCashierName} 
+                                        className="px-3 py-2 bg-sky-500 text-white rounded-lg text-xs font-bold hover:bg-sky-600 transition-all shadow-md"
+                                    >
+                                        <Icon name="check" />
+                                    </button>
+                                    <button 
+                                        onClick={() => setEditingCashierName(false)} 
+                                        className="px-3 py-2 bg-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-300 transition-all"
+                                    >
+                                        <Icon name="xmark" />
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                        
                         <div className="flex items-center gap-3 mb-4"><button onClick={handleBack} className="w-10 h-10 rounded-xl bg-white text-slate-400 hover:text-sky-600 hover:border-sky-300 border border-slate-200 flex items-center justify-center shadow-sm transition-colors" title="Kembali & Simpan Sementara"><Icon name="arrow-left" /></button><div className="relative group flex-1"><input autoFocus type="text" placeholder="Ketik nama barang disini..." className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-white border border-slate-200 shadow-soft focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition-all font-bold text-lg text-slate-700 placeholder:font-normal placeholder:text-slate-400" value={search} onChange={e => setSearch(e.target.value)} /><Icon name="magnifying-glass" className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl group-focus-within:text-sky-500" /></div></div>
                         <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 pb-2">
                             {search === '' ? (<div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60"><Icon name="magnifying-glass" className="text-6xl mb-4 text-slate-300" /><p className="font-semibold text-lg">Mulai ketik untuk mencari barang...</p><p className="text-xs mt-1">Stok diambil dari: <b>{currentProfile.name}</b></p></div>) : (<div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">{filteredItems.map(item => { const inCart = cart.find(c => c.id === item.id); const currentStock = safeNumber(item.qty) - (inCart ? inCart.cartQty : 0); const isOOS = currentStock <= 0; return (<button key={item.id} onClick={() => addToCart(item)} disabled={isOOS} className={`text-left p-3 rounded-xl border transition-all relative overflow-hidden group ${isOOS ? 'bg-slate-100 border-slate-200 opacity-70' : 'bg-white border-slate-200 hover:border-sky-300 hover:shadow-md'}`}>{isNewItem(item.createdAt) && !isOOS && <span className="absolute top-0 right-0 bg-rose-500 text-white text-[8px] font-bold px-1.5 rounded-bl-lg">NEW</span>}<h4 className="font-bold text-slate-800 text-xs line-clamp-2 h-8 leading-snug">{item.name}</h4><div className="mt-2 flex justify-between items-end"><div><p className="text-[10px] text-slate-500 font-medium">{item.unit}</p><p className="text-xs font-bold text-sky-600">{formatRupiah(item.price)}</p></div><div className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${isOOS ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>Stok: {currentStock}</div></div>{!isOOS && <div className="absolute inset-0 bg-sky-500/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Icon name="plus" className="text-sky-600 text-xl" /></div>}</button>)})}{filteredItems.length === 0 && <div className="col-span-full py-10 text-center text-slate-400 text-sm">Barang tidak ditemukan</div>}</div>)}
@@ -1638,7 +1956,7 @@
                                 <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600 p-2"><Icon name="xmark" className="text-xl" /></button>
                             </div>
                             <nav className="space-y-2 flex-1">{visibleMenuItems.map(menu => (<button key={menu.id} onClick={(e) => handleNavClick(menu.id, e)} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold transition-all duration-300 relative overflow-hidden group ${activeTab === menu.id ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}><Icon name={menu.icon} className={`w-5 text-base ${activeTab === menu.id ? 'text-white' : 'text-slate-400'}`} /> {menu.label}</button>))}</nav>
-                            <div className="mt-auto pt-6 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400">Versi 27.0 • Struk Per Cabang</p></div>
+                            <div className="mt-auto pt-6 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400">Versi 28.0 • Real-Time Cart & Nama Kasir</p></div>
                         </div>
                     </aside>
                     <main className="flex-1 md:ml-0 p-4 md:p-8 max-w-7xl mx-auto w-full mb-0 relative z-20">
