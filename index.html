@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistem Kasir Toko Husna (V31 - Badge Notif & Keranjang Tertunda)</title>
+    <title>Sistem Kasir Toko Husna (V32 - Edit Keranjang Real-Time Antar Kasir)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -772,11 +772,16 @@
                 return () => unsub();
             }, [user, currentProfile, activeCartId]);
 
-            // NEW: Sync cart ke Firestore setiap kali cart berubah
+            // Ref untuk mencegah loop sync saat update datang dari luar
+            const isExternalUpdate = useRef(false);
+
+            // Sync cart ke Firestore setiap kali cart berubah (outgoing)
             useEffect(() => {
                 if (!isSessionActive || !activeCartId || !cashierName) return;
                 
                 const syncCart = async () => {
+                    // Skip jika cart baru saja diupdate dari luar (oleh kasir lain)
+                    if (isExternalUpdate.current) { isExternalUpdate.current = false; return; }
                     try {
                         const cartRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', activeCartId);
                         await window.setDoc(cartRef, {
@@ -797,6 +802,28 @@
                 const timeoutId = setTimeout(syncCart, 500);
                 return () => clearTimeout(timeoutId);
             }, [cart, isSessionActive, activeCartId, cashierName, currentProfile]);
+
+            // Listener incoming: ketika item di keranjang kita diubah dari HP lain
+            useEffect(() => {
+                if (!isSessionActive || !activeCartId) return;
+                const cartRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', activeCartId);
+                const unsub = window.onSnapshot(cartRef, (snap) => {
+                    if (!snap.exists()) return;
+                    const data = snap.data();
+                    // Cek apakah items berubah dari luar (jumlah atau id berbeda)
+                    setCart(prevCart => {
+                        const incomingItems = data.items || [];
+                        const prevStr = JSON.stringify(prevCart.map(i => ({id: i.id, cartQty: i.cartQty})));
+                        const incomingStr = JSON.stringify(incomingItems.map(i => ({id: i.id, cartQty: i.cartQty})));
+                        if (prevStr !== incomingStr) {
+                            isExternalUpdate.current = true;
+                            return incomingItems;
+                        }
+                        return prevCart;
+                    });
+                });
+                return () => unsub();
+            }, [isSessionActive, activeCartId]);
 
             // Fungsi utama untuk memulai sesi (bisa preload items dari ambil alih)
             const handleStartSession = async (name, preloadItems = []) => {
@@ -865,7 +892,37 @@
                 }
             };
 
-            // Prevent interaction if in All Stores Mode
+            // Hapus 1 item dari keranjang kasir lain (real-time via Firestore)
+            const removeItemFromActiveCart = async (cartId, itemIndex) => {
+                const cart = activeCarts.find(c => c.id === cartId);
+                if (!cart) return;
+                const newItems = cart.items.filter((_, i) => i !== itemIndex);
+                const newTotal = newItems.reduce((acc, i) => acc + (safeNumber(i.price) * i.cartQty), 0);
+                try {
+                    await window.updateDoc(
+                        window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', cartId),
+                        { items: newItems, total: newTotal, updatedAt: window.serverTimestamp() }
+                    );
+                } catch (e) { showToast("Gagal hapus item", "error"); }
+            };
+
+            // Ubah qty item di keranjang kasir lain (real-time via Firestore)
+            const updateItemQtyInActiveCart = async (cartId, itemIndex, delta) => {
+                const cart = activeCarts.find(c => c.id === cartId);
+                if (!cart) return;
+                const newItems = [...cart.items];
+                const newQty = newItems[itemIndex].cartQty + delta;
+                if (newQty < 1) { removeItemFromActiveCart(cartId, itemIndex); return; }
+                if (newQty > newItems[itemIndex].qty) { showToast("Stok tidak cukup!", "error"); return; }
+                newItems[itemIndex] = { ...newItems[itemIndex], cartQty: newQty };
+                const newTotal = newItems.reduce((acc, i) => acc + (safeNumber(i.price) * i.cartQty), 0);
+                try {
+                    await window.updateDoc(
+                        window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', cartId),
+                        { items: newItems, total: newTotal, updatedAt: window.serverTimestamp() }
+                    );
+                } catch (e) { showToast("Gagal update qty", "error"); }
+            };
             if (currentProfile.id === 'all_stores') {
                 return (
                     <div className="fade-in h-full flex flex-col items-center justify-center text-center p-6 relative z-10">
@@ -1111,49 +1168,71 @@
                                             <Icon name="users" className="text-orange-500" />
                                             <h3 className="font-bold text-slate-700 text-sm">Kasir Lain Sedang Aktif</h3>
                                         </div>
-                                        <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-bold">{activeCarts.length} LIVE</span>
+                                        <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-bold animate-pulse">{activeCarts.length} LIVE</span>
                                     </div>
-                                    <p className="text-[10px] text-slate-400 px-1 mb-3">💡 Jika kasir lain butuh bantuan atau pergi, kamu bisa langsung <b>ambil alih</b> keranjangnya.</p>
-                                    <div className="space-y-3">
+                                    <p className="text-[10px] text-slate-400 px-1 mb-3">💡 Lihat & edit keranjang kasir lain secara real-time, atau ambil alih untuk melanjutkan transaksinya.</p>
+                                    <div className="space-y-4">
                                         {activeCarts.map(activeCart => (
-                                            <div key={activeCart.id} className="bg-gradient-to-r from-orange-50 to-amber-50 p-4 rounded-2xl border-2 border-orange-200 shadow-sm relative overflow-hidden">
-                                                <div className="absolute left-0 top-0 bottom-0 w-2 bg-gradient-to-b from-orange-400 to-orange-600"></div>
-                                                <div className="pl-2">
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-white text-sm font-bold">
-                                                                {(activeCart.cashierName||'?').charAt(0).toUpperCase()}
-                                                            </div>
-                                                            <div>
-                                                                <p className="font-black text-slate-800 text-sm">{activeCart.cashierName}</p>
-                                                                <p className="text-[10px] text-orange-600 font-bold">● KERANJANG AKTIF</p>
-                                                            </div>
+                                            <div key={activeCart.id} className="bg-white rounded-2xl border-2 border-orange-200 shadow-sm overflow-hidden">
+                                                {/* Header kartu */}
+                                                <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-3 flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-8 h-8 bg-white/30 rounded-full flex items-center justify-center text-white text-sm font-black">
+                                                            {(activeCart.cashierName||'?').charAt(0).toUpperCase()}
                                                         </div>
-                                                        <div className="text-right">
-                                                            <p className="font-black text-orange-700 text-lg">{formatRupiah(activeCart.total)}</p>
-                                                            <p className="text-[9px] text-slate-500 font-medium">{(activeCart.items||[]).length} barang</p>
+                                                        <div>
+                                                            <p className="font-black text-white text-sm leading-none">{activeCart.cashierName}</p>
+                                                            <div className="flex items-center gap-1 mt-0.5">
+                                                                <span className="w-1.5 h-1.5 bg-green-300 rounded-full inline-block animate-pulse"></span>
+                                                                <p className="text-[10px] text-orange-100 font-bold">LIVE</p>
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                    {(activeCart.items||[]).length > 0 && (
-                                                        <div className="mt-2 pt-2 border-t border-orange-200/50">
-                                                            <div className="space-y-1">
-                                                                {activeCart.items.slice(0, 3).map((item, idx) => (
-                                                                    <div key={idx} className="flex justify-between text-xs">
-                                                                        <span className="text-slate-600 truncate flex-1 mr-2">{item.name}</span>
-                                                                        <span className="font-bold text-slate-700">{item.cartQty}x</span>
+                                                    <div className="text-right">
+                                                        <p className="font-black text-white text-xl leading-none">{formatRupiah(activeCart.total)}</p>
+                                                        <p className="text-[10px] text-orange-100 mt-0.5">{(activeCart.items||[]).length} barang</p>
+                                                    </div>
+                                                </div>
+
+                                                {/* Daftar item real-time — bisa edit */}
+                                                <div className="px-3 py-2">
+                                                    {(activeCart.items||[]).length === 0 ? (
+                                                        <div className="py-4 text-center text-xs text-slate-400 italic">Keranjang masih kosong...</div>
+                                                    ) : (
+                                                        <div className="space-y-1.5">
+                                                            {(activeCart.items||[]).map((item, idx) => (
+                                                                <div key={idx} className="flex items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-100 group">
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className="text-xs font-bold text-slate-700 truncate">{item.name}</p>
+                                                                        <p className="text-[10px] text-slate-400">{formatRupiah(item.price)} × {item.cartQty} = <span className="font-bold text-slate-600">{formatRupiah(item.price * item.cartQty)}</span></p>
                                                                     </div>
-                                                                ))}
-                                                                {activeCart.items.length > 3 && (
-                                                                    <p className="text-[10px] text-slate-400 italic">+{activeCart.items.length - 3} barang lainnya</p>
-                                                                )}
-                                                            </div>
+                                                                    {/* Kontrol qty */}
+                                                                    <div className="flex items-center gap-1 bg-white rounded-lg border border-slate-200 shadow-sm px-1 py-0.5 flex-shrink-0">
+                                                                        <button onClick={() => updateItemQtyInActiveCart(activeCart.id, idx, -1)} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors">
+                                                                            <Icon name="minus" className="text-[9px]" />
+                                                                        </button>
+                                                                        <span className="text-xs font-black text-slate-700 w-4 text-center">{item.cartQty}</span>
+                                                                        <button onClick={() => updateItemQtyInActiveCart(activeCart.id, idx, 1)} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-green-500 hover:bg-green-50 rounded transition-colors">
+                                                                            <Icon name="plus" className="text-[9px]" />
+                                                                        </button>
+                                                                    </div>
+                                                                    {/* Tombol hapus */}
+                                                                    <button onClick={() => removeItemFromActiveCart(activeCart.id, idx)} className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0">
+                                                                        <Icon name="trash" className="text-[10px]" />
+                                                                    </button>
+                                                                </div>
+                                                            ))}
                                                         </div>
                                                     )}
+                                                </div>
+
+                                                {/* Footer: tombol ambil alih */}
+                                                <div className="px-3 pb-3">
                                                     <button
                                                         onClick={() => takeoverCart(activeCart)}
-                                                        className="mt-3 w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-bold shadow-md active:scale-95 transition-all flex items-center justify-center gap-2"
+                                                        className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-bold shadow-md active:scale-95 transition-all flex items-center justify-center gap-2"
                                                     >
-                                                        <Icon name="right-to-bracket" /> Lanjutkan Keranjang {activeCart.cashierName}
+                                                        <Icon name="right-to-bracket" /> Ambil Alih & Bayarkan
                                                     </button>
                                                 </div>
                                             </div>
@@ -2028,7 +2107,7 @@
                                 <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600 p-2"><Icon name="xmark" className="text-xl" /></button>
                             </div>
                             <nav className="space-y-2 flex-1">{visibleMenuItems.map(menu => (<button key={menu.id} onClick={(e) => handleNavClick(menu.id, e)} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold transition-all duration-300 relative overflow-hidden group ${activeTab === menu.id ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}><div className="relative w-5 flex-shrink-0"><Icon name={menu.icon} className={`text-base ${activeTab === menu.id ? 'text-white' : 'text-slate-400'}`} />{menu.badge > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center leading-none shadow-sm animate-pulse">{menu.badge > 9 ? '9+' : menu.badge}</span>}</div><span className="flex-1 text-left">{menu.label}</span>{menu.badge > 0 && activeTab !== menu.id && <span className="text-[9px] bg-red-100 text-red-600 font-black px-1.5 py-0.5 rounded-full border border-red-200">{menu.badge} baru</span>}</button>))}</nav>
-                            <div className="mt-auto pt-6 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400">Versi 31.0 • Badge Notif & Tertunda Nama Kasir</p></div>
+                            <div className="mt-auto pt-6 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400">Versi 32.0 • Edit Keranjang Real-Time Antar Kasir</p></div>
                         </div>
                     </aside>
                     <main className="flex-1 md:ml-0 p-4 md:p-8 max-w-7xl mx-auto w-full mb-0 relative z-20">
