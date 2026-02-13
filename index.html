@@ -769,20 +769,6 @@
                 return () => clearTimeout(timeoutId);
             }, [cart, isSessionActive, activeCartId, cashierName, currentProfile]);
 
-            // Prevent interaction if in All Stores Mode
-            if (currentProfile.id === 'all_stores') {
-                return (
-                    <div className="fade-in h-full flex flex-col items-center justify-center text-center p-6 relative z-10">
-                        <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 text-3xl mb-4 shadow-sm"><Icon name="shop-lock" /></div>
-                        <h2 className="text-xl font-bold text-slate-800 mb-2">Mode Gabungan (View Only)</h2>
-                        <p className="text-slate-500 max-w-xs mx-auto mb-6 text-sm">Anda sedang melihat stok gabungan semua toko. Untuk melakukan transaksi kasir, silakan pilih salah satu toko spesifik dari menu di kiri atas.</p>
-                        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-xs text-yellow-700 font-medium">
-                            <Icon name="triangle-exclamation" className="mr-1" /> Stok tidak dapat dikurangi dari mode gabungan.
-                        </div>
-                    </div>
-                );
-            }
-            
             // NEW: Fungsi untuk memulai sesi kasir dengan nama kasir
             const startCashierSession = async () => {
                 if (!cashierName.trim()) {
@@ -837,6 +823,20 @@
                     showToast("Gagal update nama", "error");
                 }
             };
+
+            // Prevent interaction if in All Stores Mode
+            if (currentProfile.id === 'all_stores') {
+                return (
+                    <div className="fade-in h-full flex flex-col items-center justify-center text-center p-6 relative z-10">
+                        <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 text-3xl mb-4 shadow-sm"><Icon name="shop-lock" /></div>
+                        <h2 className="text-xl font-bold text-slate-800 mb-2">Mode Gabungan (View Only)</h2>
+                        <p className="text-slate-500 max-w-xs mx-auto mb-6 text-sm">Anda sedang melihat stok gabungan semua toko. Untuk melakukan transaksi kasir, silakan pilih salah satu toko spesifik dari menu di kiri atas.</p>
+                        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-xs text-yellow-700 font-medium">
+                            <Icon name="triangle-exclamation" className="mr-1" /> Stok tidak dapat dikurangi dari mode gabungan.
+                        </div>
+                    </div>
+                );
+            }
 
             const fuse = useMemo(() => new Fuse(items, { keys: ['name', 'rack'], threshold: 0.3 }), [items]);
             const filteredItems = useMemo(() => { if (!search) return []; return fuse.search(search).map(r => r.item).slice(0, 30); }, [items, search, fuse]);
@@ -1094,50 +1094,48 @@
                                 </div>
                             )}
                         </div>
-                    </div>
-                );
-            }
-
-            // NEW: Modal Input Nama Kasir
-            if (showCashierModal) {
-                return (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
-                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative">
-                            <button onClick={() => setShowCashierModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
-                                <Icon name="xmark" className="text-xl" />
-                            </button>
-                            
-                            <div className="text-center mb-6">
-                                <div className="w-20 h-20 bg-sky-100 rounded-full flex items-center justify-center text-sky-600 text-3xl mx-auto mb-4">
-                                    <Icon name="user-circle" />
+                        
+                        {/* NEW: Modal Input Nama Kasir - Render sebagai overlay */}
+                        {showCashierModal && (
+                            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
+                                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative">
+                                    <button onClick={() => setShowCashierModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+                                        <Icon name="xmark" className="text-xl" />
+                                    </button>
+                                    
+                                    <div className="text-center mb-6">
+                                        <div className="w-20 h-20 bg-sky-100 rounded-full flex items-center justify-center text-sky-600 text-3xl mx-auto mb-4">
+                                            <Icon name="user-circle" />
+                                        </div>
+                                        <h3 className="text-2xl font-black text-slate-800">Siapa Nama Anda?</h3>
+                                        <p className="text-sm text-slate-500 mt-2">Nama akan ditampilkan di struk dan keranjang real-time</p>
+                                    </div>
+                                    
+                                    <form onSubmit={(e) => { e.preventDefault(); startCashierSession(); }} className="space-y-4">
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Nama Kasir</label>
+                                            <input 
+                                                autoFocus
+                                                type="text" 
+                                                className="w-full p-4 rounded-xl bg-slate-50 border-2 border-slate-200 text-lg font-bold text-center outline-none focus:border-sky-500 focus:bg-white transition-all" 
+                                                placeholder="Contoh: Andi" 
+                                                value={cashierName} 
+                                                onChange={e => setCashierName(e.target.value)}
+                                                maxLength={30}
+                                            />
+                                            <p className="text-[10px] text-slate-400 mt-1 text-center">Gunakan nama panggilan Anda</p>
+                                        </div>
+                                        
+                                        <button 
+                                            type="submit"
+                                            className="w-full py-4 bg-sky-600 text-white rounded-xl font-bold shadow-lg shadow-sky-100 flex items-center justify-center gap-2 hover:bg-sky-700 active:scale-95 transition-all text-lg"
+                                        >
+                                            <Icon name="rocket" /> Mulai Kasir
+                                        </button>
+                                    </form>
                                 </div>
-                                <h3 className="text-2xl font-black text-slate-800">Siapa Nama Anda?</h3>
-                                <p className="text-sm text-slate-500 mt-2">Nama akan ditampilkan di struk dan keranjang real-time</p>
                             </div>
-                            
-                            <form onSubmit={(e) => { e.preventDefault(); startCashierSession(); }} className="space-y-4">
-                                <div>
-                                    <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Nama Kasir</label>
-                                    <input 
-                                        autoFocus
-                                        type="text" 
-                                        className="w-full p-4 rounded-xl bg-slate-50 border-2 border-slate-200 text-lg font-bold text-center outline-none focus:border-sky-500 focus:bg-white transition-all" 
-                                        placeholder="Contoh: Andi" 
-                                        value={cashierName} 
-                                        onChange={e => setCashierName(e.target.value)}
-                                        maxLength={30}
-                                    />
-                                    <p className="text-[10px] text-slate-400 mt-1 text-center">Gunakan nama panggilan Anda</p>
-                                </div>
-                                
-                                <button 
-                                    type="submit"
-                                    className="w-full py-4 bg-sky-600 text-white rounded-xl font-bold shadow-lg shadow-sky-100 flex items-center justify-center gap-2 hover:bg-sky-700 active:scale-95 transition-all text-lg"
-                                >
-                                    <Icon name="rocket" /> Mulai Kasir
-                                </button>
-                            </form>
-                        </div>
+                        )}
                     </div>
                 );
             }
