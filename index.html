@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistem Kasir Toko Husna (V30 - Nama Persisten & Ambil Alih Keranjang)</title>
+    <title>Sistem Kasir Toko Husna (V31 - Badge Notif & Keranjang Tertunda)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -1076,24 +1076,44 @@
                              </div>
 
                              {pendingCarts.length > 0 && (
-                                <div className="w-full mb-8 fade-in">
-                                    <div className="flex items-center justify-between mb-3 px-1"><div className="flex items-center gap-2"><Icon name="clock-rotate-left" className="text-sky-600" /><h3 className="font-bold text-slate-700 text-sm">Tertunda di {currentProfile.name}</h3></div><span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-bold">{pendingCarts.length} sesi</span></div>
-                                    <div className="space-y-3">{pendingCarts.map(pending => (<button key={pending.id} onClick={() => resumeTransaction(pending)} className="w-full bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-sky-300 transition-all flex items-center justify-between group relative overflow-hidden"><div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-sky-400 to-sky-600"></div><div className="text-left pl-2"><p className="font-black text-slate-800 text-lg">{formatRupiah(pending.total)}</p><p className="text-xs text-slate-500 font-medium mt-0.5">{pending.items.length} Barang • {new Date(pending.date).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}</p><span className="inline-block mt-2 text-[9px] font-bold text-sky-600 bg-sky-50 px-2 py-0.5 rounded border border-sky-100">Klik untuk lanjut</span></div><div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-sky-50 group-hover:text-sky-600 transition-colors"><Icon name="chevron-right" /></div></button>))}</div>
+                                <div className="w-full mb-6 fade-in">
+                                    <div className="flex items-center justify-between mb-3 px-1">
+                                        <div className="flex items-center gap-2"><Icon name="clock-rotate-left" className="text-sky-600" /><h3 className="font-bold text-slate-700 text-sm">Tertunda di {currentProfile.name}</h3></div>
+                                        <span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-bold">{pendingCarts.length} sesi</span>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {pendingCarts.map(pending => (
+                                            <button key={pending.id} onClick={() => resumeTransaction(pending)} className="w-full bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-sky-300 transition-all flex items-center justify-between group relative overflow-hidden">
+                                                <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-sky-400 to-sky-600"></div>
+                                                <div className="text-left pl-2 flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 mb-0.5">
+                                                        <div className="w-6 h-6 bg-sky-500 rounded-full flex items-center justify-center text-white text-[10px] font-black flex-shrink-0">
+                                                            {(pending.cashierName || '?').charAt(0).toUpperCase()}
+                                                        </div>
+                                                        <p className="font-bold text-sky-700 text-xs truncate">{pending.cashierName || 'Kasir'}</p>
+                                                    </div>
+                                                    <p className="font-black text-slate-800 text-lg">{formatRupiah(pending.total)}</p>
+                                                    <p className="text-xs text-slate-500 font-medium mt-0.5">{pending.items.length} Barang • {new Date(pending.date).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}</p>
+                                                    <span className="inline-block mt-1 text-[9px] font-bold text-sky-600 bg-sky-50 px-2 py-0.5 rounded border border-sky-100">Klik untuk lanjut</span>
+                                                </div>
+                                                <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-sky-50 group-hover:text-sky-600 transition-colors ml-2 flex-shrink-0"><Icon name="chevron-right" /></div>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                              )}
-                            <button onClick={() => handleStartSession(cashierName || localStorage.getItem('cashierName') || '')} className="group relative w-full aspect-square md:aspect-video rounded-3xl border-4 border-dashed border-sky-300 bg-sky-50/50 hover:bg-sky-100 hover:border-sky-400 transition-all flex flex-col items-center justify-center gap-4 active:scale-95"><div className="w-20 h-20 rounded-full bg-white text-sky-500 shadow-soft flex items-center justify-center text-4xl group-hover:scale-110 transition-transform"><Icon name="cart-plus" /></div><div className="text-center"><h2 className="text-2xl font-black text-slate-700 group-hover:text-sky-700">+ Penjualan Baru</h2><p className="text-sm text-slate-500 font-medium mt-1">Mulai sesi kasir di toko ini</p>{(cashierName || localStorage.getItem('cashierName')) && <p className="text-xs text-sky-600 font-bold mt-1">👤 {cashierName || localStorage.getItem('cashierName')}</p>}</div></button>
-                            
-                            {/* Keranjang Aktif dari Kasir Lain — bisa diambil alih */}
+
+                            {/* Keranjang Aktif dari Kasir Lain — di atas tombol + Penjualan */}
                             {activeCarts.length > 0 && (
-                                <div className="w-full mt-8 fade-in">
+                                <div className="w-full mb-6 fade-in">
                                     <div className="flex items-center justify-between mb-1 px-1">
                                         <div className="flex items-center gap-2">
                                             <Icon name="users" className="text-orange-500" />
                                             <h3 className="font-bold text-slate-700 text-sm">Kasir Lain Sedang Aktif</h3>
                                         </div>
-                                        <span className="text-[10px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold">{activeCarts.length} LIVE</span>
+                                        <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-bold">{activeCarts.length} LIVE</span>
                                     </div>
-                                    <p className="text-[10px] text-slate-400 px-1 mb-3">💡 Jika kasir lain butuh bantuan atau pergi, kamu bisa langsung <b>ambil alih</b> keranjangnya dan teruskan transaksinya.</p>
+                                    <p className="text-[10px] text-slate-400 px-1 mb-3">💡 Jika kasir lain butuh bantuan atau pergi, kamu bisa langsung <b>ambil alih</b> keranjangnya.</p>
                                     <div className="space-y-3">
                                         {activeCarts.map(activeCart => (
                                             <div key={activeCart.id} className="bg-gradient-to-r from-orange-50 to-amber-50 p-4 rounded-2xl border-2 border-orange-200 shadow-sm relative overflow-hidden">
@@ -1102,7 +1122,7 @@
                                                     <div className="flex items-center justify-between mb-2">
                                                         <div className="flex items-center gap-2">
                                                             <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-white text-sm font-bold">
-                                                                {activeCart.cashierName.charAt(0).toUpperCase()}
+                                                                {(activeCart.cashierName||'?').charAt(0).toUpperCase()}
                                                             </div>
                                                             <div>
                                                                 <p className="font-black text-slate-800 text-sm">{activeCart.cashierName}</p>
@@ -1141,6 +1161,8 @@
                                     </div>
                                 </div>
                             )}
+
+                            <button onClick={() => handleStartSession(cashierName || localStorage.getItem('cashierName') || '')} className="group relative w-full aspect-square md:aspect-video rounded-3xl border-4 border-dashed border-sky-300 bg-sky-50/50 hover:bg-sky-100 hover:border-sky-400 transition-all flex flex-col items-center justify-center gap-4 active:scale-95"><div className="w-20 h-20 rounded-full bg-white text-sky-500 shadow-soft flex items-center justify-center text-4xl group-hover:scale-110 transition-transform"><Icon name="cart-plus" /></div><div className="text-center"><h2 className="text-2xl font-black text-slate-700 group-hover:text-sky-700">+ Penjualan Baru</h2><p className="text-sm text-slate-500 font-medium mt-1">Mulai sesi kasir di toko ini</p>{(cashierName || localStorage.getItem('cashierName')) && <p className="text-xs text-sky-600 font-bold mt-1">👤 {cashierName || localStorage.getItem('cashierName')}</p>}</div></button>
                         </div>
                         
                         {/* NEW: Modal Input Nama Kasir - Render sebagai overlay */}
@@ -1730,6 +1752,7 @@
             const [isGeneratingImage, setIsGeneratingImage] = useState(false);
             const [activeStoreId, setActiveStoreId] = useState(localStorage.getItem('activeStoreId') || 'default');
             const [showStoreMenu, setShowStoreMenu] = useState(false);
+            const [notifCounts, setNotifCounts] = useState({ pendingCarts: 0, activeCarts: 0 });
 
             useEffect(() => {
                 const initAuth = async () => { if (window.initialAuthToken) { await window.signInWithCustomToken(window.auth, window.initialAuthToken); } else { await window.signInAnonymously(window.auth); } };
@@ -1817,6 +1840,32 @@
                 setInventoryData(processed);
             }, [rawInventory, activeStoreId, settingsData]);
 
+            // 4. Subscribe ke pending_carts dan active_carts untuk badge notifikasi di menu
+            useEffect(() => {
+                if (!user || activeStoreId === 'all_stores') return;
+                const storeId = activeStoreId;
+
+                const qPending = window.query(
+                    window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pending_carts'),
+                    window.orderBy('date', 'desc')
+                );
+                const unsubPending = window.onSnapshot(qPending, (snap) => {
+                    const count = snap.docs.filter(d => d.data().storeId === storeId || d.data().storeProfile === (settingsData.storeProfiles?.find(p => p.id === storeId)?.name || '')).length;
+                    setNotifCounts(prev => ({ ...prev, pendingCarts: count }));
+                });
+
+                const qActive = window.query(
+                    window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts'),
+                    window.orderBy('updatedAt', 'desc')
+                );
+                const unsubActive = window.onSnapshot(qActive, (snap) => {
+                    const count = snap.docs.filter(d => d.data().storeId === storeId && d.data().isActive).length;
+                    setNotifCounts(prev => ({ ...prev, activeCarts: count }));
+                });
+
+                return () => { unsubPending(); unsubActive(); };
+            }, [user, activeStoreId, settingsData]);
+
             const uniqueRacksData = useMemo(() => {
                 const rackMap = new Map();
                 inventoryData.forEach(item => {
@@ -1898,7 +1947,16 @@
             const handleConfirmDeleteRack = async () => { if (!deleteRackModal.rackName || !user) return; const rackName = deleteRackModal.rackName; try { const batch = window.writeBatch(window.db); const itemsToUpdate = inventoryData.filter(item => item.rack && item.rack.includes(rackName)); if (itemsToUpdate.length === 0) { showToast("Tidak ada item di rak ini"); setDeleteRackModal({ show: false, rackName: null }); return; } itemsToUpdate.forEach(item => { const newRacks = item.rack.split(',').map(r => r.trim()).filter(r => r !== rackName); const newRackString = newRacks.length > 0 ? newRacks.join(', ') : '-'; const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id); batch.update(docRef, { rack: newRackString }); }); await batch.commit(); showToast(`Rak "${rackName}" berhasil dihapus`); setSelectedRacks([]); } catch (err) { console.error("Failed delete rack", err); showToast("Gagal menghapus rak", "error"); } finally { setDeleteRackModal({ show: false, rackName: null }); } };
             const handleNavClick = (tabId, event) => { setActiveTab(tabId); if (tabId !== 'list') setShowOnlyLowStock(false); setIsSidebarOpen(false); };
             
-            const menuItems = [ { id: 'cashier', label: 'Kasir', icon: 'cash-register', enabled: settingsData.enableCashier !== false }, { id: 'history', label: 'Riwayat', icon: 'clock-rotate-left', enabled: settingsData.enableHistory !== false }, { id: 'purchases', label: 'Faktur Pembelian', icon: 'file-invoice-dollar', enabled: settingsData.enablePurchases !== false }, { id: 'home', label: 'Dashboard', icon: 'chart-pie', enabled: true }, { id: 'list', label: 'Stok Barang', icon: 'boxes-stacked', enabled: true }, { id: 'add', label: 'Input Manual', icon: 'pen-to-square', enabled: true }, { id: 'import', label: 'Import Masal', icon: 'file-import', enabled: true }, { id: 'settings', label: 'Pengaturan', icon: 'gears', enabled: true } ];
+            const menuItems = [ 
+                { id: 'cashier', label: 'Kasir', icon: 'cash-register', enabled: settingsData.enableCashier !== false, badge: notifCounts.pendingCarts + notifCounts.activeCarts }, 
+                { id: 'history', label: 'Riwayat', icon: 'clock-rotate-left', enabled: settingsData.enableHistory !== false }, 
+                { id: 'purchases', label: 'Faktur Pembelian', icon: 'file-invoice-dollar', enabled: settingsData.enablePurchases !== false }, 
+                { id: 'home', label: 'Dashboard', icon: 'chart-pie', enabled: true }, 
+                { id: 'list', label: 'Stok Barang', icon: 'boxes-stacked', enabled: true }, 
+                { id: 'add', label: 'Input Manual', icon: 'pen-to-square', enabled: true }, 
+                { id: 'import', label: 'Import Masal', icon: 'file-import', enabled: true }, 
+                { id: 'settings', label: 'Pengaturan', icon: 'gears', enabled: true } 
+            ];
             const visibleMenuItems = menuItems.filter(m => m.enabled);
 
             return (
@@ -1969,8 +2027,8 @@
                                 </div>
                                 <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600 p-2"><Icon name="xmark" className="text-xl" /></button>
                             </div>
-                            <nav className="space-y-2 flex-1">{visibleMenuItems.map(menu => (<button key={menu.id} onClick={(e) => handleNavClick(menu.id, e)} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold transition-all duration-300 relative overflow-hidden group ${activeTab === menu.id ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}><Icon name={menu.icon} className={`w-5 text-base ${activeTab === menu.id ? 'text-white' : 'text-slate-400'}`} /> {menu.label}</button>))}</nav>
-                            <div className="mt-auto pt-6 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400">Versi 30.0 • Ambil Alih Keranjang Real-Time</p></div>
+                            <nav className="space-y-2 flex-1">{visibleMenuItems.map(menu => (<button key={menu.id} onClick={(e) => handleNavClick(menu.id, e)} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold transition-all duration-300 relative overflow-hidden group ${activeTab === menu.id ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}><div className="relative w-5 flex-shrink-0"><Icon name={menu.icon} className={`text-base ${activeTab === menu.id ? 'text-white' : 'text-slate-400'}`} />{menu.badge > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center leading-none shadow-sm animate-pulse">{menu.badge > 9 ? '9+' : menu.badge}</span>}</div><span className="flex-1 text-left">{menu.label}</span>{menu.badge > 0 && activeTab !== menu.id && <span className="text-[9px] bg-red-100 text-red-600 font-black px-1.5 py-0.5 rounded-full border border-red-200">{menu.badge} baru</span>}</button>))}</nav>
+                            <div className="mt-auto pt-6 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400">Versi 31.0 • Badge Notif & Tertunda Nama Kasir</p></div>
                         </div>
                     </aside>
                     <main className="flex-1 md:ml-0 p-4 md:p-8 max-w-7xl mx-auto w-full mb-0 relative z-20">
