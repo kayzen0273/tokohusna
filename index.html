@@ -1028,13 +1028,20 @@
             };
             
             const editCartItem = (cartItem) => {
+                // Cari item asli dari inventory berdasarkan ID
+                const originalItem = items.find(i => i.id === cartItem.id);
+                if (!originalItem) {
+                    showToast("Item tidak ditemukan di inventory", "error");
+                    return;
+                }
+                
                 // Simpan reference ke item yang sedang diedit
                 setEditingCartItem(cartItem);
                 
-                // Buka modal dengan data item yang ada di cart
+                // Buka modal dengan data item asli dari inventory + data cart
                 setPriceModal({
                     show: true,
-                    item: cartItem, // Item asli dari inventory
+                    item: originalItem, // Item asli dari inventory dengan multiPrices
                     selectedPrice: cartItem.originalPrice || cartItem.price,
                     selectedUnit: cartItem.selectedUnit || cartItem.unit,
                     qty: cartItem.cartQty,
@@ -1044,13 +1051,20 @@
             };
             
             const editLiveCartItem = (liveItem, itemIndex) => {
+                // Cari item asli dari inventory berdasarkan ID
+                const originalItem = items.find(i => i.id === liveItem.id);
+                if (!originalItem) {
+                    showToast("Item tidak ditemukan di inventory", "error");
+                    return;
+                }
+                
                 // Simpan reference ke item yang sedang diedit dari live cart
                 setEditingLiveCartItem({ item: liveItem, index: itemIndex, cartId: helpingCart.id });
                 
-                // Buka modal dengan data item yang ada di live cart
+                // Buka modal dengan data item asli dari inventory + data live cart
                 setPriceModal({
                     show: true,
-                    item: liveItem, // Item asli dari inventory
+                    item: originalItem, // Item asli dari inventory dengan multiPrices
                     selectedPrice: liveItem.originalPrice || liveItem.price,
                     selectedUnit: liveItem.selectedUnit || liveItem.unit,
                     qty: liveItem.cartQty,
