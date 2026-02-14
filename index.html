@@ -740,7 +740,6 @@
             const [showHelpCancelModal, setShowHelpCancelModal] = useState(false);
             const [priceModal, setPriceModal] = useState({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 }); // Modal pilih harga
             const [editingCartItem, setEditingCartItem] = useState(null); // Track item yang sedang diedit dari cart
-            const [editingLiveCartItem, setEditingLiveCartItem] = useState(null); // Track item yang sedang diedit dari live cart (saat membantu)
 
             useEffect(() => {
                 if (!user) return;
@@ -1028,48 +1027,18 @@
             };
             
             const editCartItem = (cartItem) => {
-                // Cari item asli dari inventory berdasarkan ID
-                const originalItem = items.find(i => i.id === cartItem.id);
-                if (!originalItem) {
-                    showToast("Item tidak ditemukan di inventory", "error");
-                    return;
-                }
-                
                 // Simpan reference ke item yang sedang diedit
                 setEditingCartItem(cartItem);
                 
-                // Buka modal dengan data item asli dari inventory + data cart
+                // Buka modal dengan data item yang ada di cart
                 setPriceModal({
                     show: true,
-                    item: originalItem, // Item asli dari inventory dengan multiPrices
+                    item: cartItem, // Item asli dari inventory
                     selectedPrice: cartItem.originalPrice || cartItem.price,
                     selectedUnit: cartItem.selectedUnit || cartItem.unit,
                     qty: cartItem.cartQty,
                     discountType: cartItem.discount?.type || '%',
                     discountValue: cartItem.discount?.value || 0
-                });
-            };
-            
-            const editLiveCartItem = (liveItem, itemIndex) => {
-                // Cari item asli dari inventory berdasarkan ID
-                const originalItem = items.find(i => i.id === liveItem.id);
-                if (!originalItem) {
-                    showToast("Item tidak ditemukan di inventory", "error");
-                    return;
-                }
-                
-                // Simpan reference ke item yang sedang diedit dari live cart
-                setEditingLiveCartItem({ item: liveItem, index: itemIndex, cartId: helpingCart.id });
-                
-                // Buka modal dengan data item asli dari inventory + data live cart
-                setPriceModal({
-                    show: true,
-                    item: originalItem, // Item asli dari inventory dengan multiPrices
-                    selectedPrice: liveItem.originalPrice || liveItem.price,
-                    selectedUnit: liveItem.selectedUnit || liveItem.unit,
-                    qty: liveItem.cartQty,
-                    discountType: liveItem.discount?.type || '%',
-                    discountValue: liveItem.discount?.value || 0
                 });
             };
             
@@ -1131,67 +1100,6 @@
                     });
                     
                     setEditingCartItem(null);
-                    setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 });
-                    showToast("Item diperbarui");
-                    return;
-                }
-                
-                // Jika sedang mengedit item di live cart (saat membantu)
-                if (editingLiveCartItem) {
-                    const { cartId, index } = editingLiveCartItem;
-                    const currentCart = activeCarts.find(c => c.id === cartId);
-                    if (!currentCart) {
-                        showToast("Keranjang tidak ditemukan", "error");
-                        return;
-                    }
-                    
-                    const currentItems = [...(currentCart.items || [])];
-                    
-                    // Hapus item lama
-                    currentItems.splice(index, 1);
-                    
-                    // Cek apakah ada item dengan kombinasi unit+price yang sama
-                    const existingIdx = currentItems.findIndex(c => 
-                        c.id === item.id && 
-                        c.selectedUnit === selectedUnit && 
-                        c.price === finalPrice
-                    );
-                    
-                    if (existingIdx >= 0) {
-                        // Jika sudah ada, tambahkan qty
-                        currentItems[existingIdx] = {
-                            ...currentItems[existingIdx],
-                            cartQty: currentItems[existingIdx].cartQty + finalQty
-                        };
-                    } else {
-                        // Tambahkan item baru
-                        currentItems.push({
-                            ...item,
-                            cartQty: finalQty,
-                            price: finalPrice,
-                            selectedUnit: selectedUnit,
-                            originalPrice: selectedPrice,
-                            discount: discountValue > 0 ? { type: discountType, value: discountValue } : null
-                        });
-                    }
-                    
-                    // Update ke Firestore
-                    const updateLiveCart = async () => {
-                        try {
-                            const cartRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', cartId);
-                            await window.updateDoc(cartRef, {
-                                items: currentItems,
-                                total: currentItems.reduce((acc, i) => acc + (safeNumber(i.price) * i.cartQty), 0),
-                                updatedAt: window.serverTimestamp()
-                            });
-                        } catch (error) {
-                            console.error('Error updating live cart:', error);
-                            showToast("Gagal update item", "error");
-                        }
-                    };
-                    
-                    updateLiveCart();
-                    setEditingLiveCartItem(null);
                     setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 });
                     showToast("Item diperbarui");
                     return;
@@ -1487,22 +1395,17 @@
                                         <p className="text-xs font-medium">Belum ada barang</p>
                                     </div>
                                 ) : liveItems.map((item, idx) => (
-                                    <div key={idx} onClick={() => editLiveCartItem(item, idx)} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex gap-2 items-center group cursor-pointer hover:bg-emerald-50 hover:border-emerald-300 transition-all relative">
-                                        <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Icon name="pen-to-square" className="text-[10px] text-emerald-500" />
-                                        </div>
+                                    <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex gap-2 items-center group">
                                         <div className="flex-1 min-w-0">
                                             <h4 className="text-xs font-bold text-slate-700 truncate">{item.name}</h4>
-                                            <p className="text-[10px] text-slate-500">{formatRupiah(item.originalPrice || item.price)} {item.selectedUnit ? `per ${item.selectedUnit}` : ''} × {item.cartQty}</p>
-                                            {item.discount && <p className="text-[9px] text-red-500 font-bold">Diskon: {item.discount.type === '%' ? `${item.discount.value}%` : formatRupiah(item.discount.value)}</p>}
-                                            <p className="text-[10px] text-slate-600 font-bold mt-0.5">= {formatRupiah(item.price * item.cartQty)}</p>
+                                            <p className="text-[10px] text-slate-500">{formatRupiah(item.price)} × {item.cartQty} = <span className="font-bold">{formatRupiah(item.price * item.cartQty)}</span></p>
                                         </div>
-                                        <div className="flex items-center gap-1 bg-white rounded-lg border border-slate-200 px-1 py-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                                        <div className="flex items-center gap-1 bg-white rounded-lg border border-slate-200 px-1 py-0.5 flex-shrink-0">
                                             <button onClick={() => updateItemQtyInActiveCart(liveCart.id, idx, -1)} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"><Icon name="minus" className="text-[9px]" /></button>
                                             <span className="text-xs font-black text-slate-700 w-4 text-center">{item.cartQty}</span>
                                             <button onClick={() => updateItemQtyInActiveCart(liveCart.id, idx, 1)} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-green-500 hover:bg-green-50 rounded transition-colors"><Icon name="plus" className="text-[9px]" /></button>
                                         </div>
-                                        <button onClick={(e) => { e.stopPropagation(); removeItemFromActiveCart(liveCart.id, idx); }} className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"><Icon name="trash" className="text-[10px]" /></button>
+                                        <button onClick={() => removeItemFromActiveCart(liveCart.id, idx)} className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"><Icon name="trash" className="text-[10px]" /></button>
                                     </div>
                                 ))}
                             </div>
@@ -1767,11 +1670,11 @@
                             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
                                 {/* Header */}
                                 <div className="p-4 border-b border-slate-200 flex items-center justify-between">
-                                    <button onClick={() => { setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 }); setEditingCartItem(null); setEditingLiveCartItem(null); }} className="text-slate-600 hover:text-slate-800">
+                                    <button onClick={() => { setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 }); setEditingCartItem(null); }} className="text-slate-600 hover:text-slate-800">
                                         <Icon name="arrow-left" className="text-xl" />
                                     </button>
                                     <div className="flex items-center gap-2">
-                                        {(editingCartItem || editingLiveCartItem) && <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">EDIT</span>}
+                                        {editingCartItem && <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">EDIT</span>}
                                         <h3 className="font-bold text-slate-800 text-sm">#{priceModal.item.id?.slice(-10) || 'ITEM'}</h3>
                                     </div>
                                 </div>
@@ -1911,32 +1814,13 @@
                                     </div>
                                 </div>
                                 
-                                {/* Footer dengan Tombol Hapus & Simpan */}
-                                <div className="p-4 border-t border-slate-200 flex gap-3">
-                                    {(editingCartItem || editingLiveCartItem) && (
-                                        <button 
-                                            onClick={async () => {
-                                                if (editingCartItem) {
-                                                    removeFromCart(editingCartItem.id, editingCartItem.selectedUnit, editingCartItem.price);
-                                                    setEditingCartItem(null);
-                                                } else if (editingLiveCartItem) {
-                                                    // Hapus dari live cart
-                                                    await removeItemFromActiveCart(editingLiveCartItem.cartId, editingLiveCartItem.index);
-                                                    setEditingLiveCartItem(null);
-                                                }
-                                                setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 });
-                                                showToast("Item dihapus");
-                                            }}
-                                            className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all"
-                                        >
-                                            Hapus
-                                        </button>
-                                    )}
+                                {/* Footer dengan Tombol Tambahkan */}
+                                <div className="p-4 border-t border-slate-200 flex justify-end">
                                     <button 
                                         onClick={addToCartWithPrice}
-                                        className="flex-1 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all"
+                                        className="px-8 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all"
                                     >
-                                        Simpan
+                                        {editingCartItem ? 'Perbarui' : 'Tambahkan'}
                                     </button>
                                 </div>
                             </div>
