@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistem Kasir Toko Husna (V33 - Mode Bantu Kolaborasi Real-Time)</title>
+    <title>Sistem Kasir Toko Husna (V34 - Batal Transaksi dari Mode Bantu)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -735,8 +735,9 @@
             const [editingCashierName, setEditingCashierName] = useState(false);
             const [activeCartId, setActiveCartId] = useState(null);
             const [activeCarts, setActiveCarts] = useState([]); // Cart real-time dari kasir lain
-            const [helpingCart, setHelpingCart] = useState(null); // Keranjang yang sedang dibantu (mode kolaborasi)
-            const [pendingHelpingCart, setPendingHelpingCart] = useState(null); // Sementara simpan cart saat belum punya nama
+            const [helpingCart, setHelpingCart] = useState(null);
+            const [pendingHelpingCart, setPendingHelpingCart] = useState(null);
+            const [showHelpCancelModal, setShowHelpCancelModal] = useState(false);
 
             useEffect(() => {
                 if (!user) return;
@@ -914,6 +915,18 @@
                     return () => clearTimeout(t);
                 }
             }, [activeCarts, helpingCart]);
+
+            // Batalkan seluruh keranjang yang sedang dibantu
+            const cancelHelpedCart = async () => {
+                const cartId = helpingCart?.id;
+                if (!cartId) return;
+                try {
+                    await window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', cartId));
+                    showToast(`Transaksi ${helpingCart.cashierName} dibatalkan.`, "error");
+                } catch(e) { showToast("Gagal membatalkan transaksi", "error"); }
+                setShowHelpCancelModal(false);
+                stopHelping();
+            };
 
             // Keluar dari mode bantu
             const stopHelping = () => {
@@ -1280,12 +1293,33 @@
                                     <span className="text-xs text-slate-500 font-medium">Total Keranjang {liveCart.cashierName}</span>
                                     <span className="text-xl font-black text-slate-800">{formatRupiah(liveTotal)}</span>
                                 </div>
-                                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-center">
+                                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-center mb-3">
                                     <p className="text-xs text-emerald-700 font-bold"><Icon name="lock" className="mr-1" />Pembayaran dilakukan oleh {liveCart.cashierName}</p>
                                 </div>
-                                <button onClick={stopHelping} className="w-full mt-3 py-3 rounded-xl border-2 border-emerald-200 text-emerald-700 font-bold hover:bg-emerald-50 transition-all text-sm active:scale-95">Selesai Membantu</button>
+                                <button onClick={stopHelping} className="w-full py-3 rounded-xl border-2 border-emerald-200 text-emerald-700 font-bold hover:bg-emerald-50 transition-all text-sm active:scale-95">Selesai Membantu</button>
+                                <button onClick={() => setShowHelpCancelModal(true)} disabled={liveItems.length === 0} className="w-full mt-2 py-3 rounded-xl border-2 border-red-200 text-red-500 font-bold hover:bg-red-50 transition-all text-sm active:scale-95 disabled:opacity-40 disabled:border-slate-200 disabled:text-slate-400 flex items-center justify-center gap-2">
+                                    <Icon name="trash" /> Batalkan Transaksi {liveCart.cashierName}
+                                </button>
                             </div>
                         </div>
+
+                        {/* Modal konfirmasi batal dari helper */}
+                        {showHelpCancelModal && (
+                            <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
+                                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 relative text-center pop-in">
+                                    <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center text-red-500 text-2xl mx-auto mb-4">
+                                        <Icon name="triangle-exclamation" />
+                                    </div>
+                                    <h3 className="text-xl font-black text-slate-800 mb-2">Batalkan Transaksi?</h3>
+                                    <p className="text-sm text-slate-500 mb-1">Keranjang <span className="font-bold text-slate-700">{helpingCart?.cashierName}</span> berisi <span className="font-bold text-slate-700">{liveItems.length} barang</span> akan dikosongkan.</p>
+                                    <p className="text-xs text-red-500 font-bold mb-6">Tindakan ini tidak bisa dibatalkan.</p>
+                                    <div className="flex gap-3">
+                                        <button onClick={() => setShowHelpCancelModal(false)} className="flex-1 py-3 rounded-xl border-2 border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-all">Batal</button>
+                                        <button onClick={cancelHelpedCart} className="flex-1 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold shadow-lg active:scale-95 transition-all">Ya, Batalkan</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 );
             }
@@ -2277,7 +2311,7 @@
                                 <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600 p-2"><Icon name="xmark" className="text-xl" /></button>
                             </div>
                             <nav className="space-y-2 flex-1">{visibleMenuItems.map(menu => (<button key={menu.id} onClick={(e) => handleNavClick(menu.id, e)} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold transition-all duration-300 relative overflow-hidden group ${activeTab === menu.id ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}><div className="relative w-5 flex-shrink-0"><Icon name={menu.icon} className={`text-base ${activeTab === menu.id ? 'text-white' : 'text-slate-400'}`} />{menu.badge > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center leading-none shadow-sm animate-pulse">{menu.badge > 9 ? '9+' : menu.badge}</span>}</div><span className="flex-1 text-left">{menu.label}</span>{menu.badge > 0 && activeTab !== menu.id && <span className="text-[9px] bg-red-100 text-red-600 font-black px-1.5 py-0.5 rounded-full border border-red-200">{menu.badge} baru</span>}</button>))}</nav>
-                            <div className="mt-auto pt-6 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400">Versi 33.0 • Kolaborasi Keranjang Real-Time</p></div>
+                            <div className="mt-auto pt-6 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400">Versi 34.0 • Batal Transaksi dari Mode Bantu</p></div>
                         </div>
                     </aside>
                     <main className="flex-1 md:ml-0 p-4 md:p-8 max-w-7xl mx-auto w-full mb-0 relative z-20">
