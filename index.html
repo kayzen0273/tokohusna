@@ -738,7 +738,7 @@
             const [helpingCart, setHelpingCart] = useState(null);
             const [pendingHelpingCart, setPendingHelpingCart] = useState(null);
             const [showHelpCancelModal, setShowHelpCancelModal] = useState(false);
-            const [priceModal, setPriceModal] = useState({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 }); // Modal pilih harga
+            const [priceModal, setPriceModal] = useState({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 0, discountType: '%', discountValue: 0 }); // Modal pilih harga
 
             useEffect(() => {
                 if (!user) return;
@@ -1009,20 +1009,13 @@
             const addToCart = (item) => {
                 if (safeNumber(item.qty) <= 0) { showToast("Stok Habis di Toko Ini!", "error"); return; }
                 
-                // Cek apakah item punya multi-harga
-                const hasMultiPrices = item.multiPrices && item.multiPrices.length > 0 && item.multiPrices.some(mp => mp.unit && mp.price);
-                
-                // Set default price dan unit
-                const defaultPrice = item.price || 0;
-                const defaultUnit = item.unit || 'Pcs';
-                
-                // Buka modal dengan setting default
+                // Buka modal tanpa mengisi default price dan unit
                 setPriceModal({ 
                     show: true, 
                     item: item,
-                    selectedPrice: defaultPrice,
-                    selectedUnit: defaultUnit,
-                    qty: 1,
+                    selectedPrice: 0,
+                    selectedUnit: '',
+                    qty: 0,
                     discountType: '%',
                     discountValue: 0
                 });
@@ -1031,8 +1024,8 @@
             const addToCartWithPrice = () => {
                 const { item, selectedPrice, selectedUnit, qty, discountType, discountValue } = priceModal;
                 
-                if (!item || !selectedPrice || qty < 1) {
-                    showToast("Silakan lengkapi data!", "error");
+                if (!item || !selectedPrice || !selectedUnit || qty < 1) {
+                    showToast("Silakan lengkapi data (pilih satuan dan isi jumlah)!", "error");
                     return;
                 }
                 
@@ -1058,7 +1051,7 @@
                     return [...prev, { ...item, cartQty: qty, price: finalPrice, selectedUnit: selectedUnit, originalPrice: selectedPrice, discount: discountValue > 0 ? { type: discountType, value: discountValue } : null }];
                 });
                 
-                setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 });
+                setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 0, discountType: '%', discountValue: 0 });
                 showToast("Ditambahkan ke keranjang");
             };
             const removeFromCart = (id, selectedUnit = null, price = null) => {
@@ -1614,7 +1607,7 @@
                             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
                                 {/* Header */}
                                 <div className="p-4 border-b border-slate-200 flex items-center justify-between">
-                                    <button onClick={() => setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 })} className="text-slate-600 hover:text-slate-800">
+                                    <button onClick={() => setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 0, discountType: '%', discountValue: 0 })} className="text-slate-600 hover:text-slate-800">
                                         <Icon name="arrow-left" className="text-xl" />
                                     </button>
                                     <h3 className="font-bold text-slate-800 text-sm">#{priceModal.item.id?.slice(-10) || 'ITEM'}</h3>
@@ -1627,42 +1620,6 @@
                                         <h2 className="text-xl font-bold text-slate-800 mb-1">{priceModal.item.name}</h2>
                                         <p className="text-sm text-slate-500">Stok {priceModal.item.qty} {priceModal.item.unit}</p>
                                     </div>
-                                    
-                                    {/* Pilih Harga Satuan (jika ada multi-price) */}
-                                    {priceModal.item.multiPrices && priceModal.item.multiPrices.length > 0 && (
-                                        <div className="mb-4">
-                                            <label className="text-sm font-bold text-slate-700 mb-2 block">Pilih Harga</label>
-                                            <div className="space-y-2">
-                                                {/* Harga Default */}
-                                                {priceModal.item.price > 0 && (
-                                                    <button 
-                                                        onClick={() => setPriceModal({...priceModal, selectedPrice: priceModal.item.price, selectedUnit: priceModal.item.unit})}
-                                                        className={`w-full p-3 rounded-xl border-2 transition-all text-left ${priceModal.selectedPrice === priceModal.item.price && priceModal.selectedUnit === priceModal.item.unit ? 'border-teal-600 bg-teal-50' : 'border-slate-200 hover:border-slate-300'}`}
-                                                    >
-                                                        <div className="flex items-center justify-between">
-                                                            <span className="font-bold text-slate-700">{priceModal.item.unit}</span>
-                                                            <span className="text-sm font-bold text-teal-700">{formatRupiah(priceModal.item.price)}</span>
-                                                        </div>
-                                                    </button>
-                                                )}
-                                                {/* Multi-prices */}
-                                                {priceModal.item.multiPrices.map((mp, idx) => 
-                                                    mp.unit && mp.price ? (
-                                                        <button 
-                                                            key={idx}
-                                                            onClick={() => setPriceModal({...priceModal, selectedPrice: mp.price, selectedUnit: mp.unit})}
-                                                            className={`w-full p-3 rounded-xl border-2 transition-all text-left ${priceModal.selectedPrice === mp.price && priceModal.selectedUnit === mp.unit ? 'border-teal-600 bg-teal-50' : 'border-slate-200 hover:border-slate-300'}`}
-                                                        >
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="font-bold text-slate-700">{mp.unit}</span>
-                                                                <span className="text-sm font-bold text-teal-700">{formatRupiah(mp.price)}</span>
-                                                            </div>
-                                                        </button>
-                                                    ) : null
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
                                     
                                     {/* Harga Display */}
                                     <div className="mb-4 text-right">
@@ -1688,19 +1645,39 @@
                                         <div className="flex gap-3">
                                             <input 
                                                 type="number" 
-                                                min="1" 
+                                                min="0" 
                                                 max={priceModal.item.qty}
                                                 value={priceModal.qty} 
-                                                onChange={e => setPriceModal({...priceModal, qty: Math.max(1, Math.min(priceModal.item.qty, parseInt(e.target.value) || 1))})}
+                                                onChange={e => setPriceModal({...priceModal, qty: Math.max(0, Math.min(priceModal.item.qty, parseInt(e.target.value) || 0))})}
                                                 className="flex-1 p-3 rounded-xl border-2 border-slate-200 focus:border-teal-500 outline-none font-bold text-slate-800"
+                                                placeholder="0"
                                             />
                                             <div className="relative w-32">
                                                 <select 
-                                                    value={priceModal.selectedUnit} 
-                                                    disabled
-                                                    className="w-full p-3 rounded-xl border-2 border-slate-200 bg-slate-50 appearance-none font-bold text-slate-600 cursor-not-allowed"
+                                                    value={priceModal.selectedUnit ? `${priceModal.selectedUnit}|${priceModal.selectedPrice}` : ''} 
+                                                    onChange={e => {
+                                                        if (e.target.value) {
+                                                            const [unit, price] = e.target.value.split('|');
+                                                            setPriceModal({...priceModal, selectedUnit: unit, selectedPrice: parseFloat(price)});
+                                                        } else {
+                                                            setPriceModal({...priceModal, selectedUnit: '', selectedPrice: 0});
+                                                        }
+                                                    }}
+                                                    className="w-full p-3 rounded-xl border-2 border-slate-200 focus:border-teal-500 outline-none appearance-none font-bold text-slate-700 bg-white"
                                                 >
-                                                    <option>{priceModal.selectedUnit}</option>
+                                                    <option value="">Pilih...</option>
+                                                    {priceModal.item.price > 0 && (
+                                                        <option value={`${priceModal.item.unit}|${priceModal.item.price}`}>
+                                                            {priceModal.item.unit} - {formatRupiah(priceModal.item.price)}
+                                                        </option>
+                                                    )}
+                                                    {priceModal.item.multiPrices && priceModal.item.multiPrices.map((mp, idx) => 
+                                                        mp.unit && mp.price ? (
+                                                            <option key={idx} value={`${mp.unit}|${mp.price}`}>
+                                                                {mp.unit} - {formatRupiah(mp.price)}
+                                                            </option>
+                                                        ) : null
+                                                    )}
                                                 </select>
                                                 <Icon name="chevron-down" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                                             </div>
