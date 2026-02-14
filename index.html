@@ -739,7 +739,7 @@
             const [pendingHelpingCart, setPendingHelpingCart] = useState(null);
             const [showHelpCancelModal, setShowHelpCancelModal] = useState(false);
             const [priceModal, setPriceModal] = useState({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 }); // Modal pilih harga
-            const [editCartModal, setEditCartModal] = useState({ show: false, cartItem: null, cartIndex: null, qty: 1, discountType: '%', discountValue: 0 }); // Modal edit item di keranjang
+            const [editingCartItem, setEditingCartItem] = useState(null); // Track item yang sedang diedit dari cart
 
             useEffect(() => {
                 if (!user) return;
@@ -1026,6 +1026,22 @@
                 });
             };
             
+            const editCartItem = (cartItem) => {
+                // Simpan reference ke item yang sedang diedit
+                setEditingCartItem(cartItem);
+                
+                // Buka modal dengan data item yang ada di cart
+                setPriceModal({
+                    show: true,
+                    item: cartItem, // Item asli dari inventory
+                    selectedPrice: cartItem.originalPrice || cartItem.price,
+                    selectedUnit: cartItem.selectedUnit || cartItem.unit,
+                    qty: cartItem.cartQty,
+                    discountType: cartItem.discount?.type || '%',
+                    discountValue: cartItem.discount?.value || 0
+                });
+            };
+            
             const addToCartWithPrice = () => {
                 const { item, selectedPrice, selectedUnit, qty, discountType, discountValue } = priceModal;
                 
@@ -1046,6 +1062,50 @@
                     }
                 }
                 
+                // Jika sedang mengedit item yang sudah ada di cart
+                if (editingCartItem) {
+                    setCart(prev => {
+                        // Hapus item lama
+                        const filtered = prev.filter(c => 
+                            !(c.id === editingCartItem.id && 
+                              c.selectedUnit === editingCartItem.selectedUnit && 
+                              c.price === editingCartItem.price)
+                        );
+                        
+                        // Cek apakah ada item dengan kombinasi unit+price yang sama (hasil edit)
+                        const existingWithNewPrice = filtered.find(c => 
+                            c.id === item.id && 
+                            c.selectedUnit === selectedUnit && 
+                            c.price === finalPrice
+                        );
+                        
+                        if (existingWithNewPrice) {
+                            // Jika sudah ada item dengan kombinasi yang sama, tambahkan qty
+                            return filtered.map(c => 
+                                (c.id === item.id && c.selectedUnit === selectedUnit && c.price === finalPrice)
+                                    ? { ...c, cartQty: c.cartQty + finalQty }
+                                    : c
+                            );
+                        } else {
+                            // Tambahkan item baru dengan data yang sudah diedit
+                            return [...filtered, { 
+                                ...item, 
+                                cartQty: finalQty, 
+                                price: finalPrice, 
+                                selectedUnit: selectedUnit, 
+                                originalPrice: selectedPrice, 
+                                discount: discountValue > 0 ? { type: discountType, value: discountValue } : null 
+                            }];
+                        }
+                    });
+                    
+                    setEditingCartItem(null);
+                    setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 });
+                    showToast("Item diperbarui");
+                    return;
+                }
+                
+                // Jika menambah item baru (bukan edit)
                 setCart(prev => {
                     const existing = prev.find(c => c.id === item.id && c.selectedUnit === selectedUnit && c.price === finalPrice);
                     if (existing) {
@@ -1080,68 +1140,6 @@
                     }
                     return c;
                 }));
-            };
-            
-            // Function untuk membuka modal edit item di keranjang
-            const openEditCartModal = (cartItem, cartIndex) => {
-                setEditCartModal({
-                    show: true,
-                    cartItem: cartItem,
-                    cartIndex: cartIndex,
-                    qty: cartItem.cartQty,
-                    discountType: cartItem.discount?.type || '%',
-                    discountValue: cartItem.discount?.value || 0
-                });
-            };
-            
-            // Function untuk menyimpan perubahan edit item di keranjang
-            const saveEditCartItem = () => {
-                const { cartItem, cartIndex, qty, discountType, discountValue } = editCartModal;
-                
-                if (qty < 1) {
-                    showToast("Jumlah minimal 1", "error");
-                    return;
-                }
-                
-                if (qty > cartItem.qty) {
-                    showToast("Stok tidak cukup!", "error");
-                    return;
-                }
-                
-                let finalPrice = cartItem.originalPrice || cartItem.price;
-                
-                // Hitung harga setelah diskon
-                if (discountValue > 0) {
-                    if (discountType === '%') {
-                        if (discountValue > 100) {
-                            showToast("Diskon maksimal 100%", "error");
-                            return;
-                        }
-                        finalPrice = finalPrice - (finalPrice * discountValue / 100);
-                    } else {
-                        if (discountValue > finalPrice) {
-                            showToast("Diskon tidak boleh lebih dari harga", "error");
-                            return;
-                        }
-                        finalPrice = finalPrice - discountValue;
-                    }
-                }
-                
-                // Update cart item
-                setCart(prev => prev.map((item, idx) => {
-                    if (idx === cartIndex) {
-                        return {
-                            ...item,
-                            cartQty: qty,
-                            price: finalPrice,
-                            discount: discountValue > 0 ? { type: discountType, value: discountValue } : null
-                        };
-                    }
-                    return item;
-                }));
-                
-                setEditCartModal({ show: false, cartItem: null, cartIndex: null, qty: 1, discountType: '%', discountValue: 0 });
-                showToast("Item berhasil diupdate!");
             };
             const grandTotal = cart.reduce((acc, item) => acc + (safeNumber(item.price) * item.cartQty), 0);
             const change = safeNumber(paymentAmount) - grandTotal;
@@ -1656,7 +1654,7 @@
                     </div>
                     <div className="w-full md:w-80 lg:w-96 flex flex-col bg-white rounded-3xl shadow-soft border border-slate-100 h-fit md:h-full max-h-[calc(100vh-100px)]">
                         <div className="p-4 border-b border-slate-100 bg-slate-50/50 rounded-t-3xl flex justify-between items-center"><h3 className="font-bold text-slate-800 flex items-center gap-2"><Icon name="cart-shopping" className="text-sky-600" /> Keranjang</h3><span className="text-xs font-bold bg-sky-100 text-sky-700 px-2 py-1 rounded-full">{cart.length} Item</span></div>
-                        <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar min-h-[200px]">{cart.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60"><Icon name="basket-shopping" className="text-4xl mb-2" /><p className="text-xs font-medium">Keranjang Kosong</p></div>) : (cart.map((item, idx) => (<div key={item.id + (item.selectedUnit || '') + (item.price || '') + idx} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex gap-3 group relative cursor-pointer hover:bg-slate-100 transition-all" onClick={() => openEditCartModal(item, idx)}><div className="flex-1 min-w-0"><h4 className="text-xs font-bold text-slate-700 truncate">{item.name}</h4><p className="text-[10px] text-slate-500">{formatRupiah(item.originalPrice || item.price)} {item.selectedUnit ? `per ${item.selectedUnit}` : ''} x {item.cartQty}</p>{item.discount && <p className="text-[9px] text-red-500 font-bold">Diskon: {item.discount.type === '%' ? `${item.discount.value}%` : formatRupiah(item.discount.value)}</p>}<p className="text-[9px] text-sky-500 font-bold mt-1 opacity-0 group-hover:opacity-100 transition-opacity">Klik untuk edit</p></div><div className="flex flex-col items-end gap-1"><p className="text-xs font-bold text-slate-800">{formatRupiah(item.price * item.cartQty)}</p><div className="flex items-center gap-1 bg-white rounded-lg shadow-sm border border-slate-200 p-0.5" onClick={(e) => e.stopPropagation()}><button onClick={() => updateQty(item.id, -1, item.selectedUnit, item.price)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="minus" /></button><span className="text-xs font-bold w-4 text-center">{item.cartQty}</span><button onClick={() => updateQty(item.id, 1, item.selectedUnit, item.price)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="plus" /></button></div></div><button onClick={(e) => { e.stopPropagation(); removeFromCart(item.id, item.selectedUnit, item.price); }} className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-[8px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-md"><Icon name="xmark" /></button></div>)))}</div>
+                        <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar min-h-[200px]">{cart.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60"><Icon name="basket-shopping" className="text-4xl mb-2" /><p className="text-xs font-medium">Keranjang Kosong</p></div>) : (cart.map(item => (<div key={item.id + (item.selectedUnit || '') + (item.price || '')} onClick={() => editCartItem(item)} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex gap-3 group relative cursor-pointer hover:bg-sky-50 hover:border-sky-300 transition-all"><div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity"><Icon name="pen-to-square" className="text-[10px] text-sky-500" /></div><div className="flex-1 min-w-0"><h4 className="text-xs font-bold text-slate-700 truncate">{item.name}</h4><p className="text-[10px] text-slate-500">{formatRupiah(item.originalPrice || item.price)} {item.selectedUnit ? `per ${item.selectedUnit}` : ''} x {item.cartQty}</p>{item.discount && <p className="text-[9px] text-red-500 font-bold">Diskon: {item.discount.type === '%' ? `${item.discount.value}%` : formatRupiah(item.discount.value)}</p>}</div><div className="flex flex-col items-end gap-1"><p className="text-xs font-bold text-slate-800">{formatRupiah(item.price * item.cartQty)}</p><div className="flex items-center gap-1 bg-white rounded-lg shadow-sm border border-slate-200 p-0.5" onClick={e => e.stopPropagation()}><button onClick={() => updateQty(item.id, -1, item.selectedUnit, item.price)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="minus" /></button><span className="text-xs font-bold w-4 text-center">{item.cartQty}</span><button onClick={() => updateQty(item.id, 1, item.selectedUnit, item.price)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="plus" /></button></div></div><button onClick={(e) => { e.stopPropagation(); removeFromCart(item.id, item.selectedUnit, item.price); }} className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-[8px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-md"><Icon name="xmark" /></button></div>)))}</div>
                         <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-3xl">
                             <div className="flex justify-between items-end mb-4"><span className="text-xs text-slate-500 font-medium">Total Tagihan</span><span className="text-xl font-black text-slate-800">{formatRupiah(grandTotal)}</span></div>
                             <button onClick={() => { setPaymentAmount(''); setCheckoutModal(true); }} disabled={cart.length === 0} className="w-full py-3.5 bg-gradient-to-r from-sky-600 to-sky-500 text-white rounded-xl font-bold shadow-lg shadow-sky-200 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-2"><Icon name="money-bill-wave" /> Bayar Sekarang</button>
@@ -1672,10 +1670,13 @@
                             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
                                 {/* Header */}
                                 <div className="p-4 border-b border-slate-200 flex items-center justify-between">
-                                    <button onClick={() => setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 })} className="text-slate-600 hover:text-slate-800">
+                                    <button onClick={() => { setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 }); setEditingCartItem(null); }} className="text-slate-600 hover:text-slate-800">
                                         <Icon name="arrow-left" className="text-xl" />
                                     </button>
-                                    <h3 className="font-bold text-slate-800 text-sm">#{priceModal.item.id?.slice(-10) || 'ITEM'}</h3>
+                                    <div className="flex items-center gap-2">
+                                        {editingCartItem && <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">EDIT</span>}
+                                        <h3 className="font-bold text-slate-800 text-sm">#{priceModal.item.id?.slice(-10) || 'ITEM'}</h3>
+                                    </div>
                                 </div>
                                 
                                 {/* Content */}
@@ -1819,175 +1820,7 @@
                                         onClick={addToCartWithPrice}
                                         className="px-8 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all"
                                     >
-                                        Tambahkan
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                    
-                    {/* MODAL EDIT ITEM DI KERANJANG */}
-                    {editCartModal.show && editCartModal.cartItem && (
-                        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
-                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
-                                {/* Header */}
-                                <div className="p-4 bg-gradient-to-r from-sky-500 to-teal-500 text-white flex items-center justify-between">
-                                    <div>
-                                        <h3 className="font-bold text-lg">Edit Item</h3>
-                                        <p className="text-xs text-sky-100 mt-0.5">{editCartModal.cartItem.name}</p>
-                                    </div>
-                                    <button 
-                                        onClick={() => setEditCartModal({ show: false, cartItem: null, cartIndex: null, qty: 1, discountType: '%', discountValue: 0 })}
-                                        className="w-8 h-8 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center transition-colors"
-                                    >
-                                        <Icon name="xmark" className="text-white" />
-                                    </button>
-                                </div>
-                                
-                                {/* Body */}
-                                <div className="p-6">
-                                    {/* Info Harga Asli */}
-                                    <div className="mb-4 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                                        <p className="text-xs text-slate-500 mb-1">Harga Asli</p>
-                                        <p className="text-lg font-black text-slate-800">{formatRupiah(editCartModal.cartItem.originalPrice || editCartModal.cartItem.price)}</p>
-                                        {editCartModal.cartItem.selectedUnit && (
-                                            <p className="text-xs text-slate-500 mt-1">per {editCartModal.cartItem.selectedUnit}</p>
-                                        )}
-                                    </div>
-                                    
-                                    {/* Jumlah */}
-                                    <div className="mb-4">
-                                        <label className="text-sm font-bold text-slate-700 mb-2 block">Jumlah</label>
-                                        <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-xl border border-slate-200">
-                                            <button
-                                                onClick={() => setEditCartModal({...editCartModal, qty: Math.max(1, editCartModal.qty - 1)})}
-                                                className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-slate-600 hover:bg-red-50 hover:text-red-500 transition-colors border border-slate-200"
-                                            >
-                                                <Icon name="minus" />
-                                            </button>
-                                            <input 
-                                                type="text" 
-                                                inputMode="numeric"
-                                                value={editCartModal.qty} 
-                                                onChange={e => {
-                                                    const val = e.target.value.replace(/[^0-9]/g, '');
-                                                    if (val === '') {
-                                                        setEditCartModal({...editCartModal, qty: ''});
-                                                    } else {
-                                                        const num = parseInt(val, 10);
-                                                        setEditCartModal({...editCartModal, qty: Math.max(1, Math.min(num, editCartModal.cartItem.qty))});
-                                                    }
-                                                }}
-                                                onBlur={e => {
-                                                    if (editCartModal.qty === '' || editCartModal.qty === 0) {
-                                                        setEditCartModal({...editCartModal, qty: 1});
-                                                    }
-                                                }}
-                                                className="flex-1 text-center p-3 rounded-xl border-2 border-slate-200 focus:border-teal-500 outline-none font-bold text-2xl text-slate-800"
-                                            />
-                                            <button
-                                                onClick={() => setEditCartModal({...editCartModal, qty: Math.min(editCartModal.cartItem.qty, editCartModal.qty + 1)})}
-                                                className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-slate-600 hover:bg-green-50 hover:text-green-500 transition-colors border border-slate-200"
-                                            >
-                                                <Icon name="plus" />
-                                            </button>
-                                        </div>
-                                        <p className="text-xs text-slate-500 mt-1">Stok tersedia: {editCartModal.cartItem.qty}</p>
-                                    </div>
-                                    
-                                    {/* Diskon */}
-                                    <div className="mb-6">
-                                        <label className="text-sm font-bold text-slate-700 mb-2 block">Diskon</label>
-                                        <div className="flex gap-3">
-                                            <div className="relative w-24">
-                                                <select 
-                                                    value={editCartModal.discountType} 
-                                                    onChange={e => setEditCartModal({...editCartModal, discountType: e.target.value, discountValue: 0})}
-                                                    className="w-full p-3 rounded-xl border-2 border-slate-200 focus:border-teal-500 outline-none appearance-none font-bold text-slate-700 bg-white"
-                                                >
-                                                    <option value="%">%</option>
-                                                    <option value="Rp">Rp</option>
-                                                </select>
-                                                <Icon name="chevron-down" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                                            </div>
-                                            <input 
-                                                type="text"
-                                                inputMode="decimal"
-                                                value={editCartModal.discountValue === 0 ? '' : editCartModal.discountValue}
-                                                onChange={e => {
-                                                    const val = e.target.value.replace(/[^0-9.]/g, '');
-                                                    if (val === '' || val === '.') {
-                                                        setEditCartModal({...editCartModal, discountValue: 0});
-                                                    } else {
-                                                        const num = parseFloat(val);
-                                                        setEditCartModal({...editCartModal, discountValue: num});
-                                                    }
-                                                }}
-                                                placeholder={editCartModal.discountType === '%' ? "0 - 100" : "Nominal"}
-                                                className="flex-1 p-3 rounded-xl border-2 border-slate-200 focus:border-teal-500 outline-none font-bold text-slate-800"
-                                            />
-                                        </div>
-                                        <p className="text-xs text-slate-500 mt-2">
-                                            {editCartModal.discountValue > 0 ? (
-                                                `Potongan: ${editCartModal.discountType === '%' ? 
-                                                    `${editCartModal.discountValue}%` : 
-                                                    formatRupiah(editCartModal.discountValue)}`
-                                            ) : 'Tidak ada diskon'}
-                                        </p>
-                                    </div>
-                                    
-                                    {/* Preview Total */}
-                                    <div className="p-4 bg-gradient-to-r from-sky-50 to-teal-50 rounded-xl border border-sky-200">
-                                        <div className="flex justify-between items-center mb-2">
-                                            <span className="text-sm text-slate-600">Harga setelah diskon:</span>
-                                            <span className="font-bold text-slate-800">
-                                                {formatRupiah((() => {
-                                                    const originalPrice = editCartModal.cartItem.originalPrice || editCartModal.cartItem.price;
-                                                    let finalPrice = originalPrice;
-                                                    if (editCartModal.discountValue > 0) {
-                                                        if (editCartModal.discountType === '%') {
-                                                            finalPrice = originalPrice - (originalPrice * editCartModal.discountValue / 100);
-                                                        } else {
-                                                            finalPrice = originalPrice - editCartModal.discountValue;
-                                                        }
-                                                    }
-                                                    return finalPrice;
-                                                })())}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between items-center pt-2 border-t border-sky-300">
-                                            <span className="text-sm font-bold text-sky-700">Total:</span>
-                                            <span className="text-xl font-black text-sky-700">
-                                                {formatRupiah((() => {
-                                                    const originalPrice = editCartModal.cartItem.originalPrice || editCartModal.cartItem.price;
-                                                    let finalPrice = originalPrice;
-                                                    if (editCartModal.discountValue > 0) {
-                                                        if (editCartModal.discountType === '%') {
-                                                            finalPrice = originalPrice - (originalPrice * editCartModal.discountValue / 100);
-                                                        } else {
-                                                            finalPrice = originalPrice - editCartModal.discountValue;
-                                                        }
-                                                    }
-                                                    return finalPrice * editCartModal.qty;
-                                                })())}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                {/* Footer dengan Tombol Update */}
-                                <div className="p-4 border-t border-slate-200 flex gap-3">
-                                    <button 
-                                        onClick={() => setEditCartModal({ show: false, cartItem: null, cartIndex: null, qty: 1, discountType: '%', discountValue: 0 })}
-                                        className="flex-1 px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl active:scale-95 transition-all"
-                                    >
-                                        Batal
-                                    </button>
-                                    <button 
-                                        onClick={saveEditCartItem}
-                                        className="flex-1 px-6 py-3 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all"
-                                    >
-                                        Update
+                                        {editingCartItem ? 'Perbarui' : 'Tambahkan'}
                                     </button>
                                 </div>
                             </div>
