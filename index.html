@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistem Kasir Toko Husna (V33 - Keranjang Aktif Live View)</title>
+    <title>Sistem Kasir Toko Husna (V33 - Mode Bantu Kolaborasi Real-Time)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -734,8 +734,9 @@
             const [cashierName, setCashierName] = useState(() => localStorage.getItem('cashierName') || '');
             const [editingCashierName, setEditingCashierName] = useState(false);
             const [activeCartId, setActiveCartId] = useState(null);
-            const [activeCarts, setActiveCarts] = useState([]); // Cart real-time dari user lain
-            const [pendingTakeoverItems, setPendingTakeoverItems] = useState([]); // items dari ambil alih saat belum punya nama
+            const [activeCarts, setActiveCarts] = useState([]); // Cart real-time dari kasir lain
+            const [helpingCart, setHelpingCart] = useState(null); // Keranjang yang sedang dibantu (mode kolaborasi)
+            const [pendingHelpingCart, setPendingHelpingCart] = useState(null); // Sementara simpan cart saat belum punya nama
 
             useEffect(() => {
                 if (!user) return;
@@ -825,30 +826,38 @@
                 return () => unsub();
             }, [isSessionActive, activeCartId]);
 
-            // Fungsi utama untuk memulai sesi (bisa preload items dari ambil alih)
-            const handleStartSession = async (name, preloadItems = []) => {
+            // Mulai sesi kasir baru (tanpa preload items)
+            const handleStartSession = async (name) => {
                 const finalName = (name || '').trim();
                 if (!finalName) { setShowCashierModal(true); return; }
                 try {
-                    const total = preloadItems.reduce((acc, i) => acc + (safeNumber(i.price) * i.cartQty), 0);
                     const cartRef = await window.addDoc(
                         window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts'),
-                        { cashierName: finalName, storeId: currentProfile.id, storeName: currentProfile.name, items: preloadItems, total, updatedAt: window.serverTimestamp(), isActive: true }
+                        { cashierName: finalName, storeId: currentProfile.id, storeName: currentProfile.name, items: [], total: 0, updatedAt: window.serverTimestamp(), isActive: true }
                     );
                     setCashierName(finalName);
                     setActiveCartId(cartRef.id);
-                    if (preloadItems.length > 0) setCart(preloadItems);
                     setIsSessionActive(true);
                     setShowCashierModal(false);
                     localStorage.setItem('cashierName', finalName);
-                    showToast(preloadItems.length > 0 ? `Keranjang diambil alih oleh ${finalName}! 💼` : `Selamat bekerja, ${finalName}! 🎉`);
+                    showToast(`Selamat bekerja, ${finalName}! 🎉`);
                 } catch (error) { console.error('Error starting session:', error); showToast("Gagal memulai sesi", "error"); }
             };
 
-            // Dipanggil dari modal nama kasir (bisa ada pending takeover items)
-            const startCashierSession = () => { 
-                handleStartSession(cashierName, pendingTakeoverItems); 
-                setPendingTakeoverItems([]);
+            // Dipanggil dari modal nama kasir
+            const startCashierSession = () => {
+                const finalName = cashierName.trim();
+                if (!finalName) return;
+                localStorage.setItem('cashierName', finalName);
+                setShowCashierModal(false);
+                if (pendingHelpingCart) {
+                    // Masuk mode bantu setelah isi nama
+                    setHelpingCart(pendingHelpingCart);
+                    setPendingHelpingCart(null);
+                    showToast(`Membantu ${pendingHelpingCart.cashierName} — scan barang! 🤝`);
+                } else {
+                    handleStartSession(finalName);
+                }
             };
 
             // NEW: Fungsi untuk update nama kasir
@@ -875,21 +884,65 @@
                 }
             };
 
-            // Ambil alih keranjang kasir lain
-            const takeoverCart = async (activeCart) => {
+            // Mulai mode bantu: ikut scan barang ke keranjang kasir lain
+            const startHelping = (activeCart) => {
                 const myName = cashierName.trim() || localStorage.getItem('cashierName') || '';
-                // Hapus dulu cart asli dari Firestore
-                try {
-                    await window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', activeCart.id));
-                } catch (e) { /* mungkin sudah dihapus */ }
-                
                 if (!myName) {
-                    // Belum ada nama → simpan items untuk nanti, minta isi nama dulu
-                    setPendingTakeoverItems(activeCart.items || []);
+                    setPendingHelpingCart(activeCart);
                     setShowCashierModal(true);
-                } else {
-                    await handleStartSession(myName, activeCart.items || []);
+                    return;
                 }
+                setHelpingCart(activeCart);
+                showToast(`Membantu ${activeCart.cashierName} — scan barang untuk ditambahkan! 🤝`);
+            };
+
+            // Auto-keluar dari mode bantu jika keranjang yang dibantu sudah hilang
+            useEffect(() => {
+                if (!helpingCart) return;
+                const stillExists = activeCarts.some(c => c.id === helpingCart.id);
+                if (!stillExists && activeCarts.length >= 0) {
+                    // Pastikan activeCarts sudah loaded (bukan kosong karena belum fetch)
+                    // Delay sedikit untuk menghindari false positive saat load awal
+                    const t = setTimeout(() => {
+                        const check = activeCarts.some(c => c.id === helpingCart.id);
+                        if (!check) {
+                            setHelpingCart(null);
+                            setSearch('');
+                            showToast("Sesi keranjang yang dibantu telah berakhir.", "error");
+                        }
+                    }, 2000);
+                    return () => clearTimeout(t);
+                }
+            }, [activeCarts, helpingCart]);
+
+            // Keluar dari mode bantu
+            const stopHelping = () => {
+                setHelpingCart(null);
+                setSearch('');
+            };
+
+            // Tambah barang ke keranjang kasir yang sedang dibantu
+            const addItemToHelpedCart = async (item) => {
+                if (!helpingCart) return;
+                if (safeNumber(item.qty) <= 0) { showToast("Stok Habis!", "error"); return; }
+                // Ambil state terbaru dari activeCarts (sudah real-time)
+                const currentCart = activeCarts.find(c => c.id === helpingCart.id) || helpingCart;
+                const currentItems = currentCart.items || [];
+                const existingIdx = currentItems.findIndex(c => c.id === item.id);
+                let newItems = [...currentItems];
+                if (existingIdx >= 0) {
+                    if (newItems[existingIdx].cartQty >= item.qty) { showToast("Stok tidak cukup!", "error"); return; }
+                    newItems[existingIdx] = { ...newItems[existingIdx], cartQty: newItems[existingIdx].cartQty + 1 };
+                } else {
+                    newItems = [...newItems, { ...item, cartQty: 1 }];
+                }
+                const newTotal = newItems.reduce((acc, i) => acc + (safeNumber(i.price) * i.cartQty), 0);
+                try {
+                    await window.updateDoc(
+                        window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', helpingCart.id),
+                        { items: newItems, total: newTotal, updatedAt: window.serverTimestamp() }
+                    );
+                } catch(e) { showToast("Gagal tambah item", "error"); }
             };
 
             // Hapus 1 item dari keranjang kasir lain (real-time via Firestore)
@@ -906,6 +959,23 @@
                 } catch (e) { showToast("Gagal hapus item", "error"); }
             };
 
+            // Ubah qty item di keranjang kasir lain (real-time via Firestore)
+            const updateItemQtyInActiveCart = async (cartId, itemIndex, delta) => {
+                const cart = activeCarts.find(c => c.id === cartId);
+                if (!cart) return;
+                const newItems = [...cart.items];
+                const newQty = newItems[itemIndex].cartQty + delta;
+                if (newQty < 1) { removeItemFromActiveCart(cartId, itemIndex); return; }
+                if (newQty > newItems[itemIndex].qty) { showToast("Stok tidak cukup!", "error"); return; }
+                newItems[itemIndex] = { ...newItems[itemIndex], cartQty: newQty };
+                const newTotal = newItems.reduce((acc, i) => acc + (safeNumber(i.price) * i.cartQty), 0);
+                try {
+                    await window.updateDoc(
+                        window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', cartId),
+                        { items: newItems, total: newTotal, updatedAt: window.serverTimestamp() }
+                    );
+                } catch (e) { showToast("Gagal update qty", "error"); }
+            };
             if (currentProfile.id === 'all_stores') {
                 return (
                     <div className="fade-in h-full flex flex-col items-center justify-center text-center p-6 relative z-10">
@@ -1103,6 +1173,123 @@
 
             const handleWA = () => { if(receiptData) { onGenerateImage(receiptData); } };
 
+            // === MODE BANTU: scan barang bareng kasir lain ===
+            if (helpingCart && !isSessionActive) {
+                const liveCart = activeCarts.find(c => c.id === helpingCart.id) || helpingCart;
+                const liveItems = liveCart.items || [];
+                const liveTotal = liveItems.reduce((acc, i) => acc + (safeNumber(i.price) * i.cartQty), 0);
+                const myName = cashierName || localStorage.getItem('cashierName') || 'Kamu';
+                return (
+                    <div className="fade-in h-full flex flex-col md:flex-row gap-4 relative z-10">
+                        {/* Panel kiri: search & scan barang */}
+                        <div className="flex-1 flex flex-col h-full min-h-0">
+                            {/* Banner mode bantu */}
+                            <div className="mb-3 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-2xl px-4 py-3 flex items-center justify-between shadow-md">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-9 h-9 bg-white/20 rounded-full flex items-center justify-center">
+                                        <Icon name="handshake" className="text-white text-sm" />
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-bold text-emerald-100 uppercase tracking-wider">Mode Bantu Aktif</p>
+                                        <p className="font-black text-sm leading-tight">
+                                            {myName} membantu <span className="underline underline-offset-2">{liveCart.cashierName}</span>
+                                        </p>
+                                    </div>
+                                </div>
+                                <button onClick={stopHelping} className="bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-xl text-xs font-bold active:scale-95 transition-all flex items-center gap-1.5">
+                                    <Icon name="xmark" /> Selesai
+                                </button>
+                            </div>
+                            {/* Search bar */}
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="relative group flex-1">
+                                    <input autoFocus type="text" placeholder={`Scan / ketik barang untuk keranjang ${liveCart.cashierName}...`}
+                                        className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-white border-2 border-emerald-300 shadow-soft focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all font-bold text-lg text-slate-700 placeholder:font-normal placeholder:text-slate-400"
+                                        value={search} onChange={e => setSearch(e.target.value)} />
+                                    <Icon name="magnifying-glass" className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-400 text-xl" />
+                                </div>
+                            </div>
+                            {/* Product grid */}
+                            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 pb-2">
+                                {search === '' ? (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60">
+                                        <Icon name="magnifying-glass" className="text-6xl mb-4 text-slate-300" />
+                                        <p className="font-semibold text-lg">Ketik nama barang untuk ditambahkan</p>
+                                        <p className="text-xs mt-1">Barang akan masuk ke keranjang <b>{liveCart.cashierName}</b></p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                                        {filteredItems.map(item => {
+                                            const inCart = liveItems.find(c => c.id === item.id);
+                                            const currentStock = safeNumber(item.qty) - (inCart ? inCart.cartQty : 0);
+                                            const isOOS = currentStock <= 0;
+                                            return (
+                                                <button key={item.id} onClick={() => addItemToHelpedCart(item)} disabled={isOOS}
+                                                    className={`text-left p-3 rounded-xl border transition-all relative overflow-hidden group ${isOOS ? 'bg-slate-100 border-slate-200 opacity-70' : 'bg-white border-slate-200 hover:border-emerald-300 hover:shadow-md'}`}>
+                                                    {isNewItem(item.createdAt) && !isOOS && <span className="absolute top-0 right-0 bg-rose-500 text-white text-[8px] font-bold px-1.5 rounded-bl-lg">NEW</span>}
+                                                    <h4 className="font-bold text-slate-800 text-xs line-clamp-2 h-8 leading-snug">{item.name}</h4>
+                                                    <div className="mt-2 flex justify-between items-end">
+                                                        <div><p className="text-[10px] text-slate-500 font-medium">{item.unit}</p><p className="text-xs font-bold text-emerald-600">{formatRupiah(item.price)}</p></div>
+                                                        <div className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${isOOS ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>Stok: {currentStock}</div>
+                                                    </div>
+                                                    {!isOOS && inCart && <div className="absolute bottom-1 left-1 bg-emerald-500 text-white text-[8px] font-bold px-1.5 py-0.5 rounded-full">{inCart.cartQty}x di keranjang</div>}
+                                                    {!isOOS && <div className="absolute inset-0 bg-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Icon name="plus" className="text-emerald-600 text-xl" /></div>}
+                                                </button>
+                                            );
+                                        })}
+                                        {filteredItems.length === 0 && <div className="col-span-full py-10 text-center text-slate-400 text-sm">Barang tidak ditemukan</div>}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        {/* Panel kanan: live cart kasir yang dibantu */}
+                        <div className="w-full md:w-80 lg:w-96 flex flex-col bg-white rounded-3xl shadow-soft border-2 border-emerald-200 h-fit md:h-full max-h-[calc(100vh-100px)]">
+                            <div className="p-4 border-b border-emerald-100 bg-emerald-50 rounded-t-3xl flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-7 h-7 bg-emerald-500 rounded-full flex items-center justify-center text-white text-xs font-black">{(liveCart.cashierName||'?').charAt(0).toUpperCase()}</div>
+                                    <div>
+                                        <h3 className="font-bold text-emerald-800 text-sm leading-none">Keranjang {liveCart.cashierName}</h3>
+                                        <div className="flex items-center gap-1 mt-0.5"><span className="w-1.5 h-1.5 bg-green-500 rounded-full inline-block animate-pulse"></span><span className="text-[9px] text-emerald-600 font-bold">LIVE</span></div>
+                                    </div>
+                                </div>
+                                <span className="text-xs font-bold bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">{liveItems.length} Item</span>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar min-h-[200px]">
+                                {liveItems.length === 0 ? (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60 py-10">
+                                        <Icon name="basket-shopping" className="text-4xl mb-2" />
+                                        <p className="text-xs font-medium">Belum ada barang</p>
+                                    </div>
+                                ) : liveItems.map((item, idx) => (
+                                    <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex gap-2 items-center group">
+                                        <div className="flex-1 min-w-0">
+                                            <h4 className="text-xs font-bold text-slate-700 truncate">{item.name}</h4>
+                                            <p className="text-[10px] text-slate-500">{formatRupiah(item.price)} × {item.cartQty} = <span className="font-bold">{formatRupiah(item.price * item.cartQty)}</span></p>
+                                        </div>
+                                        <div className="flex items-center gap-1 bg-white rounded-lg border border-slate-200 px-1 py-0.5 flex-shrink-0">
+                                            <button onClick={() => updateItemQtyInActiveCart(liveCart.id, idx, -1)} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"><Icon name="minus" className="text-[9px]" /></button>
+                                            <span className="text-xs font-black text-slate-700 w-4 text-center">{item.cartQty}</span>
+                                            <button onClick={() => updateItemQtyInActiveCart(liveCart.id, idx, 1)} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-green-500 hover:bg-green-50 rounded transition-colors"><Icon name="plus" className="text-[9px]" /></button>
+                                        </div>
+                                        <button onClick={() => removeItemFromActiveCart(liveCart.id, idx)} className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"><Icon name="trash" className="text-[10px]" /></button>
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-3xl">
+                                <div className="flex justify-between items-end mb-3">
+                                    <span className="text-xs text-slate-500 font-medium">Total Keranjang {liveCart.cashierName}</span>
+                                    <span className="text-xl font-black text-slate-800">{formatRupiah(liveTotal)}</span>
+                                </div>
+                                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-center">
+                                    <p className="text-xs text-emerald-700 font-bold"><Icon name="lock" className="mr-1" />Pembayaran dilakukan oleh {liveCart.cashierName}</p>
+                                </div>
+                                <button onClick={stopHelping} className="w-full mt-3 py-3 rounded-xl border-2 border-emerald-200 text-emerald-700 font-bold hover:bg-emerald-50 transition-all text-sm active:scale-95">Selesai Membantu</button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
             if (!isSessionActive) {
                 return (
                     <div className="fade-in h-full overflow-y-auto pb-20 md:pb-0 flex flex-col items-center justify-center relative z-10">
@@ -1143,22 +1330,22 @@
                                 </div>
                              )}
 
-                            {/* Keranjang Aktif dari Kasir Lain — di atas tombol + Penjualan */}
+                            {/* Keranjang Aktif — bisa dibantu bersama */}
                             {activeCarts.length > 0 && (
                                 <div className="w-full mb-6 fade-in">
                                     <div className="flex items-center justify-between mb-1 px-1">
                                         <div className="flex items-center gap-2">
-                                            <Icon name="users" className="text-orange-500" />
+                                            <Icon name="users" className="text-emerald-500" />
                                             <h3 className="font-bold text-slate-700 text-sm">Kasir Lain Sedang Aktif</h3>
                                         </div>
-                                        <span className="text-[10px] bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-bold animate-pulse">{activeCarts.length} LIVE</span>
+                                        <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold animate-pulse">{activeCarts.length} LIVE</span>
                                     </div>
-                                    <p className="text-[10px] text-slate-400 px-1 mb-3">💡 Lihat & edit keranjang kasir lain secara real-time, atau ambil alih untuk melanjutkan transaksinya.</p>
+                                    <p className="text-[10px] text-slate-400 px-1 mb-3">🤝 Klik <b>Ikut Bantu</b> untuk scan barang bareng ke keranjang mereka secara real-time.</p>
                                     <div className="space-y-4">
                                         {activeCarts.map(activeCart => (
-                                            <div key={activeCart.id} className="bg-white rounded-2xl border-2 border-orange-200 shadow-sm overflow-hidden">
+                                            <div key={activeCart.id} className="bg-white rounded-2xl border-2 border-emerald-200 shadow-sm overflow-hidden">
                                                 {/* Header kartu */}
-                                                <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-3 flex items-center justify-between">
+                                                <div className="bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-3 flex items-center justify-between">
                                                     <div className="flex items-center gap-2">
                                                         <div className="w-8 h-8 bg-white/30 rounded-full flex items-center justify-center text-white text-sm font-black">
                                                             {(activeCart.cashierName||'?').charAt(0).toUpperCase()}
@@ -1167,35 +1354,41 @@
                                                             <p className="font-black text-white text-sm leading-none">{activeCart.cashierName}</p>
                                                             <div className="flex items-center gap-1 mt-0.5">
                                                                 <span className="w-1.5 h-1.5 bg-green-300 rounded-full inline-block animate-pulse"></span>
-                                                                <p className="text-[10px] text-orange-100 font-bold">LIVE</p>
+                                                                <p className="text-[10px] text-emerald-100 font-bold">LIVE</p>
                                                             </div>
                                                         </div>
                                                     </div>
                                                     <div className="text-right">
                                                         <p className="font-black text-white text-xl leading-none">{formatRupiah(activeCart.total)}</p>
-                                                        <p className="text-[10px] text-orange-100 mt-0.5">{(activeCart.items||[]).length} barang</p>
+                                                        <p className="text-[10px] text-emerald-100 mt-0.5">{(activeCart.items||[]).length} barang</p>
                                                     </div>
                                                 </div>
 
-                                                {/* Daftar item real-time — read-only + hapus per barang */}
+                                                {/* Daftar item real-time — bisa edit */}
                                                 <div className="px-3 py-2">
                                                     {(activeCart.items||[]).length === 0 ? (
                                                         <div className="py-4 text-center text-xs text-slate-400 italic">Keranjang masih kosong...</div>
                                                     ) : (
                                                         <div className="space-y-1.5">
                                                             {(activeCart.items||[]).map((item, idx) => (
-                                                                <div key={idx} className="flex items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-100">
-                                                                    {/* Badge qty */}
-                                                                    <div className="w-7 h-7 bg-orange-100 rounded-lg flex items-center justify-center text-orange-700 text-xs font-black flex-shrink-0">
-                                                                        {item.cartQty}×
-                                                                    </div>
+                                                                <div key={idx} className="flex items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-100 group">
                                                                     <div className="flex-1 min-w-0">
                                                                         <p className="text-xs font-bold text-slate-700 truncate">{item.name}</p>
-                                                                        <p className="text-[10px] text-slate-400 font-medium">{formatRupiah(item.price * item.cartQty)}</p>
+                                                                        <p className="text-[10px] text-slate-400">{formatRupiah(item.price)} × {item.cartQty} = <span className="font-bold text-slate-600">{formatRupiah(item.price * item.cartQty)}</span></p>
                                                                     </div>
-                                                                    {/* Hapus 1 barang */}
-                                                                    <button onClick={() => removeItemFromActiveCart(activeCart.id, idx)} className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0" title="Hapus barang ini">
-                                                                        <Icon name="xmark" className="text-xs" />
+                                                                    {/* Kontrol qty */}
+                                                                    <div className="flex items-center gap-1 bg-white rounded-lg border border-slate-200 shadow-sm px-1 py-0.5 flex-shrink-0">
+                                                                        <button onClick={() => updateItemQtyInActiveCart(activeCart.id, idx, -1)} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors">
+                                                                            <Icon name="minus" className="text-[9px]" />
+                                                                        </button>
+                                                                        <span className="text-xs font-black text-slate-700 w-4 text-center">{item.cartQty}</span>
+                                                                        <button onClick={() => updateItemQtyInActiveCart(activeCart.id, idx, 1)} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-green-500 hover:bg-green-50 rounded transition-colors">
+                                                                            <Icon name="plus" className="text-[9px]" />
+                                                                        </button>
+                                                                    </div>
+                                                                    {/* Tombol hapus */}
+                                                                    <button onClick={() => removeItemFromActiveCart(activeCart.id, idx)} className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0">
+                                                                        <Icon name="trash" className="text-[10px]" />
                                                                     </button>
                                                                 </div>
                                                             ))}
@@ -1203,13 +1396,13 @@
                                                     )}
                                                 </div>
 
-                                                {/* Footer: tombol ambil alih */}
+                                                {/* Footer: tombol bantu */}
                                                 <div className="px-3 pb-3">
                                                     <button
-                                                        onClick={() => takeoverCart(activeCart)}
-                                                        className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-bold shadow-md active:scale-95 transition-all flex items-center justify-center gap-2"
+                                                        onClick={() => startHelping(activeCart)}
+                                                        className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-bold shadow-md active:scale-95 transition-all flex items-center justify-center gap-2"
                                                     >
-                                                        <Icon name="right-to-bracket" /> Ambil Alih & Bayarkan
+                                                        <Icon name="handshake" /> Ikut Bantu Scan Barang
                                                     </button>
                                                 </div>
                                             </div>
@@ -1225,23 +1418,23 @@
                         {showCashierModal && (
                             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
                                 <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative">
-                                    <button onClick={() => { setShowCashierModal(false); setPendingTakeoverItems([]); }} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+                                    <button onClick={() => { setShowCashierModal(false); setPendingHelpingCart(null); }} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
                                         <Icon name="xmark" className="text-xl" />
                                     </button>
                                     
                                     <div className="text-center mb-6">
-                                        <div className="w-20 h-20 bg-sky-100 rounded-full flex items-center justify-center text-sky-600 text-3xl mx-auto mb-4">
-                                            <Icon name={pendingTakeoverItems.length > 0 ? "right-to-bracket" : "user-circle"} />
+                                        <div className={`w-20 h-20 ${pendingHelpingCart ? 'bg-emerald-100' : 'bg-sky-100'} rounded-full flex items-center justify-center text-3xl mx-auto mb-4 ${pendingHelpingCart ? 'text-emerald-600' : 'text-sky-600'}`}>
+                                            <Icon name={pendingHelpingCart ? "handshake" : "user-circle"} />
                                         </div>
-                                        <h3 className="text-2xl font-black text-slate-800">{pendingTakeoverItems.length > 0 ? 'Anda mengambil alih keranjang' : 'Siapa Nama Anda?'}</h3>
+                                        <h3 className="text-2xl font-black text-slate-800">{pendingHelpingCart ? `Bantu ${pendingHelpingCart.cashierName}` : 'Siapa Nama Anda?'}</h3>
                                         <p className="text-sm text-slate-500 mt-2">
-                                            {pendingTakeoverItems.length > 0 
-                                                ? `Masukkan nama Anda untuk melanjutkan ${pendingTakeoverItems.length} barang yang sudah dipilih.` 
+                                            {pendingHelpingCart 
+                                                ? `Masukkan nama Anda untuk mulai scan barang bareng ke keranjang ${pendingHelpingCart.cashierName}.`
                                                 : 'Nama akan ditampilkan di struk dan keranjang real-time'}
                                         </p>
-                                        {pendingTakeoverItems.length > 0 && (
-                                            <div className="mt-3 p-2 bg-orange-50 rounded-xl border border-orange-200 text-xs text-orange-700 font-bold">
-                                                🛒 {pendingTakeoverItems.length} barang siap dilanjutkan
+                                        {pendingHelpingCart && (
+                                            <div className="mt-3 p-2 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-700 font-bold">
+                                                🛒 {(pendingHelpingCart.items||[]).length} barang di keranjang {pendingHelpingCart.cashierName}
                                             </div>
                                         )}
                                     </div>
@@ -2084,7 +2277,7 @@
                                 <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600 p-2"><Icon name="xmark" className="text-xl" /></button>
                             </div>
                             <nav className="space-y-2 flex-1">{visibleMenuItems.map(menu => (<button key={menu.id} onClick={(e) => handleNavClick(menu.id, e)} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold transition-all duration-300 relative overflow-hidden group ${activeTab === menu.id ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}><div className="relative w-5 flex-shrink-0"><Icon name={menu.icon} className={`text-base ${activeTab === menu.id ? 'text-white' : 'text-slate-400'}`} />{menu.badge > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center leading-none shadow-sm animate-pulse">{menu.badge > 9 ? '9+' : menu.badge}</span>}</div><span className="flex-1 text-left">{menu.label}</span>{menu.badge > 0 && activeTab !== menu.id && <span className="text-[9px] bg-red-100 text-red-600 font-black px-1.5 py-0.5 rounded-full border border-red-200">{menu.badge} baru</span>}</button>))}</nav>
-                            <div className="mt-auto pt-6 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400">Versi 33.0 • Live View Keranjang Aktif</p></div>
+                            <div className="mt-auto pt-6 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400">Versi 33.0 • Kolaborasi Keranjang Real-Time</p></div>
                         </div>
                     </aside>
                     <main className="flex-1 md:ml-0 p-4 md:p-8 max-w-7xl mx-auto w-full mb-0 relative z-20">
