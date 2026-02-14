@@ -1048,10 +1048,6 @@
                 setCart(prev => {
                     const existing = prev.find(c => c.id === item.id && c.selectedUnit === selectedUnit && c.price === finalPrice);
                     if (existing) {
-                        if (existing.cartQty + finalQty > item.qty) { 
-                            showToast("Stok tidak cukup!", "error"); 
-                            return prev; 
-                        }
                         return prev.map(c => (c.id === item.id && c.selectedUnit === selectedUnit && c.price === finalPrice) ? { ...c, cartQty: c.cartQty + finalQty } : c);
                     }
                     return [...prev, { ...item, cartQty: finalQty, price: finalPrice, selectedUnit: selectedUnit, originalPrice: selectedPrice, discount: discountValue > 0 ? { type: discountType, value: discountValue } : null }];
@@ -1659,7 +1655,7 @@
                                                         setPriceModal({...priceModal, qty: ''});
                                                     } else {
                                                         const num = parseInt(val, 10);
-                                                        setPriceModal({...priceModal, qty: Math.max(1, Math.min(priceModal.item.qty, num))});
+                                                        setPriceModal({...priceModal, qty: Math.max(1, num)});
                                                     }
                                                 }}
                                                 onBlur={e => {
