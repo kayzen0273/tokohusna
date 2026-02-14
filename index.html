@@ -1814,13 +1814,26 @@
                                     </div>
                                 </div>
                                 
-                                {/* Footer dengan Tombol Tambahkan */}
-                                <div className="p-4 border-t border-slate-200 flex justify-end">
+                                {/* Footer dengan Tombol Hapus & Simpan */}
+                                <div className="p-4 border-t border-slate-200 flex gap-3">
+                                    {editingCartItem && (
+                                        <button 
+                                            onClick={() => {
+                                                removeFromCart(editingCartItem.id, editingCartItem.selectedUnit, editingCartItem.price);
+                                                setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 });
+                                                setEditingCartItem(null);
+                                                showToast("Item dihapus");
+                                            }}
+                                            className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all"
+                                        >
+                                            Hapus
+                                        </button>
+                                    )}
                                     <button 
                                         onClick={addToCartWithPrice}
-                                        className="px-8 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all"
+                                        className="flex-1 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all"
                                     >
-                                        {editingCartItem ? 'Perbarui' : 'Tambahkan'}
+                                        Simpan
                                     </button>
                                 </div>
                             </div>
