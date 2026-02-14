@@ -1684,7 +1684,7 @@
                                                     {priceModal.item.multiPrices && priceModal.item.multiPrices.map((mp, idx) => 
                                                         mp.unit && mp.price ? (
                                                             <option key={idx} value={`${mp.unit}|${mp.price}`}>
-                                                                {mp.unit} - {formatRupiah(mp.price)}
+                                                                {mp.unit} - {formatRupiah(mp.price)}{mp.quantity ? ` (${mp.quantity} ${mp.baseUnit || priceModal.item.unit})` : ''}
                                                             </option>
                                                         ) : null
                                                     )}
@@ -1692,6 +1692,23 @@
                                                 <Icon name="chevron-down" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                                             </div>
                                         </div>
+                                        {/* Info Konversi */}
+                                        {(() => {
+                                            const selectedMultiPrice = priceModal.item.multiPrices?.find(mp => 
+                                                mp.unit === priceModal.selectedUnit && mp.price === priceModal.selectedPrice
+                                            );
+                                            if (selectedMultiPrice && selectedMultiPrice.quantity) {
+                                                return (
+                                                    <div className="mt-2 p-2 bg-teal-50 rounded-lg border border-teal-200">
+                                                        <p className="text-xs text-teal-700 font-bold">
+                                                            <Icon name="info-circle" className="mr-1" />
+                                                            1 {selectedMultiPrice.unit} = {selectedMultiPrice.quantity} {selectedMultiPrice.baseUnit || priceModal.item.unit}
+                                                        </p>
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        })()}
                                     </div>
                                     
                                     {/* Diskon */}
@@ -2239,14 +2256,23 @@
                             <div className="space-y-2 bg-gradient-to-br from-amber-50 to-yellow-50 p-4 rounded-xl border border-amber-200">
                                 <div className="flex items-center justify-between mb-2">
                                     <label className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Harga Multi-Satuan (Opsional)</label>
-                                    <button type="button" onClick={() => setFormData({...formData, multiPrices: [...(formData.multiPrices || []), {unit: '', price: ''}]})} className="text-xs bg-amber-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-amber-700 transition-colors flex items-center gap-1"><Icon name="plus" className="text-[10px]" /> Tambah Harga</button>
+                                    <button type="button" onClick={() => setFormData({...formData, multiPrices: [...(formData.multiPrices || []), {unit: '', price: '', quantity: '', baseUnit: ''}]})} className="text-xs bg-amber-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-amber-700 transition-colors flex items-center gap-1"><Icon name="plus" className="text-[10px]" /> Tambah Harga</button>
                                 </div>
                                 <p className="text-[9px] text-amber-600 mb-3">Contoh: Harga per Box, per Karton, per Lusin, dll. Kosongkan jika tidak perlu.</p>
                                 {(formData.multiPrices || []).map((mp, idx) => (
-                                    <div key={idx} className="flex gap-2 items-center bg-white p-2 rounded-lg border border-amber-100">
-                                        <input type="text" placeholder="Satuan (ex: Box)" value={mp.unit} onChange={e => { const updated = [...formData.multiPrices]; updated[idx].unit = e.target.value; setFormData({...formData, multiPrices: updated}); }} className="flex-1 p-2 rounded-lg border border-slate-200 text-sm font-medium outline-none focus:border-amber-500" />
-                                        <input type="number" placeholder="Harga" value={mp.price} onChange={e => { const updated = [...formData.multiPrices]; updated[idx].price = e.target.value; setFormData({...formData, multiPrices: updated}); }} className="w-28 p-2 rounded-lg border border-slate-200 text-sm font-bold outline-none focus:border-amber-500" />
-                                        <button type="button" onClick={() => { const updated = formData.multiPrices.filter((_, i) => i !== idx); setFormData({...formData, multiPrices: updated}); }} className="w-8 h-8 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors flex items-center justify-center"><Icon name="trash-can" className="text-xs" /></button>
+                                    <div key={idx} className="bg-white p-3 rounded-lg border border-amber-100 space-y-2">
+                                        <div className="flex gap-2 items-center">
+                                            <input type="text" placeholder="Satuan (ex: Box)" value={mp.unit} onChange={e => { const updated = [...formData.multiPrices]; updated[idx].unit = e.target.value; setFormData({...formData, multiPrices: updated}); }} className="flex-1 p-2 rounded-lg border border-slate-200 text-sm font-medium outline-none focus:border-amber-500" />
+                                            <input type="number" placeholder="Harga" value={mp.price} onChange={e => { const updated = [...formData.multiPrices]; updated[idx].price = e.target.value; setFormData({...formData, multiPrices: updated}); }} className="w-28 p-2 rounded-lg border border-slate-200 text-sm font-bold outline-none focus:border-amber-500" />
+                                            <button type="button" onClick={() => { const updated = formData.multiPrices.filter((_, i) => i !== idx); setFormData({...formData, multiPrices: updated}); }} className="w-8 h-8 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors flex items-center justify-center"><Icon name="trash-can" className="text-xs" /></button>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <label className="text-[9px] font-bold text-amber-600 uppercase min-w-fit">Isi/Konversi:</label>
+                                            <input type="number" placeholder="Jumlah" value={mp.quantity || ''} onChange={e => { const updated = [...formData.multiPrices]; updated[idx].quantity = e.target.value; setFormData({...formData, multiPrices: updated}); }} className="w-20 p-1.5 rounded-lg border border-slate-200 text-xs font-medium outline-none focus:border-amber-500" />
+                                            <span className="text-xs text-slate-500">x</span>
+                                            <input type="text" placeholder="Satuan dasar" value={mp.baseUnit || formData.unit || 'Pcs'} onChange={e => { const updated = [...formData.multiPrices]; updated[idx].baseUnit = e.target.value; setFormData({...formData, multiPrices: updated}); }} className="flex-1 p-1.5 rounded-lg border border-slate-200 text-xs font-medium outline-none focus:border-amber-500" />
+                                        </div>
+                                        <p className="text-[8px] text-slate-400 italic">Contoh: 1 {mp.unit || 'Box'} = {mp.quantity || '100'} {mp.baseUnit || formData.unit || 'Pcs'}</p>
                                     </div>
                                 ))}
                                 {(!formData.multiPrices || formData.multiPrices.length === 0) && <div className="text-center text-xs text-amber-500 italic py-2">Belum ada harga tambahan</div>}
