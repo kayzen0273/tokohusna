@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistem Kasir Toko Husna (V34 - Batal Transaksi dari Mode Bantu)</title>
+    <title>Sistem Kasir Toko Husna (V34.1 - Fix: Tombol Edit/Hapus Harus Mode Bantu)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -1412,16 +1412,28 @@
                                                                     </div>
                                                                     {/* Kontrol qty */}
                                                                     <div className="flex items-center gap-1 bg-white rounded-lg border border-slate-200 shadow-sm px-1 py-0.5 flex-shrink-0">
-                                                                        <button onClick={() => updateItemQtyInActiveCart(activeCart.id, idx, -1)} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors">
+                                                                        <button 
+                                                                            onClick={() => updateItemQtyInActiveCart(activeCart.id, idx, -1)} 
+                                                                            disabled={!helpingCart || helpingCart.id !== activeCart.id}
+                                                                            className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${!helpingCart || helpingCart.id !== activeCart.id ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-red-500 hover:bg-red-50'}`}
+                                                                        >
                                                                             <Icon name="minus" className="text-[9px]" />
                                                                         </button>
                                                                         <span className="text-xs font-black text-slate-700 w-4 text-center">{item.cartQty}</span>
-                                                                        <button onClick={() => updateItemQtyInActiveCart(activeCart.id, idx, 1)} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-green-500 hover:bg-green-50 rounded transition-colors">
+                                                                        <button 
+                                                                            onClick={() => updateItemQtyInActiveCart(activeCart.id, idx, 1)} 
+                                                                            disabled={!helpingCart || helpingCart.id !== activeCart.id}
+                                                                            className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${!helpingCart || helpingCart.id !== activeCart.id ? 'text-slate-200 cursor-not-allowed' : 'text-slate-400 hover:text-green-500 hover:bg-green-50'}`}
+                                                                        >
                                                                             <Icon name="plus" className="text-[9px]" />
                                                                         </button>
                                                                     </div>
                                                                     {/* Tombol hapus */}
-                                                                    <button onClick={() => removeItemFromActiveCart(activeCart.id, idx)} className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0">
+                                                                    <button 
+                                                                        onClick={() => removeItemFromActiveCart(activeCart.id, idx)} 
+                                                                        disabled={!helpingCart || helpingCart.id !== activeCart.id}
+                                                                        className={`w-6 h-6 flex items-center justify-center rounded-lg transition-colors flex-shrink-0 ${!helpingCart || helpingCart.id !== activeCart.id ? 'text-slate-200 cursor-not-allowed' : 'text-slate-300 hover:text-red-500 hover:bg-red-50'}`}
+                                                                    >
                                                                         <Icon name="trash" className="text-[10px]" />
                                                                     </button>
                                                                 </div>
@@ -2311,7 +2323,7 @@
                                 <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600 p-2"><Icon name="xmark" className="text-xl" /></button>
                             </div>
                             <nav className="space-y-2 flex-1">{visibleMenuItems.map(menu => (<button key={menu.id} onClick={(e) => handleNavClick(menu.id, e)} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold transition-all duration-300 relative overflow-hidden group ${activeTab === menu.id ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}><div className="relative w-5 flex-shrink-0"><Icon name={menu.icon} className={`text-base ${activeTab === menu.id ? 'text-white' : 'text-slate-400'}`} />{menu.badge > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center leading-none shadow-sm animate-pulse">{menu.badge > 9 ? '9+' : menu.badge}</span>}</div><span className="flex-1 text-left">{menu.label}</span>{menu.badge > 0 && activeTab !== menu.id && <span className="text-[9px] bg-red-100 text-red-600 font-black px-1.5 py-0.5 rounded-full border border-red-200">{menu.badge} baru</span>}</button>))}</nav>
-                            <div className="mt-auto pt-6 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400">Versi 34.0 • Batal Transaksi dari Mode Bantu</p></div>
+                            <div className="mt-auto pt-6 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400">Versi 34.1 • Fix: Tombol Edit/Hapus Harus Mode Bantu</p></div>
                         </div>
                     </aside>
                     <main className="flex-1 md:ml-0 p-4 md:p-8 max-w-7xl mx-auto w-full mb-0 relative z-20">
