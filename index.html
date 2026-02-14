@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistem Kasir Toko Husna (V34.1 - Fix: Tombol Edit/Hapus Harus Mode Bantu)</title>
+    <title>Sistem Kasir Toko Husna (V35 - Multi-Harga + Diskon Item)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -738,7 +738,7 @@
             const [helpingCart, setHelpingCart] = useState(null);
             const [pendingHelpingCart, setPendingHelpingCart] = useState(null);
             const [showHelpCancelModal, setShowHelpCancelModal] = useState(false);
-            const [priceModal, setPriceModal] = useState({ show: false, item: null }); // Modal pilih harga
+            const [priceModal, setPriceModal] = useState({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 }); // Modal pilih harga
 
             useEffect(() => {
                 if (!user) return;
@@ -1012,42 +1012,70 @@
                 // Cek apakah item punya multi-harga
                 const hasMultiPrices = item.multiPrices && item.multiPrices.length > 0 && item.multiPrices.some(mp => mp.unit && mp.price);
                 
-                if (hasMultiPrices) {
-                    // Tampilkan modal untuk pilih harga
-                    setPriceModal({ show: true, item: item });
-                    return;
-                }
+                // Set default price dan unit
+                const defaultPrice = item.price || 0;
+                const defaultUnit = item.unit || 'Pcs';
                 
-                // Jika tidak ada multi-harga, lanjutkan seperti biasa
-                setCart(prev => {
-                    const existing = prev.find(c => c.id === item.id);
-                    if (existing) { if (existing.cartQty >= item.qty) { showToast("Stok tidak cukup!", "error"); return prev; } return prev.map(c => c.id === item.id ? { ...c, cartQty: c.cartQty + 1 } : c); }
-                    return [...prev, { ...item, cartQty: 1 }];
+                // Buka modal dengan setting default
+                setPriceModal({ 
+                    show: true, 
+                    item: item,
+                    selectedPrice: defaultPrice,
+                    selectedUnit: defaultUnit,
+                    qty: 1,
+                    discountType: '%',
+                    discountValue: 0
                 });
             };
             
-            const addToCartWithPrice = (item, selectedPrice, selectedUnit) => {
-                setCart(prev => {
-                    const existing = prev.find(c => c.id === item.id && c.selectedUnit === selectedUnit);
-                    if (existing) {
-                        if (existing.cartQty >= item.qty) { showToast("Stok tidak cukup!", "error"); return prev; }
-                        return prev.map(c => (c.id === item.id && c.selectedUnit === selectedUnit) ? { ...c, cartQty: c.cartQty + 1 } : c);
+            const addToCartWithPrice = () => {
+                const { item, selectedPrice, selectedUnit, qty, discountType, discountValue } = priceModal;
+                
+                if (!item || !selectedPrice || qty < 1) {
+                    showToast("Silakan lengkapi data!", "error");
+                    return;
+                }
+                
+                // Hitung harga setelah diskon
+                let finalPrice = selectedPrice;
+                if (discountValue > 0) {
+                    if (discountType === '%') {
+                        finalPrice = selectedPrice - (selectedPrice * discountValue / 100);
+                    } else {
+                        finalPrice = selectedPrice - discountValue;
                     }
-                    return [...prev, { ...item, cartQty: 1, price: selectedPrice, selectedUnit: selectedUnit }];
+                }
+                
+                setCart(prev => {
+                    const existing = prev.find(c => c.id === item.id && c.selectedUnit === selectedUnit && c.price === finalPrice);
+                    if (existing) {
+                        if (existing.cartQty + qty > item.qty) { 
+                            showToast("Stok tidak cukup!", "error"); 
+                            return prev; 
+                        }
+                        return prev.map(c => (c.id === item.id && c.selectedUnit === selectedUnit && c.price === finalPrice) ? { ...c, cartQty: c.cartQty + qty } : c);
+                    }
+                    return [...prev, { ...item, cartQty: qty, price: finalPrice, selectedUnit: selectedUnit, originalPrice: selectedPrice, discount: discountValue > 0 ? { type: discountType, value: discountValue } : null }];
                 });
-                setPriceModal({ show: false, item: null });
+                
+                setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 });
+                showToast("Ditambahkan ke keranjang");
             };
-            const removeFromCart = (id, selectedUnit = null) => {
+            const removeFromCart = (id, selectedUnit = null, price = null) => {
                 setCart(prev => prev.filter(c => {
-                    if (selectedUnit) {
+                    if (selectedUnit && price !== null) {
+                        return !(c.id === id && c.selectedUnit === selectedUnit && c.price === price);
+                    } else if (selectedUnit) {
                         return !(c.id === id && c.selectedUnit === selectedUnit);
                     }
                     return c.id !== id;
                 }));
             };
-            const updateQty = (id, delta, selectedUnit = null) => {
+            const updateQty = (id, delta, selectedUnit = null, price = null) => {
                 setCart(prev => prev.map(c => {
-                    const matchesItem = selectedUnit ? (c.id === id && c.selectedUnit === selectedUnit) : (c.id === id);
+                    const matchesItem = selectedUnit && price !== null ? (c.id === id && c.selectedUnit === selectedUnit && c.price === price) :
+                                       selectedUnit ? (c.id === id && c.selectedUnit === selectedUnit) : 
+                                       (c.id === id);
                     if (matchesItem) { 
                         const newQty = c.cartQty + delta; 
                         if (newQty > c.qty) { showToast("Stok mentok!", "error"); return c; } 
@@ -1570,7 +1598,7 @@
                     </div>
                     <div className="w-full md:w-80 lg:w-96 flex flex-col bg-white rounded-3xl shadow-soft border border-slate-100 h-fit md:h-full max-h-[calc(100vh-100px)]">
                         <div className="p-4 border-b border-slate-100 bg-slate-50/50 rounded-t-3xl flex justify-between items-center"><h3 className="font-bold text-slate-800 flex items-center gap-2"><Icon name="cart-shopping" className="text-sky-600" /> Keranjang</h3><span className="text-xs font-bold bg-sky-100 text-sky-700 px-2 py-1 rounded-full">{cart.length} Item</span></div>
-                        <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar min-h-[200px]">{cart.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60"><Icon name="basket-shopping" className="text-4xl mb-2" /><p className="text-xs font-medium">Keranjang Kosong</p></div>) : (cart.map(item => (<div key={item.id + (item.selectedUnit || '')} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex gap-3 group"><div className="flex-1 min-w-0"><h4 className="text-xs font-bold text-slate-700 truncate">{item.name}</h4><p className="text-[10px] text-slate-500">{formatRupiah(item.price)} {item.selectedUnit ? `per ${item.selectedUnit}` : ''} x {item.cartQty}</p></div><div className="flex flex-col items-end gap-1"><p className="text-xs font-bold text-slate-800">{formatRupiah(item.price * item.cartQty)}</p><div className="flex items-center gap-1 bg-white rounded-lg shadow-sm border border-slate-200 p-0.5"><button onClick={() => updateQty(item.id, -1, item.selectedUnit)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="minus" /></button><span className="text-xs font-bold w-4 text-center">{item.cartQty}</span><button onClick={() => updateQty(item.id, 1, item.selectedUnit)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="plus" /></button></div></div><button onClick={() => removeFromCart(item.id, item.selectedUnit)} className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-[8px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-md"><Icon name="xmark" /></button></div>)))}</div>
+                        <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar min-h-[200px]">{cart.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60"><Icon name="basket-shopping" className="text-4xl mb-2" /><p className="text-xs font-medium">Keranjang Kosong</p></div>) : (cart.map(item => (<div key={item.id + (item.selectedUnit || '') + (item.price || '')} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex gap-3 group relative"><div className="flex-1 min-w-0"><h4 className="text-xs font-bold text-slate-700 truncate">{item.name}</h4><p className="text-[10px] text-slate-500">{formatRupiah(item.originalPrice || item.price)} {item.selectedUnit ? `per ${item.selectedUnit}` : ''} x {item.cartQty}</p>{item.discount && <p className="text-[9px] text-red-500 font-bold">Diskon: {item.discount.type === '%' ? `${item.discount.value}%` : formatRupiah(item.discount.value)}</p>}</div><div className="flex flex-col items-end gap-1"><p className="text-xs font-bold text-slate-800">{formatRupiah(item.price * item.cartQty)}</p><div className="flex items-center gap-1 bg-white rounded-lg shadow-sm border border-slate-200 p-0.5"><button onClick={() => updateQty(item.id, -1, item.selectedUnit, item.price)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="minus" /></button><span className="text-xs font-bold w-4 text-center">{item.cartQty}</span><button onClick={() => updateQty(item.id, 1, item.selectedUnit, item.price)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="plus" /></button></div></div><button onClick={() => removeFromCart(item.id, item.selectedUnit, item.price)} className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-[8px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-md"><Icon name="xmark" /></button></div>)))}</div>
                         <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-3xl">
                             <div className="flex justify-between items-end mb-4"><span className="text-xs text-slate-500 font-medium">Total Tagihan</span><span className="text-xl font-black text-slate-800">{formatRupiah(grandTotal)}</span></div>
                             <button onClick={() => { setPaymentAmount(''); setCheckoutModal(true); }} disabled={cart.length === 0} className="w-full py-3.5 bg-gradient-to-r from-sky-600 to-sky-500 text-white rounded-xl font-bold shadow-lg shadow-sky-200 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-2"><Icon name="money-bill-wave" /> Bayar Sekarang</button>
@@ -1580,60 +1608,147 @@
                     {checkoutModal && ( <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in"> {!paymentSuccess ? ( <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 relative"> <button onClick={() => setCheckoutModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><Icon name="xmark" /></button><h3 className="text-lg font-bold text-slate-800 mb-4 text-center">Pembayaran</h3> <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-4"><div className="flex justify-between mb-2 text-sm text-slate-500"><span>Total Belanja</span><span className="font-bold text-slate-800">{formatRupiah(grandTotal)}</span></div><div className="h-px bg-slate-200 my-2"></div><label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Pilih Nominal Cepat</label><div className="grid grid-cols-2 gap-2 mb-4">{getPaymentSuggestions.map((amount, idx) => (<button key={idx} onClick={() => setPaymentAmount(amount.toString())} className={`py-2 px-1 rounded-lg text-xs font-bold border transition-all active:scale-95 ${safeNumber(paymentAmount) === amount ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-sky-50 hover:border-sky-300'}`}>{amount === grandTotal ? 'Uang Pas' : formatRupiah(amount)}</button>))}</div><div className="space-y-1"><label className="text-[10px] font-bold text-slate-400 uppercase">Atau Ketik Manual</label><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">Rp</span><input autoFocus type="number" className="w-full pl-10 pr-3 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-sky-500 outline-none font-bold text-lg text-slate-800" placeholder="0" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} /></div></div><div className={`mt-3 flex justify-between text-sm transition-colors ${change < 0 ? 'text-red-500' : 'text-green-600'}`}><span className="font-medium">Kembalian</span><span className="font-bold">{change < 0 ? '-' : formatRupiah(change)}</span></div></div> <button onClick={handleCheckout} disabled={change < 0 || isProcessing} className="w-full py-3.5 bg-sky-600 text-white rounded-xl font-bold shadow-lg disabled:opacity-50 disabled:bg-slate-400 flex justify-center items-center gap-2">{isProcessing ? <div className="typing-dot bg-white"></div> : <><Icon name="wallet" /> BAYAR</>}</button> </div> ) : ( <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 relative flex flex-col items-center text-center pop-in"> <div className="w-24 h-24 relative mb-4"><svg className="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52"><circle className="checkmark__circle" cx="26" cy="26" r="25" fill="none"/><path className="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/></svg></div> <h2 className="text-2xl font-black text-slate-800 mb-1">Transaksi Selesai</h2><p className="text-slate-500 text-sm mb-8">Kembalian: <span className="font-bold text-slate-800">{formatRupiah(receiptData.change)}</span></p> <div className="w-full space-y-3"><button onClick={handlePrintAction} className="w-full py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><Icon name="print" /> Cetak Bluetooth</button><button onClick={handleWA} className="w-full py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><Icon name="image" /> Kirim Gambar Struk (WA)</button><button onClick={handleCloseSuccess} className="w-full py-3 rounded-xl border-2 border-slate-100 text-slate-600 font-bold hover:bg-slate-50 active:scale-95 transition-all">Selesaikan Tanpa Struk</button></div> </div> )} </div> )}
                     <ConfirmModal isOpen={cancelModal} title="Batalkan Transaksi?" message="Keranjang akan dikosongkan dan semua item akan dihapus dari sesi ini." onConfirm={confirmCancel} onCancel={() => setCancelModal(false)} confirmText="Ya, Batalkan" confirmColor="red" />
                     
-                    {/* Modal Pilih Harga Multi-Satuan */}
+                    {/* Modal Tambah ke Keranjang (Mirip Screenshot) */}
                     {priceModal.show && priceModal.item && (
                         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
-                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-0 overflow-hidden">
-                                <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-amber-50 to-yellow-50">
-                                    <h3 className="font-bold text-slate-800">Pilih Harga Satuan</h3>
-                                    <p className="text-[10px] text-amber-700 mt-1">{priceModal.item.name}</p>
+                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                                {/* Header */}
+                                <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+                                    <button onClick={() => setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 })} className="text-slate-600 hover:text-slate-800">
+                                        <Icon name="arrow-left" className="text-xl" />
+                                    </button>
+                                    <h3 className="font-bold text-slate-800 text-sm">#{priceModal.item.id?.slice(-10) || 'ITEM'}</h3>
                                 </div>
-                                <div className="p-5 space-y-3">
-                                    {/* Harga default jika ada */}
-                                    {priceModal.item.price > 0 && (
-                                        <button 
-                                            onClick={() => addToCartWithPrice(priceModal.item, priceModal.item.price, priceModal.item.unit)}
-                                            className="w-full p-4 rounded-xl bg-green-50 border-2 border-green-200 hover:bg-green-100 transition-all text-left group"
-                                        >
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <p className="text-xs font-bold text-slate-600 uppercase">Satuan Utama</p>
-                                                    <p className="text-lg font-black text-slate-800">{priceModal.item.unit || 'Pcs'}</p>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-sm text-green-700 font-bold">{formatRupiah(priceModal.item.price)}</p>
-                                                </div>
+                                
+                                {/* Content */}
+                                <div className="p-5">
+                                    {/* Nama Barang & Stok */}
+                                    <div className="mb-6">
+                                        <h2 className="text-xl font-bold text-slate-800 mb-1">{priceModal.item.name}</h2>
+                                        <p className="text-sm text-slate-500">Stok {priceModal.item.qty} {priceModal.item.unit}</p>
+                                    </div>
+                                    
+                                    {/* Pilih Harga Satuan (jika ada multi-price) */}
+                                    {priceModal.item.multiPrices && priceModal.item.multiPrices.length > 0 && (
+                                        <div className="mb-4">
+                                            <label className="text-sm font-bold text-slate-700 mb-2 block">Pilih Harga</label>
+                                            <div className="space-y-2">
+                                                {/* Harga Default */}
+                                                {priceModal.item.price > 0 && (
+                                                    <button 
+                                                        onClick={() => setPriceModal({...priceModal, selectedPrice: priceModal.item.price, selectedUnit: priceModal.item.unit})}
+                                                        className={`w-full p-3 rounded-xl border-2 transition-all text-left ${priceModal.selectedPrice === priceModal.item.price && priceModal.selectedUnit === priceModal.item.unit ? 'border-teal-600 bg-teal-50' : 'border-slate-200 hover:border-slate-300'}`}
+                                                    >
+                                                        <div className="flex items-center justify-between">
+                                                            <span className="font-bold text-slate-700">{priceModal.item.unit}</span>
+                                                            <span className="text-sm font-bold text-teal-700">{formatRupiah(priceModal.item.price)}</span>
+                                                        </div>
+                                                    </button>
+                                                )}
+                                                {/* Multi-prices */}
+                                                {priceModal.item.multiPrices.map((mp, idx) => 
+                                                    mp.unit && mp.price ? (
+                                                        <button 
+                                                            key={idx}
+                                                            onClick={() => setPriceModal({...priceModal, selectedPrice: mp.price, selectedUnit: mp.unit})}
+                                                            className={`w-full p-3 rounded-xl border-2 transition-all text-left ${priceModal.selectedPrice === mp.price && priceModal.selectedUnit === mp.unit ? 'border-teal-600 bg-teal-50' : 'border-slate-200 hover:border-slate-300'}`}
+                                                        >
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="font-bold text-slate-700">{mp.unit}</span>
+                                                                <span className="text-sm font-bold text-teal-700">{formatRupiah(mp.price)}</span>
+                                                            </div>
+                                                        </button>
+                                                    ) : null
+                                                )}
                                             </div>
-                                        </button>
+                                        </div>
                                     )}
                                     
-                                    {/* Harga multi-satuan */}
-                                    {priceModal.item.multiPrices && priceModal.item.multiPrices.map((mp, idx) => 
-                                        mp.unit && mp.price ? (
-                                            <button 
-                                                key={idx}
-                                                onClick={() => addToCartWithPrice(priceModal.item, mp.price, mp.unit)}
-                                                className="w-full p-4 rounded-xl bg-amber-50 border-2 border-amber-200 hover:bg-amber-100 transition-all text-left group"
-                                            >
-                                                <div className="flex items-center justify-between">
-                                                    <div>
-                                                        <p className="text-xs font-bold text-slate-600 uppercase">Harga per</p>
-                                                        <p className="text-lg font-black text-slate-800">{mp.unit}</p>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <p className="text-sm text-amber-700 font-bold">{formatRupiah(mp.price)}</p>
-                                                    </div>
-                                                </div>
-                                            </button>
-                                        ) : null
-                                    )}
+                                    {/* Harga Display */}
+                                    <div className="mb-4 text-right">
+                                        <p className="text-sm text-slate-500">{priceModal.qty} x {formatRupiah(priceModal.selectedPrice)}</p>
+                                        <p className="text-2xl font-bold text-slate-800">
+                                            {formatRupiah((() => {
+                                                let total = priceModal.selectedPrice * priceModal.qty;
+                                                if (priceModal.discountValue > 0) {
+                                                    if (priceModal.discountType === '%') {
+                                                        total = total - (total * priceModal.discountValue / 100);
+                                                    } else {
+                                                        total = total - (priceModal.discountValue * priceModal.qty);
+                                                    }
+                                                }
+                                                return total;
+                                            })())}
+                                        </p>
+                                    </div>
+                                    
+                                    {/* Jumlah */}
+                                    <div className="mb-4">
+                                        <label className="text-sm font-bold text-slate-700 mb-2 block">Jumlah</label>
+                                        <div className="flex gap-3">
+                                            <input 
+                                                type="number" 
+                                                min="1" 
+                                                max={priceModal.item.qty}
+                                                value={priceModal.qty} 
+                                                onChange={e => setPriceModal({...priceModal, qty: Math.max(1, Math.min(priceModal.item.qty, parseInt(e.target.value) || 1))})}
+                                                className="flex-1 p-3 rounded-xl border-2 border-slate-200 focus:border-teal-500 outline-none font-bold text-slate-800"
+                                            />
+                                            <div className="relative w-32">
+                                                <select 
+                                                    value={priceModal.selectedUnit} 
+                                                    disabled
+                                                    className="w-full p-3 rounded-xl border-2 border-slate-200 bg-slate-50 appearance-none font-bold text-slate-600 cursor-not-allowed"
+                                                >
+                                                    <option>{priceModal.selectedUnit}</option>
+                                                </select>
+                                                <Icon name="chevron-down" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Diskon */}
+                                    <div className="mb-6">
+                                        <label className="text-sm font-bold text-slate-700 mb-2 block">Diskon</label>
+                                        <div className="flex gap-3">
+                                            <div className="relative w-24">
+                                                <select 
+                                                    value={priceModal.discountType} 
+                                                    onChange={e => setPriceModal({...priceModal, discountType: e.target.value, discountValue: 0})}
+                                                    className="w-full p-3 rounded-xl border-2 border-slate-200 focus:border-teal-500 outline-none appearance-none font-bold text-slate-700 bg-white"
+                                                >
+                                                    <option value="%">%</option>
+                                                    <option value="Rp">Rp</option>
+                                                </select>
+                                                <Icon name="chevron-down" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                            </div>
+                                            <input 
+                                                type="number" 
+                                                min="0"
+                                                max={priceModal.discountType === '%' ? 100 : priceModal.selectedPrice}
+                                                value={priceModal.discountValue} 
+                                                onChange={e => {
+                                                    const val = parseFloat(e.target.value) || 0;
+                                                    const maxVal = priceModal.discountType === '%' ? 100 : priceModal.selectedPrice;
+                                                    setPriceModal({...priceModal, discountValue: Math.max(0, Math.min(maxVal, val))});
+                                                }}
+                                                placeholder="0"
+                                                className="flex-1 p-3 rounded-xl border-2 border-slate-200 focus:border-teal-500 outline-none font-bold text-slate-800"
+                                            />
+                                            <div className="flex items-center px-3 rounded-xl border-2 border-slate-200 bg-slate-50 font-bold text-slate-600">
+                                                {priceModal.discountType}
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="p-4 bg-slate-50 border-t border-slate-100">
+                                
+                                {/* Footer dengan Tombol Tambahkan */}
+                                <div className="p-4 border-t border-slate-200 flex justify-end">
                                     <button 
-                                        onClick={() => setPriceModal({ show: false, item: null })}
-                                        className="w-full py-3 rounded-xl bg-white border border-slate-200 text-slate-600 font-bold hover:bg-slate-100 transition-colors"
+                                        onClick={addToCartWithPrice}
+                                        className="px-8 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-all"
                                     >
-                                        Batal
+                                        Tambahkan
                                     </button>
                                 </div>
                             </div>
@@ -2457,7 +2572,7 @@
                                 <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600 p-2"><Icon name="xmark" className="text-xl" /></button>
                             </div>
                             <nav className="space-y-2 flex-1">{visibleMenuItems.map(menu => (<button key={menu.id} onClick={(e) => handleNavClick(menu.id, e)} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold transition-all duration-300 relative overflow-hidden group ${activeTab === menu.id ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}><div className="relative w-5 flex-shrink-0"><Icon name={menu.icon} className={`text-base ${activeTab === menu.id ? 'text-white' : 'text-slate-400'}`} />{menu.badge > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center leading-none shadow-sm animate-pulse">{menu.badge > 9 ? '9+' : menu.badge}</span>}</div><span className="flex-1 text-left">{menu.label}</span>{menu.badge > 0 && activeTab !== menu.id && <span className="text-[9px] bg-red-100 text-red-600 font-black px-1.5 py-0.5 rounded-full border border-red-200">{menu.badge} baru</span>}</button>))}</nav>
-                            <div className="mt-auto pt-6 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400">Versi 34.1 • Fix: Tombol Edit/Hapus Harus Mode Bantu</p></div>
+                            <div className="mt-auto pt-6 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400">Versi 35 • Multi-Harga + Diskon Item</p></div>
                         </div>
                     </aside>
                     <main className="flex-1 md:ml-0 p-4 md:p-8 max-w-7xl mx-auto w-full mb-0 relative z-20">
