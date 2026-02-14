@@ -1038,12 +1038,22 @@
                 // Cari konversi jika ada
                 let conversionQty = 1;
                 let conversionUnit = selectedUnit;
-                const selectedMultiPrice = item.multiPrices?.find(mp => 
-                    mp.unit === selectedUnit && mp.price === selectedPrice
-                );
+                
+                console.log('Debug - Searching for multiPrice:', { selectedUnit, selectedPrice, multiPrices: item.multiPrices });
+                
+                const selectedMultiPrice = item.multiPrices?.find(mp => {
+                    const unitMatch = mp.unit === selectedUnit;
+                    const priceMatch = parseFloat(mp.price) === parseFloat(selectedPrice);
+                    console.log('Debug - Checking:', { mpUnit: mp.unit, mpPrice: mp.price, unitMatch, priceMatch });
+                    return unitMatch && priceMatch;
+                });
+                
+                console.log('Debug - Found multiPrice:', selectedMultiPrice);
+                
                 if (selectedMultiPrice && selectedMultiPrice.quantity) {
                     conversionQty = parseFloat(selectedMultiPrice.quantity) || 1;
                     conversionUnit = selectedMultiPrice.baseUnit || item.unit;
+                    console.log('Debug - Conversion set:', { conversionQty, conversionUnit });
                 }
                 
                 // Hitung harga setelah diskon
@@ -1059,8 +1069,22 @@
                 setCart(prev => {
                     const existing = prev.find(c => c.id === item.id && c.selectedUnit === selectedUnit && c.price === finalPrice);
                     if (existing) {
-                        return prev.map(c => (c.id === item.id && c.selectedUnit === selectedUnit && c.price === finalPrice) ? { ...c, cartQty: c.cartQty + finalQty } : c);
+                        // Jika item sudah ada, pertahankan conversionQty yang sudah ada
+                        return prev.map(c => (c.id === item.id && c.selectedUnit === selectedUnit && c.price === finalPrice) ? { 
+                            ...c, 
+                            cartQty: c.cartQty + finalQty,
+                            conversionQty: c.conversionQty || conversionQty,
+                            conversionUnit: c.conversionUnit || conversionUnit
+                        } : c);
                     }
+                    
+                    console.log('Debug - Adding to cart with conversion:', { 
+                        finalQty, 
+                        conversionQty, 
+                        conversionUnit,
+                        multiPrices: item.multiPrices 
+                    });
+                    
                     return [...prev, { 
                         ...item, 
                         cartQty: finalQty, 
@@ -1069,7 +1093,8 @@
                         originalPrice: selectedPrice, 
                         discount: discountValue > 0 ? { type: discountType, value: discountValue } : null,
                         conversionQty: conversionQty,
-                        conversionUnit: conversionUnit
+                        conversionUnit: conversionUnit,
+                        multiPrices: item.multiPrices // Pastikan multiPrices ikut tersimpan
                     }];
                 });
                 
@@ -1207,6 +1232,13 @@
                         const stockField = `stocks.${currentProfile.id}`;
                         // Hitung qty sebenarnya berdasarkan konversi
                         const actualQty = item.conversionQty ? (item.cartQty * item.conversionQty) : item.cartQty;
+                        console.log('Debug - Stock update:', { 
+                            itemName: item.name, 
+                            cartQty: item.cartQty, 
+                            conversionQty: item.conversionQty, 
+                            actualQty: actualQty,
+                            selectedUnit: item.selectedUnit
+                        });
                         batch.update(docRef, { [stockField]: window.increment(-actualQty), updatedAt: window.serverTimestamp() }); 
                     });
 
