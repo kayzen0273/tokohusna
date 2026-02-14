@@ -738,7 +738,7 @@
             const [helpingCart, setHelpingCart] = useState(null);
             const [pendingHelpingCart, setPendingHelpingCart] = useState(null);
             const [showHelpCancelModal, setShowHelpCancelModal] = useState(false);
-            const [priceModal, setPriceModal] = useState({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 0, discountType: '%', discountValue: 0 }); // Modal pilih harga
+            const [priceModal, setPriceModal] = useState({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 }); // Modal pilih harga
 
             useEffect(() => {
                 if (!user) return;
@@ -1009,13 +1009,17 @@
             const addToCart = (item) => {
                 if (safeNumber(item.qty) <= 0) { showToast("Stok Habis di Toko Ini!", "error"); return; }
                 
-                // Buka modal tanpa mengisi default price dan unit
+                // Set default sesuai barang
+                const defaultPrice = item.price || 0;
+                const defaultUnit = item.unit || 'Pcs';
+                
+                // Buka modal dengan setting default barang
                 setPriceModal({ 
                     show: true, 
                     item: item,
-                    selectedPrice: 0,
-                    selectedUnit: '',
-                    qty: 0,
+                    selectedPrice: defaultPrice,
+                    selectedUnit: defaultUnit,
+                    qty: 1,
                     discountType: '%',
                     discountValue: 0
                 });
@@ -1024,8 +1028,8 @@
             const addToCartWithPrice = () => {
                 const { item, selectedPrice, selectedUnit, qty, discountType, discountValue } = priceModal;
                 
-                if (!item || !selectedPrice || !selectedUnit || qty < 1) {
-                    showToast("Silakan lengkapi data (pilih satuan dan isi jumlah)!", "error");
+                if (!item || !selectedPrice || qty < 1) {
+                    showToast("Silakan lengkapi data!", "error");
                     return;
                 }
                 
@@ -1051,7 +1055,7 @@
                     return [...prev, { ...item, cartQty: qty, price: finalPrice, selectedUnit: selectedUnit, originalPrice: selectedPrice, discount: discountValue > 0 ? { type: discountType, value: discountValue } : null }];
                 });
                 
-                setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 0, discountType: '%', discountValue: 0 });
+                setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 });
                 showToast("Ditambahkan ke keranjang");
             };
             const removeFromCart = (id, selectedUnit = null, price = null) => {
@@ -1607,7 +1611,7 @@
                             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
                                 {/* Header */}
                                 <div className="p-4 border-b border-slate-200 flex items-center justify-between">
-                                    <button onClick={() => setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 0, discountType: '%', discountValue: 0 })} className="text-slate-600 hover:text-slate-800">
+                                    <button onClick={() => setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 })} className="text-slate-600 hover:text-slate-800">
                                         <Icon name="arrow-left" className="text-xl" />
                                     </button>
                                     <h3 className="font-bold text-slate-800 text-sm">#{priceModal.item.id?.slice(-10) || 'ITEM'}</h3>
@@ -1646,14 +1650,17 @@
                                             <input 
                                                 type="text" 
                                                 inputMode="numeric"
-                                                value={priceModal.qty === 0 ? '' : priceModal.qty} 
+                                                value={priceModal.qty} 
                                                 onChange={e => {
                                                     const val = e.target.value.replace(/[^0-9]/g, '');
-                                                    const num = val === '' ? 0 : parseInt(val, 10);
-                                                    setPriceModal({...priceModal, qty: Math.max(0, Math.min(priceModal.item.qty, num))});
+                                                    if (val === '') {
+                                                        setPriceModal({...priceModal, qty: 1});
+                                                    } else {
+                                                        const num = parseInt(val, 10);
+                                                        setPriceModal({...priceModal, qty: Math.max(1, Math.min(priceModal.item.qty, num))});
+                                                    }
                                                 }}
                                                 className="flex-1 p-3 rounded-xl border-2 border-slate-200 focus:border-teal-500 outline-none font-bold text-slate-800"
-                                                placeholder="0"
                                             />
                                             <div className="relative w-32">
                                                 <select 
@@ -1662,13 +1669,10 @@
                                                         if (e.target.value) {
                                                             const [unit, price] = e.target.value.split('|');
                                                             setPriceModal({...priceModal, selectedUnit: unit, selectedPrice: parseFloat(price)});
-                                                        } else {
-                                                            setPriceModal({...priceModal, selectedUnit: '', selectedPrice: 0});
                                                         }
                                                     }}
                                                     className="w-full p-3 rounded-xl border-2 border-slate-200 focus:border-teal-500 outline-none appearance-none font-bold text-slate-700 bg-white"
                                                 >
-                                                    <option value="">Pilih...</option>
                                                     {priceModal.item.price > 0 && (
                                                         <option value={`${priceModal.item.unit}|${priceModal.item.price}`}>
                                                             {priceModal.item.unit} - {formatRupiah(priceModal.item.price)}
@@ -1703,14 +1707,18 @@
                                                 <Icon name="chevron-down" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                                             </div>
                                             <input 
-                                                type="number" 
-                                                min="0"
-                                                max={priceModal.discountType === '%' ? 100 : priceModal.selectedPrice}
-                                                value={priceModal.discountValue} 
+                                                type="text"
+                                                inputMode="decimal"
+                                                value={priceModal.discountValue === 0 ? '' : priceModal.discountValue}
                                                 onChange={e => {
-                                                    const val = parseFloat(e.target.value) || 0;
-                                                    const maxVal = priceModal.discountType === '%' ? 100 : priceModal.selectedPrice;
-                                                    setPriceModal({...priceModal, discountValue: Math.max(0, Math.min(maxVal, val))});
+                                                    const val = e.target.value.replace(/[^0-9.]/g, '');
+                                                    if (val === '' || val === '.') {
+                                                        setPriceModal({...priceModal, discountValue: 0});
+                                                    } else {
+                                                        const num = parseFloat(val) || 0;
+                                                        const maxVal = priceModal.discountType === '%' ? 100 : priceModal.selectedPrice;
+                                                        setPriceModal({...priceModal, discountValue: Math.max(0, Math.min(maxVal, num))});
+                                                    }
                                                 }}
                                                 placeholder="0"
                                                 className="flex-1 p-3 rounded-xl border-2 border-slate-200 focus:border-teal-500 outline-none font-bold text-slate-800"
