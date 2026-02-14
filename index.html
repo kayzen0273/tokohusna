@@ -1053,7 +1053,12 @@
                 if (selectedMultiPrice && selectedMultiPrice.quantity) {
                     conversionQty = parseFloat(selectedMultiPrice.quantity) || 1;
                     conversionUnit = selectedMultiPrice.baseUnit || item.unit;
-                    console.log('Debug - Conversion set:', { conversionQty, conversionUnit });
+                    console.log('Debug - Conversion set:', { 
+                        conversionQty, 
+                        conversionUnit,
+                        typeOfQty: typeof conversionQty,
+                        originalQuantity: selectedMultiPrice.quantity
+                    });
                 }
                 
                 // Hitung harga setelah diskon
@@ -1081,11 +1086,14 @@
                     console.log('Debug - Adding to cart with conversion:', { 
                         finalQty, 
                         conversionQty, 
+                        typeOfConversionQty: typeof conversionQty,
                         conversionUnit,
-                        multiPrices: item.multiPrices 
+                        multiPrices: item.multiPrices,
+                        selectedUnit: selectedUnit,
+                        selectedPrice: selectedPrice
                     });
                     
-                    return [...prev, { 
+                    const newItem = { 
                         ...item, 
                         cartQty: finalQty, 
                         price: finalPrice, 
@@ -1095,7 +1103,11 @@
                         conversionQty: conversionQty,
                         conversionUnit: conversionUnit,
                         multiPrices: item.multiPrices // Pastikan multiPrices ikut tersimpan
-                    }];
+                    };
+                    
+                    console.log('Debug - New cart item created:', newItem);
+                    
+                    return [...prev, newItem];
                 });
                 
                 setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 });
@@ -1230,14 +1242,26 @@
                     cart.forEach(item => { 
                         const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id);
                         const stockField = `stocks.${currentProfile.id}`;
+                        
                         // Hitung qty sebenarnya berdasarkan konversi
-                        const actualQty = item.conversionQty ? (item.cartQty * item.conversionQty) : item.cartQty;
+                        // Pastikan konversi ke number untuk menghindari masalah tipe data
+                        const cartQtyNum = parseFloat(item.cartQty) || 0;
+                        const conversionQtyNum = parseFloat(item.conversionQty) || 1;
+                        const actualQty = (conversionQtyNum > 1) ? (cartQtyNum * conversionQtyNum) : cartQtyNum;
+                        
                         console.log('Debug - Stock update:', { 
                             itemName: item.name, 
-                            cartQty: item.cartQty, 
+                            cartQty: item.cartQty,
+                            cartQtyNum: cartQtyNum,
                             conversionQty: item.conversionQty, 
+                            conversionQtyNum: conversionQtyNum,
                             actualQty: actualQty,
-                            selectedUnit: item.selectedUnit
+                            selectedUnit: item.selectedUnit,
+                            itemObject: item
+                        });
+                        
+                        batch.update(docRef, { [stockField]: window.increment(-actualQty), updatedAt: window.serverTimestamp() }); 
+                    });
                         });
                         batch.update(docRef, { [stockField]: window.increment(-actualQty), updatedAt: window.serverTimestamp() }); 
                     });
@@ -1896,8 +1920,21 @@
                     const storeIdToReturn = tx.storeId || 'default';
                     const invRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id);
                     const stockField = `stocks.${storeIdToReturn}`;
+                    
                     // Hitung qty sebenarnya berdasarkan konversi
-                    const actualQty = item.conversionQty ? (qtyToRetur * item.conversionQty) : qtyToRetur;
+                    const qtyToReturNum = parseFloat(qtyToRetur) || 0;
+                    const conversionQtyNum = parseFloat(item.conversionQty) || 1;
+                    const actualQty = (conversionQtyNum > 1) ? (qtyToReturNum * conversionQtyNum) : qtyToReturNum;
+                    
+                    console.log('Debug - Retur stock update:', {
+                        itemName: item.name,
+                        qtyToRetur: qtyToRetur,
+                        qtyToReturNum: qtyToReturNum,
+                        conversionQty: item.conversionQty,
+                        conversionQtyNum: conversionQtyNum,
+                        actualQty: actualQty
+                    });
+                    
                     batch.update(invRef, { [stockField]: window.increment(actualQty) });
                     
                     const txRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions', tx.id);
