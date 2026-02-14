@@ -1035,21 +1035,6 @@
                     return;
                 }
                 
-                // Cari konversi jika ada
-                let conversionQty = 1;
-                let conversionUnit = selectedUnit;
-                
-                const selectedMultiPrice = item.multiPrices?.find(mp => {
-                    const unitMatch = mp.unit === selectedUnit;
-                    const priceMatch = parseFloat(mp.price) === parseFloat(selectedPrice);
-                    return unitMatch && priceMatch;
-                });
-                
-                if (selectedMultiPrice && selectedMultiPrice.quantity) {
-                    conversionQty = parseFloat(selectedMultiPrice.quantity) || 1;
-                    conversionUnit = selectedMultiPrice.baseUnit || item.unit;
-                }
-                
                 // Hitung harga setelah diskon
                 let finalPrice = selectedPrice;
                 if (discountValue > 0) {
@@ -1063,27 +1048,9 @@
                 setCart(prev => {
                     const existing = prev.find(c => c.id === item.id && c.selectedUnit === selectedUnit && c.price === finalPrice);
                     if (existing) {
-                        return prev.map(c => (c.id === item.id && c.selectedUnit === selectedUnit && c.price === finalPrice) ? { 
-                            ...c, 
-                            cartQty: c.cartQty + finalQty,
-                            conversionQty: c.conversionQty || conversionQty,
-                            conversionUnit: c.conversionUnit || conversionUnit
-                        } : c);
+                        return prev.map(c => (c.id === item.id && c.selectedUnit === selectedUnit && c.price === finalPrice) ? { ...c, cartQty: c.cartQty + finalQty } : c);
                     }
-                    
-                    const newItem = { 
-                        ...item, 
-                        cartQty: finalQty, 
-                        price: finalPrice, 
-                        selectedUnit: selectedUnit, 
-                        originalPrice: selectedPrice, 
-                        discount: discountValue > 0 ? { type: discountType, value: discountValue } : null,
-                        conversionQty: conversionQty,
-                        conversionUnit: conversionUnit,
-                        multiPrices: item.multiPrices
-                    };
-                    
-                    return [...prev, newItem];
+                    return [...prev, { ...item, cartQty: finalQty, price: finalPrice, selectedUnit: selectedUnit, originalPrice: selectedPrice, discount: discountValue > 0 ? { type: discountType, value: discountValue } : null }];
                 });
                 
                 setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 });
@@ -1218,13 +1185,7 @@
                     cart.forEach(item => { 
                         const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id);
                         const stockField = `stocks.${currentProfile.id}`;
-                        
-                        // Hitung qty sebenarnya berdasarkan konversi
-                        const cartQtyNum = parseFloat(item.cartQty) || 0;
-                        const conversionQtyNum = parseFloat(item.conversionQty) || 1;
-                        const actualQty = (conversionQtyNum > 1) ? (cartQtyNum * conversionQtyNum) : cartQtyNum;
-                        
-                        batch.update(docRef, { [stockField]: window.increment(-actualQty), updatedAt: window.serverTimestamp() }); 
+                        batch.update(docRef, { [stockField]: window.increment(-item.cartQty), updatedAt: window.serverTimestamp() }); 
                     });
 
                     const transactionRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions');
@@ -1632,7 +1593,7 @@
                     </div>
                     <div className="w-full md:w-80 lg:w-96 flex flex-col bg-white rounded-3xl shadow-soft border border-slate-100 h-fit md:h-full max-h-[calc(100vh-100px)]">
                         <div className="p-4 border-b border-slate-100 bg-slate-50/50 rounded-t-3xl flex justify-between items-center"><h3 className="font-bold text-slate-800 flex items-center gap-2"><Icon name="cart-shopping" className="text-sky-600" /> Keranjang</h3><span className="text-xs font-bold bg-sky-100 text-sky-700 px-2 py-1 rounded-full">{cart.length} Item</span></div>
-                        <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar min-h-[200px]">{cart.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60"><Icon name="basket-shopping" className="text-4xl mb-2" /><p className="text-xs font-medium">Keranjang Kosong</p></div>) : (cart.map(item => (<div key={item.id + (item.selectedUnit || '') + (item.price || '')} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex gap-3 group relative"><div className="flex-1 min-w-0"><h4 className="text-xs font-bold text-slate-700 truncate">{item.name}</h4><p className="text-[10px] text-slate-500">{formatRupiah(item.originalPrice || item.price)} {item.selectedUnit ? `per ${item.selectedUnit}` : ''} x {item.cartQty}</p>{item.conversionQty && item.conversionQty > 1 && <p className="text-[9px] text-teal-600 font-bold">= {item.cartQty * item.conversionQty} {item.conversionUnit}</p>}{item.discount && <p className="text-[9px] text-red-500 font-bold">Diskon: {item.discount.type === '%' ? `${item.discount.value}%` : formatRupiah(item.discount.value)}</p>}</div><div className="flex flex-col items-end gap-1"><p className="text-xs font-bold text-slate-800">{formatRupiah(item.price * item.cartQty)}</p><div className="flex items-center gap-1 bg-white rounded-lg shadow-sm border border-slate-200 p-0.5"><button onClick={() => updateQty(item.id, -1, item.selectedUnit, item.price)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="minus" /></button><span className="text-xs font-bold w-4 text-center">{item.cartQty}</span><button onClick={() => updateQty(item.id, 1, item.selectedUnit, item.price)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="plus" /></button></div></div><button onClick={() => removeFromCart(item.id, item.selectedUnit, item.price)} className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-[8px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-md"><Icon name="xmark" /></button></div>)))}</div>
+                        <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar min-h-[200px]">{cart.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60"><Icon name="basket-shopping" className="text-4xl mb-2" /><p className="text-xs font-medium">Keranjang Kosong</p></div>) : (cart.map(item => (<div key={item.id + (item.selectedUnit || '') + (item.price || '')} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex gap-3 group relative"><div className="flex-1 min-w-0"><h4 className="text-xs font-bold text-slate-700 truncate">{item.name}</h4><p className="text-[10px] text-slate-500">{formatRupiah(item.originalPrice || item.price)} {item.selectedUnit ? `per ${item.selectedUnit}` : ''} x {item.cartQty}</p>{item.discount && <p className="text-[9px] text-red-500 font-bold">Diskon: {item.discount.type === '%' ? `${item.discount.value}%` : formatRupiah(item.discount.value)}</p>}</div><div className="flex flex-col items-end gap-1"><p className="text-xs font-bold text-slate-800">{formatRupiah(item.price * item.cartQty)}</p><div className="flex items-center gap-1 bg-white rounded-lg shadow-sm border border-slate-200 p-0.5"><button onClick={() => updateQty(item.id, -1, item.selectedUnit, item.price)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="minus" /></button><span className="text-xs font-bold w-4 text-center">{item.cartQty}</span><button onClick={() => updateQty(item.id, 1, item.selectedUnit, item.price)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="plus" /></button></div></div><button onClick={() => removeFromCart(item.id, item.selectedUnit, item.price)} className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full text-[8px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-md"><Icon name="xmark" /></button></div>)))}</div>
                         <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-3xl">
                             <div className="flex justify-between items-end mb-4"><span className="text-xs text-slate-500 font-medium">Total Tagihan</span><span className="text-xl font-black text-slate-800">{formatRupiah(grandTotal)}</span></div>
                             <button onClick={() => { setPaymentAmount(''); setCheckoutModal(true); }} disabled={cart.length === 0} className="w-full py-3.5 bg-gradient-to-r from-sky-600 to-sky-500 text-white rounded-xl font-bold shadow-lg shadow-sky-200 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-2"><Icon name="money-bill-wave" /> Bayar Sekarang</button>
@@ -1881,13 +1842,7 @@
                     const storeIdToReturn = tx.storeId || 'default';
                     const invRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id);
                     const stockField = `stocks.${storeIdToReturn}`;
-                    
-                    // Hitung qty sebenarnya berdasarkan konversi
-                    const qtyToReturNum = parseFloat(qtyToRetur) || 0;
-                    const conversionQtyNum = parseFloat(item.conversionQty) || 1;
-                    const actualQty = (conversionQtyNum > 1) ? (qtyToReturNum * conversionQtyNum) : qtyToReturNum;
-                    
-                    batch.update(invRef, { [stockField]: window.increment(actualQty) });
+                    batch.update(invRef, { [stockField]: window.increment(qtyToRetur) });
                     
                     const txRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions', tx.id);
                     const updatedItems = [...tx.items];
@@ -1898,7 +1853,7 @@
                     if (totalReturnedCount === totalItemsCount) newStatus = 'returned'; else if (totalReturnedCount > 0) newStatus = 'partial';
                     batch.update(txRef, { items: updatedItems, status: newStatus, returnedAt: window.serverTimestamp() });
                     await batch.commit();
-                    showToast(`Berhasil meretur ${qtyToRetur} ${item.selectedUnit || item.unit} ke Stok Toko`, "success");
+                    showToast(`Berhasil meretur ${qtyToRetur} ${item.unit} ke Stok Toko`, "success");
                     setReturModal({ show: false, tx: null, item: null, index: -1 }); setSelectedTx(null);
                 } catch (error) { console.error("Retur error", error); showToast("Gagal melakukan retur", "error"); } finally { setProcessingRetur(false); }
             };
@@ -2306,18 +2261,18 @@
                                 <p className="text-[9px] text-amber-600 mb-3">Contoh: Harga per Box, per Karton, per Lusin, dll. Kosongkan jika tidak perlu.</p>
                                 {(formData.multiPrices || []).map((mp, idx) => (
                                     <div key={idx} className="bg-white p-3 rounded-lg border border-amber-100 space-y-2">
-                                        <div className="grid grid-cols-12 gap-2 items-center">
-                                            <input type="text" placeholder="Satuan" value={mp.unit} onChange={e => { const updated = [...formData.multiPrices]; updated[idx].unit = e.target.value; setFormData({...formData, multiPrices: updated}); }} className="col-span-4 p-2 rounded-lg border border-slate-200 text-sm font-medium outline-none focus:border-amber-500" />
-                                            <input type="number" placeholder="Harga" value={mp.price} onChange={e => { const updated = [...formData.multiPrices]; updated[idx].price = e.target.value; setFormData({...formData, multiPrices: updated}); }} className="col-span-7 p-2 rounded-lg border border-slate-200 text-sm font-bold outline-none focus:border-amber-500" />
-                                            <button type="button" onClick={() => { const updated = formData.multiPrices.filter((_, i) => i !== idx); setFormData({...formData, multiPrices: updated}); }} className="col-span-1 w-8 h-8 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors flex items-center justify-center"><Icon name="trash-can" className="text-xs" /></button>
+                                        <div className="flex gap-2 items-center">
+                                            <input type="text" placeholder="Satuan (ex: Box)" value={mp.unit} onChange={e => { const updated = [...formData.multiPrices]; updated[idx].unit = e.target.value; setFormData({...formData, multiPrices: updated}); }} className="flex-1 p-2 rounded-lg border border-slate-200 text-sm font-medium outline-none focus:border-amber-500" />
+                                            <input type="number" placeholder="Harga" value={mp.price} onChange={e => { const updated = [...formData.multiPrices]; updated[idx].price = e.target.value; setFormData({...formData, multiPrices: updated}); }} className="w-28 p-2 rounded-lg border border-slate-200 text-sm font-bold outline-none focus:border-amber-500" />
+                                            <button type="button" onClick={() => { const updated = formData.multiPrices.filter((_, i) => i !== idx); setFormData({...formData, multiPrices: updated}); }} className="w-8 h-8 rounded-lg bg-red-100 text-red-600 hover:bg-red-200 transition-colors flex items-center justify-center"><Icon name="trash-can" className="text-xs" /></button>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            <label className="text-[9px] font-bold text-amber-600 uppercase whitespace-nowrap">Isi:</label>
-                                            <input type="number" placeholder="0" value={mp.quantity || ''} onChange={e => { const updated = [...formData.multiPrices]; updated[idx].quantity = e.target.value; setFormData({...formData, multiPrices: updated}); }} className="w-16 p-1.5 rounded-lg border border-slate-200 text-xs font-medium outline-none focus:border-amber-500" />
+                                            <label className="text-[9px] font-bold text-amber-600 uppercase min-w-fit">Isi/Konversi:</label>
+                                            <input type="number" placeholder="Jumlah" value={mp.quantity || ''} onChange={e => { const updated = [...formData.multiPrices]; updated[idx].quantity = e.target.value; setFormData({...formData, multiPrices: updated}); }} className="w-20 p-1.5 rounded-lg border border-slate-200 text-xs font-medium outline-none focus:border-amber-500" />
                                             <span className="text-xs text-slate-500">x</span>
-                                            <input type="text" placeholder="Satuan" value={mp.baseUnit || formData.unit || 'Pcs'} onChange={e => { const updated = [...formData.multiPrices]; updated[idx].baseUnit = e.target.value; setFormData({...formData, multiPrices: updated}); }} className="flex-1 p-1.5 rounded-lg border border-slate-200 text-xs font-medium outline-none focus:border-amber-500" />
+                                            <input type="text" placeholder="Satuan dasar" value={mp.baseUnit || formData.unit || 'Pcs'} onChange={e => { const updated = [...formData.multiPrices]; updated[idx].baseUnit = e.target.value; setFormData({...formData, multiPrices: updated}); }} className="flex-1 p-1.5 rounded-lg border border-slate-200 text-xs font-medium outline-none focus:border-amber-500" />
                                         </div>
-                                        {mp.quantity && <p className="text-[8px] text-slate-400 italic">→ 1 {mp.unit || 'Box'} = {mp.quantity} {mp.baseUnit || formData.unit || 'Pcs'}</p>}
+                                        <p className="text-[8px] text-slate-400 italic">Contoh: 1 {mp.unit || 'Box'} = {mp.quantity || '100'} {mp.baseUnit || formData.unit || 'Pcs'}</p>
                                     </div>
                                 ))}
                                 {(!formData.multiPrices || formData.multiPrices.length === 0) && <div className="text-center text-xs text-amber-500 italic py-2">Belum ada harga tambahan</div>}
