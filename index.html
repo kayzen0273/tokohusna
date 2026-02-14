@@ -1028,7 +1028,9 @@
             const addToCartWithPrice = () => {
                 const { item, selectedPrice, selectedUnit, qty, discountType, discountValue } = priceModal;
                 
-                if (!item || !selectedPrice || qty < 1) {
+                const finalQty = typeof qty === 'string' && qty === '' ? 1 : parseInt(qty) || 1;
+                
+                if (!item || !selectedPrice || finalQty < 1) {
                     showToast("Silakan lengkapi data!", "error");
                     return;
                 }
@@ -1046,13 +1048,13 @@
                 setCart(prev => {
                     const existing = prev.find(c => c.id === item.id && c.selectedUnit === selectedUnit && c.price === finalPrice);
                     if (existing) {
-                        if (existing.cartQty + qty > item.qty) { 
+                        if (existing.cartQty + finalQty > item.qty) { 
                             showToast("Stok tidak cukup!", "error"); 
                             return prev; 
                         }
-                        return prev.map(c => (c.id === item.id && c.selectedUnit === selectedUnit && c.price === finalPrice) ? { ...c, cartQty: c.cartQty + qty } : c);
+                        return prev.map(c => (c.id === item.id && c.selectedUnit === selectedUnit && c.price === finalPrice) ? { ...c, cartQty: c.cartQty + finalQty } : c);
                     }
-                    return [...prev, { ...item, cartQty: qty, price: finalPrice, selectedUnit: selectedUnit, originalPrice: selectedPrice, discount: discountValue > 0 ? { type: discountType, value: discountValue } : null }];
+                    return [...prev, { ...item, cartQty: finalQty, price: finalPrice, selectedUnit: selectedUnit, originalPrice: selectedPrice, discount: discountValue > 0 ? { type: discountType, value: discountValue } : null }];
                 });
                 
                 setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 });
@@ -1654,10 +1656,15 @@
                                                 onChange={e => {
                                                     const val = e.target.value.replace(/[^0-9]/g, '');
                                                     if (val === '') {
-                                                        setPriceModal({...priceModal, qty: 1});
+                                                        setPriceModal({...priceModal, qty: ''});
                                                     } else {
                                                         const num = parseInt(val, 10);
                                                         setPriceModal({...priceModal, qty: Math.max(1, Math.min(priceModal.item.qty, num))});
+                                                    }
+                                                }}
+                                                onBlur={e => {
+                                                    if (priceModal.qty === '' || priceModal.qty === 0) {
+                                                        setPriceModal({...priceModal, qty: 1});
                                                     }
                                                 }}
                                                 className="flex-1 p-3 rounded-xl border-2 border-slate-200 focus:border-teal-500 outline-none font-bold text-slate-800"
