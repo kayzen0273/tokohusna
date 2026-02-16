@@ -60,8 +60,8 @@
     <!-- Fuse.js -->
     <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
 
-    <!-- SheetJS for Excel Export -->
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <!-- ExcelJS for Excel Export with Full Styling Support -->
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
 
     <!-- Firebase SDK (Module) -->
     <script type="module">
@@ -2563,84 +2563,94 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text).then(() => onCopySuccess("Disalin! Tempel di WA.")).catch(() => fallbackCopy(text)); } else { fallbackCopy(text); }
             };
 
-            const handleExportExcel = () => {
+            const handleExportExcel = async () => {
                 if (filteredItems.length === 0) { alert("Tidak ada data untuk diexport!"); return; }
                 
-                // Prepare data for Excel - hanya kolom yang diminta
-                const excelData = filteredItems.map((item, index) => {
-                    const expDate = item.exp ? (typeof item.exp === 'string' ? item.exp : new Date(item.exp).toLocaleDateString('id-ID')) : '-';
+                try {
+                    // Create workbook and worksheet menggunakan ExcelJS
+                    const ExcelJS = window.ExcelJS;
+                    const workbook = new ExcelJS.Workbook();
+                    const worksheet = workbook.addWorksheet('Daftar Barang');
                     
-                    return {
-                        'No': index + 1,
-                        'Nama Barang': item.name || '-',
-                        'Stok': item.qty || 0,
-                        'Rak': item.rack || '-',
-                        'Harga': formatRupiah(item.price || 0),
-                        'Expired': expDate
+                    // Define columns dengan format yang diminta
+                    worksheet.columns = [
+                        { header: 'No', key: 'no', width: 8 },
+                        { header: 'Nama Barang', key: 'nama', width: 40 },
+                        { header: 'Stok', key: 'stok', width: 12 },
+                        { header: 'Rak', key: 'rak', width: 18 },
+                        { header: 'Harga', key: 'harga', width: 20 },
+                        { header: 'Expired', key: 'expired', width: 18 }
+                    ];
+                    
+                    // Style untuk header row
+                    worksheet.getRow(1).font = { bold: true, size: 11 };
+                    worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+                    worksheet.getRow(1).fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FFE5E7EB' }
                     };
-                });
-                
-                // Create workbook and worksheet
-                const wb = XLSX.utils.book_new();
-                const ws = XLSX.utils.json_to_sheet(excelData);
-                
-                // Set column widths
-                const colWidths = [
-                    { wch: 6 },  // No
-                    { wch: 35 }, // Nama Barang
-                    { wch: 10 }, // Stok
-                    { wch: 15 }, // Rak
-                    { wch: 18 }, // Harga
-                    { wch: 15 }  // Expired
-                ];
-                ws['!cols'] = colWidths;
-                
-                // Apply styling - Center alignment untuk semua cell kecuali Nama Barang
-                const range = XLSX.utils.decode_range(ws['!ref']);
-                
-                // Style untuk header (row 0) - bold dan center
-                for (let col = range.s.c; col <= range.e.c; col++) {
-                    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
-                    if (!ws[cellAddress]) continue;
-                    ws[cellAddress].s = {
-                        font: { bold: true },
-                        alignment: { horizontal: 'center', vertical: 'center' },
-                        fill: { fgColor: { rgb: "F3F4F6" } }
-                    };
-                }
-                
-                // Style untuk data rows
-                for (let row = range.s.r + 1; row <= range.e.r; row++) {
-                    for (let col = range.s.c; col <= range.e.c; col++) {
-                        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
-                        if (!ws[cellAddress]) continue;
+                    worksheet.getRow(1).height = 25;
+                    
+                    // Add data rows
+                    filteredItems.forEach((item, index) => {
+                        const expDate = item.exp ? (typeof item.exp === 'string' ? item.exp : new Date(item.exp).toLocaleDateString('id-ID')) : '-';
                         
-                        // Kolom 1 (index 1) adalah Nama Barang - left align
-                        // Kolom lainnya - center align
-                        if (col === 1) {
-                            ws[cellAddress].s = {
-                                alignment: { horizontal: 'left', vertical: 'center' }
+                        const row = worksheet.addRow({
+                            no: index + 1,
+                            nama: item.name || '-',
+                            stok: item.qty || 0,
+                            rak: item.rack || '-',
+                            harga: formatRupiah(item.price || 0),
+                            expired: expDate
+                        });
+                        
+                        // Apply center alignment untuk semua kolom kecuali Nama Barang
+                        row.eachCell((cell, colNumber) => {
+                            cell.alignment = { 
+                                vertical: 'middle', 
+                                horizontal: colNumber === 2 ? 'left' : 'center'  // Kolom 2 = Nama Barang (left), lainnya center
                             };
-                        } else {
-                            ws[cellAddress].s = {
-                                alignment: { horizontal: 'center', vertical: 'center' }
+                            cell.border = {
+                                top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+                                left: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+                                bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
+                                right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
                             };
-                        }
-                    }
+                        });
+                    });
+                    
+                    // Add border ke header juga
+                    worksheet.getRow(1).eachCell((cell) => {
+                        cell.border = {
+                            top: { style: 'thin', color: { argb: 'FF9CA3AF' } },
+                            left: { style: 'thin', color: { argb: 'FF9CA3AF' } },
+                            bottom: { style: 'thin', color: { argb: 'FF9CA3AF' } },
+                            right: { style: 'thin', color: { argb: 'FF9CA3AF' } }
+                        };
+                    });
+                    
+                    // Generate filename
+                    const now = new Date();
+                    const dateStr = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
+                    let filename = `Stok_${currentProfile.name}_${dateStr}.xlsx`;
+                    if (showOnlyLowStock) filename = `Stok_Menipis_${currentProfile.name}_${dateStr}.xlsx`;
+                    
+                    // Write to file
+                    const buffer = await workbook.xlsx.writeBuffer();
+                    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                    const url = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = filename;
+                    link.click();
+                    window.URL.revokeObjectURL(url);
+                    
+                    onCopySuccess("Excel berhasil diexport!");
+                } catch (error) {
+                    console.error('Error exporting Excel:', error);
+                    alert('Gagal export Excel. Silakan coba lagi.');
                 }
-                
-                // Add worksheet to workbook
-                XLSX.utils.book_append_sheet(wb, ws, "Daftar Barang");
-                
-                // Generate filename
-                const now = new Date();
-                const dateStr = `${String(now.getDate()).padStart(2, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}-${now.getFullYear()}`;
-                let filename = `Stok_${currentProfile.name}_${dateStr}.xlsx`;
-                if (showOnlyLowStock) filename = `Stok_Menipis_${currentProfile.name}_${dateStr}.xlsx`;
-                
-                // Download file
-                XLSX.writeFile(wb, filename);
-                onCopySuccess("Excel berhasil diexport!");
             };
 
             const fallbackCopy = (text) => { const textArea = document.createElement("textarea"); textArea.value = text; textArea.style.position = "fixed"; textArea.style.left = "-9999px"; document.body.appendChild(textArea); textArea.select(); try { const successful = document.execCommand('copy'); if(successful) onCopySuccess("Disalin! Tempel di WA."); } catch (err) {} document.body.removeChild(textArea); };
