@@ -627,7 +627,12 @@
             const [addSupplierMode, setAddSupplierMode] = useState(false);
             const [submitting, setSubmitting] = useState(false);
             const [supplierSearch, setSupplierSearch] = useState('');
-            const [invoiceData, setInvoiceData] = useState({ supplier: '', date: '', dueDate: '', total: '', ppn: '', paymentMethod: 'Tunai', isPaid: true, isConsignment: false, items: [] });
+            const [invoiceData, setInvoiceData] = useState({ supplier: '', invoiceNumber: '', date: '', receivedDate: new Date().toISOString().slice(0,10), receivedTime: new Date().toTimeString().slice(0,5), dueDate: '', total: '', ppn: '', paymentMethod: 'Kredit', isPaid: false, isConsignment: false, items: [] });
+            const [diskon, setDiskon] = useState('0');
+            const [diskonType, setDiskonType] = useState('percent');
+            const [materai, setMaterai] = useState('0');
+            const [pengiriman, setPengiriman] = useState('0');
+            const [pembulatan, setPembulatan] = useState('0');
             const [supplierData, setSupplierData] = useState({ name: '', address: '', phone: '' });
             const [editingSupplier, setEditingSupplier] = useState(null);
             
@@ -723,7 +728,11 @@
                 return { totalPurchase, dueSoon, overdue, unpaid, countTotal, countDue, countOverdue, countUnpaid, consignmentTotal, consignmentUnpaid };
             }, [purchases]);
 
-            const handleSelectSupplier = (supplier) => { setInvoiceData({ ...invoiceData, supplier: supplier.name }); setSupplierModalOpen(false); setInvoiceModalOpen(true); };
+            const handleSelectSupplier = (supplier) => { 
+                setInvoiceData({ supplier: supplier.name, invoiceNumber: '', date: '', receivedDate: new Date().toISOString().slice(0,10), receivedTime: new Date().toTimeString().slice(0,5), dueDate: '', total: '', ppn: '', paymentMethod: 'Kredit', isPaid: false, isConsignment: false, items: [] });
+                setDiskon('0'); setDiskonType('percent'); setMaterai('0'); setPengiriman('0'); setPembulatan('0');
+                setSupplierModalOpen(false); setInvoiceModalOpen(true); 
+            };
 
             const handleSubmitInvoice = async (e) => {
                 e.preventDefault(); 
@@ -745,18 +754,32 @@
                 setSubmitting(true);
                 const subtotal = safeNumber(invoiceData.total); 
                 const ppn = safeNumber(invoiceData.ppn); 
-                const grandTotal = subtotal + ppn;
+                const numDiskon = parseInt(diskon.replace(/\D/g,'')) || 0;
+                const diskonNominal = diskonType === 'percent' ? Math.floor(subtotal * numDiskon / 100) : numDiskon;
+                const dpp = subtotal - diskonNominal;
+                const numMaterai = parseInt(materai.replace(/\D/g,'')) || 0;
+                const numPengiriman = parseInt(pengiriman.replace(/\D/g,'')) || 0;
+                const numPembulatan = parseInt(pembulatan.replace(/\D/g,'')) || 0;
+                const grandTotal = dpp + ppn + numMaterai + numPengiriman + numPembulatan;
                 
                 try {
                     // 1. Simpan faktur dengan items
                     console.log('💾 Menyimpan faktur...');
                     await window.addDoc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'purchases'), { 
                         supplier: invoiceData.supplier, 
+                        invoiceNumber: invoiceData.invoiceNumber || '',
                         total: grandTotal, 
-                        subtotal: subtotal, 
+                        subtotal: subtotal,
+                        diskon: diskonNominal,
+                        diskonType: diskonType,
+                        materai: numMaterai,
+                        pengiriman: numPengiriman,
+                        pembulatan: numPembulatan,
                         ppn: ppn, 
                         paymentMethod: invoiceData.paymentMethod, 
-                        date: invoiceData.date ? new Date(invoiceData.date).toISOString() : new Date().toISOString(), 
+                        date: invoiceData.date ? new Date(invoiceData.date).toISOString() : new Date().toISOString(),
+                        receivedDate: invoiceData.receivedDate || new Date().toISOString().slice(0,10),
+                        receivedTime: invoiceData.receivedTime || '',
                         dueDate: invoiceData.dueDate ? new Date(invoiceData.dueDate).toISOString() : null, 
                         isPaid: invoiceData.isPaid, 
                         isConsignment: invoiceData.isConsignment || false,
@@ -849,7 +872,8 @@
                     }
                     
                     setInvoiceModalOpen(false); 
-                    setInvoiceData({ supplier: '', date: '', dueDate: '', total: '', ppn: '', paymentMethod: 'Tunai', isPaid: true, isConsignment: false, items: [] });
+                    setInvoiceData({ supplier: '', invoiceNumber: '', date: '', receivedDate: new Date().toISOString().slice(0,10), receivedTime: new Date().toTimeString().slice(0,5), dueDate: '', total: '', ppn: '', paymentMethod: 'Kredit', isPaid: false, isConsignment: false, items: [] });
+                    setDiskon('0'); setDiskonType('percent'); setMaterai('0'); setPengiriman('0'); setPembulatan('0');
                 } catch(err) { 
                     console.error(err); 
                     showToast("Gagal menyimpan faktur", "error"); 
@@ -909,231 +933,231 @@
                                 {!addSupplierMode ? (<><div className="p-4 bg-white border-b border-slate-100 flex gap-2"><div className="relative flex-1"><input autoFocus type="text" className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-200 text-sm font-bold outline-none focus:ring-2 focus:ring-teal-500" placeholder="Cari..." value={supplierSearch} onChange={e => setSupplierSearch(e.target.value)} /><Icon name="magnifying-glass" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" /></div><button onClick={() => setAddSupplierMode(true)} className="px-3 py-2 rounded-lg bg-teal-50 text-teal-700 border border-teal-200 font-bold text-xs flex items-center gap-1 whitespace-nowrap active:scale-95 transition-all"><Icon name="plus" /> Pengirim</button></div><div className="px-4 py-2 bg-slate-50 text-[10px] font-bold text-slate-500">{filteredSuppliers.length} ditemukan</div><div className="flex-1 overflow-y-auto custom-scrollbar">{filteredSuppliers.length === 0 ? (<div className="flex flex-col items-center justify-center py-10 opacity-60"><Icon name="box-open" className="text-3xl text-slate-300 mb-2" /><p className="text-xs text-slate-400">Belum ada supplier.</p><button onClick={() => setAddSupplierMode(true)} className="mt-2 text-teal-600 text-xs font-bold hover:underline">Tambah Baru</button></div>) : (<div className="divide-y divide-slate-100">{filteredSuppliers.map(s => (<div key={s.id} className="p-4 bg-white hover:bg-slate-50 transition-colors flex items-center justify-between"><div className="flex-1 min-w-0 pr-3"><h4 className="font-bold text-slate-800 text-sm truncate">{s.name}</h4><p className="text-[10px] text-slate-500 truncate">{s.address || 'Tidak ada alamat'}</p></div><div className="flex gap-2"><button onClick={() => handleEditSupplier(s)} className="text-teal-600 text-xs font-bold px-2 py-1 hover:bg-teal-50 rounded">Edit</button><button onClick={() => handleSelectSupplier(s)} className="bg-white border border-teal-600 text-teal-700 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-teal-50 shadow-sm">Pilih</button></div></div>))}</div>)}</div></>) : (<div className="p-6 flex-1 overflow-y-auto"><form onSubmit={handleSaveSupplier} className="space-y-4"><div><label className="text-[10px] font-bold text-slate-500 uppercase">Nama Supplier / Pengirim</label><input autoFocus type="text" className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm font-bold outline-none focus:border-teal-500" placeholder="Contoh: PT. Maju Jaya" value={supplierData.name} onChange={e => setSupplierData({...supplierData, name: e.target.value})} required /></div><div><label className="text-[10px] font-bold text-slate-500 uppercase">Alamat (Kota/Kab)</label><input type="text" className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm font-medium outline-none focus:border-teal-500" placeholder="Contoh: Kota Cirebon, Jawa Barat" value={supplierData.address} onChange={e => setSupplierData({...supplierData, address: e.target.value})} /></div><div><label className="text-[10px] font-bold text-slate-500 uppercase">No. Telepon (Opsional)</label><input type="tel" className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm font-medium outline-none focus:border-teal-500" placeholder="08..." value={supplierData.phone} onChange={e => setSupplierData({...supplierData, phone: e.target.value})} /></div><button type="submit" disabled={submitting} className="w-full py-3.5 bg-teal-600 text-white rounded-xl font-bold shadow-lg shadow-teal-100 flex items-center justify-center gap-2 mt-4 active:scale-95 transition-all">{submitting ? <div className="typing-dot bg-white"></div> : <><Icon name="save" /> {editingSupplier ? 'UPDATE DATA' : 'SIMPAN SUPPLIER'}</>}</button></form></div>)}</div></div>)}
 
                     {invoiceModalOpen && (
-                        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
-                             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto relative">
-                                <div className="sticky top-0 bg-white z-10 p-6 pb-3 border-b border-slate-100">
-                                    <button onClick={() => setInvoiceModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><Icon name="xmark" /></button>
-                                    <h3 className="text-lg font-bold text-slate-800">Detail Faktur Pembelian</h3>
-                                    <div className="bg-teal-50 p-3 rounded-xl border border-teal-100 mt-3 flex items-center gap-2">
-                                        <div className="w-8 h-8 bg-teal-100 text-teal-600 rounded-lg flex items-center justify-center"><Icon name="truck-fast" /></div>
-                                        <div><p className="text-[10px] text-teal-600 font-bold uppercase">Supplier</p><p className="text-sm font-bold text-teal-800">{invoiceData.supplier}</p></div>
+                        <div className="fixed inset-0 z-[110] bg-white flex flex-col fade-in" style={{fontFamily:'system-ui,-apple-system,Segoe UI,Roboto,sans-serif',fontSize:'12.5px',color:'#111827'}}>
+                            {/* HEADER - fixed top */}
+                            <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white">
+                                <div className="flex items-center gap-2">
+                                    <button type="button" onClick={() => setInvoiceModalOpen(false)} className="text-slate-400 hover:text-slate-700 mr-1"><Icon name="chevron-left" /></button>
+                                    <span className="font-medium text-sm">Catat faktur dari {invoiceData.supplier}</span>
+                                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">Draf</span>
+                                </div>
+                                <button type="button" onClick={handleSubmitInvoice} disabled={submitting} className="bg-teal-700 text-white border-none px-3 py-1.5 rounded-md text-xs font-medium disabled:opacity-50">
+                                    {submitting ? '...' : 'Simpan faktur'}
+                                </button>
+                            </div>
+
+                            {/* CONTENT - scrollable */}
+                            <div className="flex-1 overflow-y-auto px-4 py-3 pb-24 space-y-5">
+                                <p className="text-xs text-green-600">✓ Draf tersimpan otomatis</p>
+
+                                {/* SECTION: Detail Faktur */}
+                                <div>
+                                    <div className="flex items-center gap-2 text-sm font-medium mb-3">📄 Detail faktur</div>
+                                    <div className="space-y-2">
+                                        <div>
+                                            <label className="block text-[11.5px] text-gray-500 mb-1">Nomor faktur</label>
+                                            <input type="text" className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs bg-white outline-none focus:border-teal-500" placeholder="Contoh: INV-001" value={invoiceData.invoiceNumber} onChange={e => setInvoiceData({...invoiceData, invoiceNumber: e.target.value})} />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[11.5px] text-gray-500 mb-1">Tanggal faktur</label>
+                                            <input type="date" className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs bg-white outline-none focus:border-teal-500" value={invoiceData.date} onChange={e => setInvoiceData({...invoiceData, date: e.target.value})} />
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <div className="flex-1">
+                                                <label className="block text-[11.5px] text-gray-500 mb-1">Tanggal diterima</label>
+                                                <input type="date" className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs bg-white outline-none focus:border-teal-500" value={invoiceData.receivedDate} onChange={e => setInvoiceData({...invoiceData, receivedDate: e.target.value})} />
+                                            </div>
+                                            <div style={{width:'90px'}}>
+                                                <label className="block text-[11.5px] text-gray-500 mb-1">Jam</label>
+                                                <input type="time" className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs bg-white outline-none focus:border-teal-500" value={invoiceData.receivedTime} onChange={e => setInvoiceData({...invoiceData, receivedTime: e.target.value})} />
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <div className="flex-1">
+                                                <label className="block text-[11.5px] text-gray-500 mb-1">Pembayaran</label>
+                                                <select className="w-full h-8 px-2 border border-gray-300 rounded-md text-xs bg-white outline-none focus:border-teal-500" value={invoiceData.paymentMethod} onChange={e => setInvoiceData({...invoiceData, paymentMethod: e.target.value})}>
+                                                    <option value="Kredit">Kredit</option>
+                                                    <option value="Tunai">Tunai</option>
+                                                    <option value="Transfer">Transfer</option>
+                                                </select>
+                                            </div>
+                                            <div className="flex-1">
+                                                <label className="block text-[11.5px] text-gray-500 mb-1">Jatuh tempo</label>
+                                                <input type="date" className="w-full h-8 px-2 py-1 border border-gray-300 rounded-md text-xs bg-white outline-none focus:border-teal-500" value={invoiceData.dueDate} onChange={e => setInvoiceData({...invoiceData, dueDate: e.target.value})} />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-[11.5px] text-gray-500 mb-1">PPN</label>
+                                            <select className="w-full h-8 px-2 border border-gray-300 rounded-md text-xs bg-white outline-none focus:border-teal-500" value={invoiceData.ppn} onChange={e => setInvoiceData({...invoiceData, ppn: e.target.value})}>
+                                                <option value="">Tidak ada PPN</option>
+                                                <option value="11">PPN 11%</option>
+                                                <option value="12">PPN 12%</option>
+                                            </select>
+                                        </div>
+                                        <div className="flex items-center gap-2 pt-1">
+                                            <input type="checkbox" id="consCheck" checked={invoiceData.isConsignment} onChange={e => setInvoiceData({...invoiceData, isConsignment: e.target.checked})} className="w-4 h-4 rounded text-indigo-600" />
+                                            <label htmlFor="consCheck" className="text-xs text-slate-600 font-medium">Barang Konsinyasi?</label>
+                                            <input type="checkbox" id="paidCheck" checked={invoiceData.isPaid} onChange={e => setInvoiceData({...invoiceData, isPaid: e.target.checked})} className="w-4 h-4 rounded text-teal-600 ml-3" />
+                                            <label htmlFor="paidCheck" className="text-xs text-slate-600 font-medium">Sudah Lunas?</label>
+                                        </div>
                                     </div>
                                 </div>
-                                
-                                <form onSubmit={handleSubmitInvoice} className="p-6 space-y-4">
-                                    {/* SECTION: Tambah Barang */}
-                                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                                        <h4 className="text-xs font-bold text-slate-700 mb-3 flex items-center gap-2">
-                                            <Icon name="box" /> Tambah Barang
-                                        </h4>
-                                        
-                                        {/* Search Barang */}
-                                        <div className="mb-3">
-                                            <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Cari Barang</label>
-                                            <div className="relative">
-                                                <input
-                                                    type="text"
-                                                    className="w-full p-3 pr-10 rounded-xl bg-white border border-slate-200 text-sm font-medium outline-none focus:border-teal-500"
-                                                    placeholder="Ketik nama barang..."
-                                                    value={itemSearch}
-                                                    onChange={e => setItemSearch(e.target.value)}
-                                                />
-                                                <Icon name="magnifying-glass" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                            </div>
-                                            
-                                            {/* Dropdown hasil search */}
-                                            {itemSearch && filteredItems.length > 0 && (
-                                                <div className="mt-2 bg-white border border-slate-200 rounded-xl max-h-40 overflow-y-auto shadow-lg">
-                                                    {filteredItems.map(item => (
-                                                        <button
-                                                            key={item.id}
-                                                            type="button"
-                                                            onClick={() => {
-                                                                setSelectedItem(item);
-                                                                setItemSearch(item.name);
-                                                            }}
-                                                            className="w-full text-left px-4 py-2 hover:bg-teal-50 flex justify-between items-center border-b border-slate-100 last:border-0"
-                                                        >
-                                                            <span className="text-sm font-medium text-slate-800">{item.name}</span>
-                                                            <span className="text-xs text-slate-500">Stok: {item.qty || 0}</span>
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                        
-                                        {/* Selected Item Info */}
-                                        {selectedItem && (
-                                            <div className="mb-3 p-3 bg-white rounded-xl border border-teal-200">
-                                                <div className="flex justify-between items-center mb-2">
-                                                    <span className="text-sm font-bold text-slate-800">{selectedItem.name}</span>
-                                                    <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded font-bold">
-                                                        Stok Saat Ini: {selectedItem.qty || 0}
-                                                    </span>
-                                                </div>
-                                                
-                                                <div className="grid grid-cols-2 gap-3">
-                                                    <div>
-                                                        <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Jumlah Beli</label>
-                                                        <input
-                                                            type="number"
-                                                            className="w-full p-2 rounded-lg bg-slate-50 border border-slate-200 text-sm font-bold outline-none focus:border-teal-500"
-                                                            placeholder="0"
-                                                            value={itemQty}
-                                                            onChange={e => setItemQty(e.target.value)}
-                                                            step="0.01"
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Harga Satuan</label>
-                                                        <input
-                                                            type="number"
-                                                            className="w-full p-2 rounded-lg bg-slate-50 border border-slate-200 text-sm font-bold outline-none focus:border-teal-500"
-                                                            placeholder="0"
-                                                            value={itemPrice}
-                                                            onChange={e => setItemPrice(e.target.value)}
-                                                        />
-                                                    </div>
-                                                </div>
-                                                
-                                                <button
-                                                    type="button"
-                                                    onClick={addItemToInvoice}
-                                                    className="w-full mt-3 py-2 bg-teal-600 text-white rounded-lg font-bold text-sm hover:bg-teal-700 active:scale-95 transition-all flex items-center justify-center gap-2"
-                                                >
-                                                    <Icon name="plus" /> Tambahkan ke Faktur
-                                                </button>
-                                            </div>
-                                        )}
+
+                                {/* SECTION: Lampiran */}
+                                <div>
+                                    <div className="flex items-center gap-2 text-sm font-medium mb-3">🔎 Lampiran</div>
+                                    <div className="border border-dashed border-gray-300 rounded-md p-4 text-center text-gray-500 text-xs">
+                                        Faktur asli (Opsional)<br/>
+                                        <button type="button" className="mt-2 bg-white border border-teal-700 text-teal-700 text-xs px-3 py-1 rounded-md">Unggah bukti faktur</button><br/>
+                                        <span className="text-[10px] mt-1 block">Maksimal 4MB. JPG, JPEG, PNG, PDF</span>
                                     </div>
+                                </div>
+
+                                {/* SECTION: Daftar Barang */}
+                                <div>
+                                    <div className="flex items-center gap-2 text-sm font-medium mb-3">📦 Daftar barang</div>
                                     
-                                    {/* SECTION: Daftar Barang di Faktur */}
-                                    {invoiceData.items.length > 0 && (
-                                        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                                            <div className="bg-slate-100 px-4 py-2 border-b border-slate-200">
-                                                <h4 className="text-xs font-bold text-slate-700">Daftar Barang ({invoiceData.items.length})</h4>
+                                    {/* Search Barang */}
+                                    <div className="relative mb-2">
+                                        <input type="text" className="w-full h-8 pl-3 pr-8 border border-gray-300 rounded-md text-xs bg-white outline-none focus:border-teal-500" placeholder="Cari barang..." value={itemSearch} onChange={e => setItemSearch(e.target.value)} />
+                                        <Icon name="magnifying-glass" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs" />
+                                    </div>
+                                    {itemSearch && filteredItems.length > 0 && (
+                                        <div className="mb-2 bg-white border border-slate-200 rounded-xl max-h-40 overflow-y-auto shadow-lg">
+                                            {filteredItems.map(item => (
+                                                <button key={item.id} type="button" onClick={() => { setSelectedItem(item); setItemSearch(item.name); }} className="w-full text-left px-3 py-2 hover:bg-teal-50 flex justify-between items-center border-b border-slate-100 last:border-0">
+                                                    <span className="text-xs font-medium text-slate-800">{item.name}</span>
+                                                    <span className="text-[10px] text-slate-500">Stok: {item.qty || 0}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Selected Item Info */}
+                                    {selectedItem && (
+                                        <div className="mb-3 p-3 bg-white rounded-md border border-teal-200">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className="text-xs font-bold text-slate-800">{selectedItem.name}</span>
+                                                <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-1 rounded font-bold">Stok: {selectedItem.qty || 0}</span>
                                             </div>
-                                            <div className="divide-y divide-slate-100">
+                                            <div className="flex gap-2 mb-2">
+                                                <div className="flex-1">
+                                                    <label className="block text-[10px] text-gray-500 mb-1">Jumlah Beli</label>
+                                                    <input type="number" className="w-full h-8 px-2 border border-gray-300 rounded text-xs bg-white outline-none focus:border-teal-500" placeholder="0" value={itemQty} onChange={e => setItemQty(e.target.value)} step="0.01" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <label className="block text-[10px] text-gray-500 mb-1">Harga Satuan</label>
+                                                    <input type="number" className="w-full h-8 px-2 border border-gray-300 rounded text-xs bg-white outline-none focus:border-teal-500" placeholder="0" value={itemPrice} onChange={e => setItemPrice(e.target.value)} />
+                                                </div>
+                                            </div>
+                                            <button type="button" onClick={addItemToInvoice} className="w-full py-1.5 bg-teal-600 text-white rounded text-xs font-bold hover:bg-teal-700 active:scale-95 transition-all flex items-center justify-center gap-1">
+                                                <Icon name="plus" /> + Barang
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {/* Daftar Barang di Faktur */}
+                                    {invoiceData.items.length > 0 && (
+                                        <div className="border border-gray-200 rounded-md overflow-hidden">
+                                            <div className="bg-gray-50 px-3 py-2 border-b border-gray-200">
+                                                <h4 className="text-xs font-bold text-gray-700">Daftar Barang ({invoiceData.items.length})</h4>
+                                            </div>
+                                            <div className="divide-y divide-gray-100">
                                                 {invoiceData.items.map((item, index) => (
-                                                    <div key={index} className="p-3 flex items-center justify-between hover:bg-slate-50">
+                                                    <div key={index} className="p-3 flex items-center justify-between">
                                                         <div className="flex-1">
-                                                            <h5 className="text-sm font-bold text-slate-800">{item.name}</h5>
-                                                            <div className="flex items-center gap-3 mt-1">
-                                                                <span className="text-xs text-slate-500">Qty: <b>{item.qty}</b></span>
-                                                                <span className="text-xs text-slate-500">@ {formatRupiah(item.price)}</span>
-                                                                <span className="text-xs text-teal-600 font-bold">= {formatRupiah(item.qty * item.price)}</span>
+                                                            <h5 className="text-xs font-bold text-slate-800">{item.name}</h5>
+                                                            <div className="flex items-center gap-2 mt-0.5">
+                                                                <span className="text-[11px] text-slate-500">Qty: <b>{item.qty}</b></span>
+                                                                <span className="text-[11px] text-slate-500">@ {formatRupiah(item.price)}</span>
+                                                                <span className="text-[11px] text-teal-600 font-bold">= {formatRupiah(item.qty * item.price)}</span>
                                                             </div>
                                                         </div>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => removeItemFromInvoice(index)}
-                                                            className="ml-3 text-red-500 hover:text-red-700 p-2"
-                                                        >
-                                                            <Icon name="trash" />
-                                                        </button>
+                                                        <button type="button" onClick={() => removeItemFromInvoice(index)} className="ml-3 text-red-400 hover:text-red-600 p-1"><Icon name="trash" /></button>
                                                     </div>
                                                 ))}
                                             </div>
                                         </div>
                                     )}
-                                    
-                                    {/* SECTION: Subtotal & PPN */}
-                                    <div className="space-y-3">
-                                        <div className="p-3 bg-slate-100 rounded-xl border border-slate-200">
-                                            <div className="flex justify-between items-center mb-2">
-                                                <span className="text-xs font-bold text-slate-600">Subtotal ({invoiceData.items.length} barang)</span>
-                                                <span className="text-base font-black text-slate-800">{formatRupiah(safeNumber(invoiceData.total))}</span>
-                                            </div>
-                                            
-                                            <div className="pt-2 border-t border-dashed border-slate-300">
-                                                <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">PPN (Rp)</label>
-                                                <input 
-                                                    type="number" 
-                                                    className="w-full p-2 rounded-lg bg-white border border-slate-200 text-sm font-bold outline-none focus:border-teal-500" 
-                                                    placeholder="0" 
-                                                    value={invoiceData.ppn} 
-                                                    onChange={e => setInvoiceData({...invoiceData, ppn: e.target.value})} 
-                                                />
-                                            </div>
+
+                                    {invoiceData.items.length === 0 && (
+                                        <div className="border border-dashed border-gray-300 rounded-md p-5 text-center text-gray-500 text-xs">
+                                            Belum ada barang pada faktur ini
                                         </div>
-                                        
-                                        <div className="p-4 bg-teal-50 rounded-xl border-2 border-teal-200">
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-sm font-bold text-teal-700">TOTAL AKHIR</span>
-                                                <span className="text-2xl font-black text-teal-800">{formatRupiah(safeNumber(invoiceData.total) + safeNumber(invoiceData.ppn))}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    
-                                    {/* SECTION: Payment & Dates */}
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Metode Pembayaran</label>
-                                            <select 
-                                                className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-sm font-bold outline-none focus:border-teal-500" 
-                                                value={invoiceData.paymentMethod} 
-                                                onChange={e => setInvoiceData({...invoiceData, paymentMethod: e.target.value})}
-                                            >
-                                                <option value="Tunai">Tunai</option>
-                                                <option value="Kredit">Kredit (Tempo)</option>
-                                                <option value="Transfer">Transfer</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Tanggal Faktur</label>
-                                            <input 
-                                                type="date" 
-                                                className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold outline-none focus:border-teal-500" 
-                                                value={invoiceData.date} 
-                                                onChange={e => setInvoiceData({...invoiceData, date: e.target.value})} 
-                                                required 
-                                            />
-                                        </div>
-                                    </div>
-                                    
-                                    <div>
-                                        <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Jatuh Tempo (Opsional)</label>
-                                        <input 
-                                            type="date" 
-                                            className="w-full p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold outline-none focus:border-teal-500" 
-                                            value={invoiceData.dueDate} 
-                                            onChange={e => setInvoiceData({...invoiceData, dueDate: e.target.value})} 
-                                        />
-                                    </div>
-                                    
-                                    {/* SECTION: Checkboxes */}
-                                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 space-y-2">
-                                        <div className="flex items-center gap-2">
-                                            <input 
-                                                type="checkbox" 
-                                                id="consignmentCheckInv" 
-                                                checked={invoiceData.isConsignment} 
-                                                onChange={e => setInvoiceData({...invoiceData, isConsignment: e.target.checked})} 
-                                                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500" 
-                                            />
-                                            <label htmlFor="consignmentCheckInv" className="text-sm font-bold text-slate-700">Barang Konsinyasi (Titipan)?</label>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <input 
-                                                type="checkbox" 
-                                                id="paidCheckInv" 
-                                                checked={invoiceData.isPaid} 
-                                                onChange={e => setInvoiceData({...invoiceData, isPaid: e.target.checked})} 
-                                                className="w-4 h-4 rounded text-teal-600 focus:ring-teal-500" 
-                                            />
-                                            <label htmlFor="paidCheckInv" className="text-sm font-bold text-slate-700">Sudah Lunas?</label>
-                                        </div>
-                                    </div>
-                                    
-                                    {/* SECTION: Submit Button */}
-                                    <button 
-                                        type="submit" 
-                                        disabled={submitting || invoiceData.items.length === 0} 
-                                        className="w-full py-4 bg-teal-600 text-white rounded-xl font-bold shadow-lg shadow-teal-100 flex items-center justify-center gap-2 mt-4 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        {submitting ? <div className="typing-dot bg-white"></div> : <><Icon name="save" /> SIMPAN FAKTUR & UPDATE STOK</>}
-                                    </button>
-                                </form>
+                                    )}
+                                </div>
+
+                                {/* SECTION: Summary */}
+                                <div className="space-y-2">
+                                    {(() => {
+                                        const subtotal = invoiceData.items.reduce((s, it) => s + it.qty * it.price, 0);
+                                        const numDiskon = parseInt((diskon || '0').replace(/\D/g,'')) || 0;
+                                        const diskonNom = diskonType === 'percent' ? Math.floor(subtotal * numDiskon / 100) : numDiskon;
+                                        const dpp = subtotal - diskonNom;
+                                        const ppnPersen = parseInt(invoiceData.ppn) || 0;
+                                        const ppnNom = Math.floor(dpp * ppnPersen / 100);
+                                        const numMat = parseInt((materai || '0').replace(/\D/g,'')) || 0;
+                                        const numPeng = parseInt((pengiriman || '0').replace(/\D/g,'')) || 0;
+                                        const numPemb = parseInt((pembulatan || '0').replace(/\D/g,'')) || 0;
+                                        const total = dpp + ppnNom + numMat + numPeng + numPemb;
+                                        const fmt = n => n.toLocaleString('id-ID');
+                                        return (
+                                            <>
+                                                <div className="flex justify-between items-center text-xs py-1">
+                                                    <span className="text-gray-600">Subtotal</span>
+                                                    <span className="font-medium">{fmt(subtotal)}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center text-xs py-1">
+                                                    <span className="text-gray-600">Diskon</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <select value={diskonType} onChange={e => setDiskonType(e.target.value)} className="h-7 px-1 border border-gray-300 rounded text-xs bg-white outline-none" style={{width:'48px'}}>
+                                                            <option value="percent">%</option>
+                                                            <option value="rupiah">Rp</option>
+                                                        </select>
+                                                        <input value={diskon} onChange={e => { const raw = parseInt(e.target.value.replace(/\D/g,'')) || 0; setDiskon(raw.toLocaleString('id-ID')); }} onFocus={e => { if(e.target.value === '0') e.target.value = ''; }} onBlur={e => { if(!e.target.value.trim()) setDiskon('0'); }} inputMode="numeric" className="text-right border border-gray-300 rounded text-xs px-2 bg-white outline-none focus:border-teal-500" style={{width:'70px',height:'28px'}} />
+                                                    </div>
+                                                </div>
+                                                <div className="flex justify-between items-center text-xs py-1">
+                                                    <span className="text-gray-600">DPP</span>
+                                                    <span className="font-medium">{fmt(dpp)}</span>
+                                                </div>
+                                                {ppnPersen > 0 && (
+                                                    <div className="flex justify-between items-center text-xs py-1">
+                                                        <span className="text-gray-600">PPN {ppnPersen}%</span>
+                                                        <span className="font-medium">{fmt(ppnNom)}</span>
+                                                    </div>
+                                                )}
+                                                <div className="flex justify-between items-center text-xs py-1">
+                                                    <span className="text-gray-600">Biaya meterai</span>
+                                                    <input value={materai} onChange={e => { const raw = parseInt(e.target.value.replace(/\D/g,'')) || 0; setMaterai(raw.toLocaleString('id-ID')); }} onFocus={e => { if(e.target.value === '0') e.target.value = ''; }} onBlur={e => { if(!e.target.value.trim()) setMaterai('0'); }} inputMode="numeric" className="text-right border border-gray-300 rounded text-xs px-2 bg-white outline-none focus:border-teal-500" style={{width:'90px',height:'28px'}} />
+                                                </div>
+                                                <div className="flex justify-between items-center text-xs py-1">
+                                                    <span className="text-gray-600">Biaya pengiriman</span>
+                                                    <input value={pengiriman} onChange={e => { const raw = parseInt(e.target.value.replace(/\D/g,'')) || 0; setPengiriman(raw.toLocaleString('id-ID')); }} onFocus={e => { if(e.target.value === '0') e.target.value = ''; }} onBlur={e => { if(!e.target.value.trim()) setPengiriman('0'); }} inputMode="numeric" className="text-right border border-gray-300 rounded text-xs px-2 bg-white outline-none focus:border-teal-500" style={{width:'90px',height:'28px'}} />
+                                                </div>
+                                                <div className="flex justify-between items-center text-xs py-1">
+                                                    <span className="text-gray-600">Pembulatan</span>
+                                                    <input value={pembulatan} onChange={e => { const raw = parseInt(e.target.value.replace(/\D/g,'')) || 0; setPembulatan(raw.toLocaleString('id-ID')); }} onFocus={e => { if(e.target.value === '0') e.target.value = ''; }} onBlur={e => { if(!e.target.value.trim()) setPembulatan('0'); }} inputMode="numeric" className="text-right border border-gray-300 rounded text-xs px-2 bg-white outline-none focus:border-teal-500" style={{width:'90px',height:'28px'}} />
+                                                </div>
+                                                <div className="border-t border-gray-200 my-2"></div>
+                                                <div className="flex justify-between items-center py-1">
+                                                    <span className="text-sm font-semibold text-gray-800">Total</span>
+                                                    <span className="text-sm font-bold text-teal-700">{fmt(total)}</span>
+                                                </div>
+                                            </>
+                                        );
+                                    })()}
+                                </div>
+                            </div>
+
+                            {/* FOOTER - fixed bottom */}
+                            <div className="flex-shrink-0 flex justify-between items-center px-4 py-3 border-t border-gray-200 bg-white">
+                                <button type="button" onClick={() => setInvoiceModalOpen(false)} className="bg-white border border-red-400 text-red-500 px-3 py-1.5 rounded-md text-xs font-medium">
+                                    Hapus draf
+                                </button>
+                                <button type="button" onClick={handleSubmitInvoice} disabled={submitting || invoiceData.items.length === 0} className="bg-teal-700 text-white px-4 py-1.5 rounded-md text-xs font-medium disabled:opacity-50">
+                                    {submitting ? 'Menyimpan...' : 'Simpan faktur'}
+                                </button>
                             </div>
                         </div>
                     )}
@@ -3534,8 +3558,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         </div>
                     </aside>
                     <main className="flex-1 md:ml-0 p-4 md:p-8 max-w-7xl mx-auto w-full mb-0 relative z-20">
-                        <div className="md:hidden fixed top-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-b border-slate-200 px-4 py-4 flex items-center justify-between gap-4 z-40 shadow-sm"><div className="flex items-center gap-2"><div className={`w-9 h-9 rounded-lg flex items-center justify-center text-white ${activeStoreId === 'all_stores' ? 'bg-indigo-600' : 'bg-sky-600'} shadow-md`}><Icon name="shop" /></div><h1 className="font-bold text-slate-800 text-lg">{currentProfile.name}</h1></div><button onClick={() => setIsSidebarOpen(true)} className="bg-white/90 backdrop-blur-md px-4 py-2.5 rounded-xl text-slate-700 font-bold text-sm shadow-sm border border-slate-200 active:scale-95 transition-all flex items-center gap-2"><Icon name="bars" className="text-sky-600" /> Menu</button></div>
-                        <div className="md:hidden h-[72px]"></div>
+                        <div className="md:hidden mb-6 flex items-center justify-between gap-4 relative z-30"><div className="flex items-center gap-2"><div className={`w-9 h-9 rounded-lg flex items-center justify-center text-white ${activeStoreId === 'all_stores' ? 'bg-indigo-600' : 'bg-sky-600'} shadow-md`}><Icon name="shop" /></div><h1 className="font-bold text-slate-800 text-lg">{currentProfile.name}</h1></div><button onClick={() => setIsSidebarOpen(true)} className="bg-white/90 backdrop-blur-md px-4 py-2.5 rounded-xl text-slate-700 font-bold text-sm shadow-sm border border-slate-200 active:scale-95 transition-all flex items-center gap-2"><Icon name="bars" className="text-sky-600" /> Menu</button></div>
                         {activeTab === 'home' && (<DashboardView items={inventoryData} settings={settingsData} onShowLowStock={() => { setActiveTab('list'); setShowOnlyLowStock(true); }} />)}
                         {activeTab === 'cashier' && (<CashierView items={inventoryData} user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} />)}
                         {activeTab === 'history' && (<HistoryView user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} />)}
