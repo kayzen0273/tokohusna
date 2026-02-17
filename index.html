@@ -932,6 +932,7 @@
             }
 
             return (
+                <>
                 <div className="fade-in pb-20 md:pb-0 h-full flex flex-col relative z-10">
                      <header className="mb-6 flex items-center justify-between"><div><h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Faktur Pembelian</h2><p className="text-slate-500 text-xs mt-1">Kelola tagihan supplier</p></div><div className="flex gap-2"><button className="hidden md:flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-xs hover:bg-slate-50 transition-all shadow-sm"><Icon name="download" /> Unduh Laporan</button><button onClick={() => setSupplierModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-xl font-bold text-xs hover:bg-teal-700 transition-all shadow-lg shadow-teal-200 active:scale-95"><Icon name="plus" /> Catat Faktur</button></div></header>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
@@ -945,8 +946,9 @@
                         <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-xl border border-indigo-100 shadow-sm flex items-center justify-between"><div><div className="flex items-center gap-2 mb-1"><Icon name="file-invoice-dollar" className="text-purple-500" /><h4 className="font-bold text-purple-800 text-xs">Konsinyasi Belum Bayar</h4></div><div className="text-lg font-black text-purple-900">{formatRupiah(stats.consignmentUnpaid)}</div></div></div>
                     </div>
                     <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1">{loading ? <div className="text-center py-10"><div className="typing-dot bg-teal-600"></div></div> : purchases.length === 0 ? <div className="text-center py-12 text-slate-400 text-xs">Belum ada faktur pembelian.</div> : purchases.map(p => { const dueDate = p.dueDate ? new Date(p.dueDate) : null; const isOverdue = !p.isPaid && dueDate && dueDate < new Date(); return (<div key={p.id} className={`p-4 rounded-xl border transition-all hover:shadow-md bg-white ${isOverdue ? 'border-l-4 border-l-red-500 border-y-slate-100 border-r-slate-100' : 'border-slate-100'}`}><div className="flex justify-between items-start mb-2"><div><div className="flex items-center gap-2"><h4 className="font-bold text-slate-800 text-sm">{p.supplier}</h4>{p.isConsignment && <span className="bg-indigo-100 text-indigo-600 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">Konsinyasi</span>}</div><div className="flex items-center gap-2 mt-1"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${p.paymentMethod === 'Kredit' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>{p.paymentMethod || 'Tunai'}</span>{p.ppn > 0 && <span className="text-[9px] text-slate-400">+ PPN {formatRupiah(p.ppn)}</span>}</div><p className="text-[10px] text-slate-500 mt-1">{new Date(p.date).toLocaleDateString('id-ID', {day: 'numeric', month: 'short', year: 'numeric'})}{p.dueDate && ` • Tempo: ${new Date(p.dueDate).toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})}`}</p></div><div className="text-right"><div className="font-black text-slate-800">{formatRupiah(p.total)}</div><button onClick={() => togglePaid(p)} className={`mt-1 px-2 py-0.5 rounded text-[10px] font-bold border ${p.isPaid ? 'bg-green-50 text-green-600 border-green-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>{p.isPaid ? 'LUNAS' : 'BELUM LUNAS'}</button></div></div><div className="flex justify-end pt-2 border-t border-dashed border-slate-100 mt-2"><button onClick={() => deletePurchase(p.id)} className="text-[10px] text-red-400 hover:text-red-600 font-bold flex items-center gap-1"><Icon name="trash" /> Hapus</button></div></div>) })}</div>
-
-                    {supplierModalOpen && (
+                </div>
+                {/* Modals OUTSIDE z-10 stacking context */}
+                {supplierModalOpen && (
                         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
                             <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm h-[80vh] flex flex-col relative overflow-hidden">
                                 <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-white z-10">{addSupplierMode ? (<button onClick={() => { setAddSupplierMode(false); setEditingSupplier(null); setSupplierData({name:'', address:'', phone:''}); }} className="flex items-center gap-1 text-slate-500 text-sm font-bold"><Icon name="chevron-left" /> Kembali</button>) : (<button onClick={() => setSupplierModalOpen(false)} className="text-slate-400 hover:text-slate-600"><Icon name="xmark" /></button>)}<h3 className="text-lg font-bold text-slate-800">{addSupplierMode ? (editingSupplier ? 'Edit Supplier' : 'Tambah Supplier') : 'Pilih Supplier'}</h3><div className="w-6"></div></div>
@@ -1208,7 +1210,7 @@
                             </div>
                         </div>
                     )}
-                </div>
+                </>
             );
         };
 
