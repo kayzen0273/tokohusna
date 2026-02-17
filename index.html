@@ -618,7 +618,7 @@
         };
 
         // --- PURCHASE VIEW ---
-        const PurchaseView = ({ user, showToast, items }) => {
+        const PurchaseView = ({ user, showToast, items, currentProfile }) => {
             const [purchases, setPurchases] = useState([]);
             const [suppliers, setSuppliers] = useState([]);
             const [loading, setLoading] = useState(true);
@@ -682,6 +682,8 @@
                     currentStock: selectedItem.qty || 0
                 };
                 
+                console.log('➕ Menambahkan item ke faktur:', newItem);
+                
                 setInvoiceData(prev => ({
                     ...prev,
                     items: [...prev.items, newItem]
@@ -725,6 +727,12 @@
 
             const handleSubmitInvoice = async (e) => {
                 e.preventDefault(); 
+                
+                console.log('\n🚀 ===== SUBMIT FAKTUR START =====');
+                console.log('Current Profile:', currentProfile);
+                console.log('Store ID:', currentProfile.id);
+                console.log('Invoice Data:', invoiceData);
+                
                 if(!invoiceData.supplier) {
                     showToast("Pilih supplier!", "error");
                     return;
@@ -741,6 +749,7 @@
                 
                 try {
                     // 1. Simpan faktur dengan items
+                    console.log('💾 Menyimpan faktur...');
                     await window.addDoc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'purchases'), { 
                         supplier: invoiceData.supplier, 
                         total: grandTotal, 
@@ -760,19 +769,85 @@
                         createdAt: window.serverTimestamp() 
                     });
                     
+                    console.log('✅ Faktur berhasil disimpan!');
+                    console.log('📦 Items yang akan diupdate stoknya:', invoiceData.items.length, 'barang');
+                    
                     // 2. Update stok untuk setiap barang
-                    const batch = window.writeBatch(window.db);
+                    console.log('=== MULAI UPDATE STOK ===');
+                    console.log('Store ID:', currentProfile.id);
+                    console.log('Items to update:', invoiceData.items);
+                    
+                    const storeId = currentProfile.id;
+                    let successCount = 0;
+                    let failedItems = [];
                     
                     for (const item of invoiceData.items) {
-                        const itemRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id);
-                        batch.update(itemRef, {
-                            qty: window.increment(item.qty)
-                        });
+                        try {
+                            const itemRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id);
+                            
+                            // Get current item data
+                            const itemDoc = await window.getDoc(itemRef);
+                            
+                            if (!itemDoc.exists()) {
+                                console.error(`❌ Item ${item.id} (${item.name}) tidak ditemukan di database!`);
+                                failedItems.push(item.name);
+                                continue;
+                            }
+                            
+                            const itemData = itemDoc.data();
+                            console.log('📦 Current item data:', itemData);
+                            
+                            // Hitung stok baru
+                            const currentStocks = itemData.stocks || {};
+                            const currentStockInStore = Number(currentStocks[storeId]) || 0;
+                            const qtyToAdd = Number(item.qty);
+                            const newStockInStore = currentStockInStore + qtyToAdd;
+                            
+                            console.log(`🔄 ${item.name} (${storeId}):`, {
+                                stokSebelum: currentStockInStore,
+                                tambah: qtyToAdd,
+                                stokSesudah: newStockInStore
+                            });
+                            
+                            // Prepare update data
+                            const updateData = {
+                                [`stocks.${storeId}`]: newStockInStore,
+                                updatedAt: window.serverTimestamp()
+                            };
+                            
+                            // Jika default store, update field qty juga (backward compatibility)
+                            if (storeId === 'default') {
+                                updateData.qty = newStockInStore;
+                            }
+                            
+                            // Update ke Firestore
+                            await window.updateDoc(itemRef, updateData);
+                            
+                            console.log(`✅ ${item.name} berhasil diupdate! Stok baru: ${newStockInStore}`);
+                            successCount++;
+                            
+                        } catch (error) {
+                            console.error(`❌ Error update ${item.name}:`, error);
+                            failedItems.push(item.name);
+                        }
                     }
                     
-                    await batch.commit();
+                    console.log(`\n=== HASIL UPDATE ===`);
+                    console.log(`✅ Berhasil: ${successCount} barang`);
+                    console.log(`❌ Gagal: ${failedItems.length} barang`, failedItems);
                     
-                    showToast(`Faktur disimpan & stok ${invoiceData.items.length} barang diupdate!`); 
+                    if (successCount === 0) {
+                        showToast("❌ Gagal update stok semua barang! Cek console.", "error");
+                        setSubmitting(false);
+                        return;
+                    }
+                    
+                    if (failedItems.length > 0) {
+                        showToast(`⚠️ ${successCount} barang berhasil, ${failedItems.length} gagal: ${failedItems.join(', ')}`, "error");
+                    } else {
+                        showToast(`✅ Faktur disimpan & stok ${successCount} barang berhasil diupdate!`);
+                    }
+                    
                     setInvoiceModalOpen(false); 
                     setInvoiceData({ supplier: '', date: '', dueDate: '', total: '', ppn: '', paymentMethod: 'Tunai', isPaid: true, isConsignment: false, items: [] });
                 } catch(err) { 
@@ -797,6 +872,20 @@
 
             const handleEditSupplier = (supplier) => { setEditingSupplier(supplier); setSupplierData({ name: supplier.name, address: supplier.address || '', phone: supplier.phone || '' }); setAddSupplierMode(true); };
             const filteredSuppliers = suppliers.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase()));
+
+            // Guard untuk mode all_stores
+            if (currentProfile.id === 'all_stores') {
+                return (
+                    <div className="fade-in h-full flex flex-col items-center justify-center text-center p-6 relative z-10">
+                        <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 text-3xl mb-4 shadow-sm"><Icon name="shop-lock" /></div>
+                        <h2 className="text-xl font-bold text-slate-800 mb-2">Mode Gabungan (View Only)</h2>
+                        <p className="text-slate-500 max-w-xs mx-auto mb-6 text-sm">Untuk input faktur pembelian, silakan pilih salah satu toko spesifik dari menu di kiri atas.</p>
+                        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-xs text-yellow-700 font-medium">
+                            <Icon name="triangle-exclamation" className="mr-1" /> Faktur harus diinput ke toko spesifik.
+                        </div>
+                    </div>
+                );
+            }
 
             return (
                 <div className="fade-in pb-20 md:pb-0 h-full flex flex-col relative z-10">
@@ -3449,7 +3538,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         {activeTab === 'home' && (<DashboardView items={inventoryData} settings={settingsData} onShowLowStock={() => { setActiveTab('list'); setShowOnlyLowStock(true); }} />)}
                         {activeTab === 'cashier' && (<CashierView items={inventoryData} user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} />)}
                         {activeTab === 'history' && (<HistoryView user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} />)}
-                        {activeTab === 'purchases' && (<PurchaseView user={user} showToast={showToast} items={inventoryData} />)}
+                        {activeTab === 'purchases' && (<PurchaseView user={user} showToast={showToast} items={inventoryData} currentProfile={currentProfile} />)}
                         {activeTab === 'cashbook' && (<CashBookView user={user} currentProfile={currentProfile} showToast={showToast} />)}
                         {activeTab === 'list' && (<ListView items={inventoryData} loading={loading} settings={settingsData} searchQuery={searchQuery} setSearchQuery={setSearchQuery} showOnlyLowStock={showOnlyLowStock} setShowOnlyLowStock={setShowOnlyLowStock} selectedRacks={selectedRacks} setSelectedRacks={setSelectedRacks} uniqueRacksData={uniqueRacksData} onCopySuccess={showToast} onEdit={(item) => { setFormData({...item}); setEditingItem(item); setActiveTab('add'); }} onDelete={(item) => setDeleteModal({ show: true, item: item })} onDeleteRack={(rackName) => setDeleteRackModal({ show: true, rackName })} currentProfile={currentProfile} />)}
                         {activeTab === 'add' && (<FormView formData={formData} setFormData={setFormData} onSubmit={handleSubmit} isEditing={!!editingItem} submitting={submitting} onCancel={() => { setEditingItem(null); setFormData({name:'', qty:'', unit:'Pcs', exp:'', rack:'', price:'', minStock: '', multiPrices: []}); setActiveTab('list'); }} currentProfile={currentProfile} />)}
