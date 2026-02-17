@@ -1078,7 +1078,21 @@
                             )}
                         </div>
                         {loading ? <div className="text-center py-10"><div className="typing-dot bg-teal-600"></div></div> : (() => {
-                            const filtered = purchaseSearch.trim() === '' ? purchases : purchases.filter(p => {
+                            // Helper: cek apakah draft punya isi yang bermakna
+                            const isDraftMeaningful = (p) => {
+                                if (p.status !== 'draft') return true;
+                                return !!(p.supplier || p.invoiceNumber || p.date || p.dueDate || (p.items && p.items.length > 0) || (p.total && parseFloat(p.total) > 0));
+                            };
+                            // Sembunyikan draft kosong & hapus dari Firestore di background
+                            const meaningfulPurchases = purchases.filter(p => {
+                                if (!isDraftMeaningful(p)) {
+                                    // Hapus draft kosong dari Firestore (silent)
+                                    window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'purchases', p.id)).catch(() => {});
+                                    return false;
+                                }
+                                return true;
+                            });
+                            const filtered = purchaseSearch.trim() === '' ? meaningfulPurchases : meaningfulPurchases.filter(p => {
                                 const q = purchaseSearch.toLowerCase();
                                 return (p.supplier || '').toLowerCase().includes(q) || (p.invoiceNumber || '').toLowerCase().includes(q) || (p.items || []).some(item => (item.name || '').toLowerCase().includes(q));
                             });
