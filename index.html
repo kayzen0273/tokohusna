@@ -651,7 +651,14 @@
             useEffect(() => {
                 if (!invoiceModalOpen || isEditMode || !user) return;
                 // Cek apakah ada data yang sudah diisi (jangan simpan jika form masih kosong)
-                const hasContent = invoiceData.supplier || invoiceData.invoiceNumber || invoiceData.date || invoiceData.dueDate || (invoiceData.items && invoiceData.items.length > 0) || (invoiceData.total && parseFloat(invoiceData.total) > 0);
+                // Supplier saja TIDAK cukup — harus ada minimal satu data bermakna lainnya
+                const hasContent = invoiceData.supplier && (
+                    invoiceData.invoiceNumber ||
+                    invoiceData.date ||
+                    invoiceData.dueDate ||
+                    (invoiceData.items && invoiceData.items.length > 0) ||
+                    (invoiceData.total && parseFloat(invoiceData.total) > 0)
+                );
                 if (!hasContent) return;
                 if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
                 draftTimerRef.current = setTimeout(async () => {
@@ -1081,7 +1088,14 @@
                             // Helper: cek apakah draft punya isi yang bermakna
                             const isDraftMeaningful = (p) => {
                                 if (p.status !== 'draft') return true;
-                                return !!(p.supplier || p.invoiceNumber || p.date || p.dueDate || (p.items && p.items.length > 0) || (p.total && parseFloat(p.total) > 0));
+                                // Draft harus punya minimal: supplier + (item / nomor / tanggal)
+                                return !!(p.supplier && (
+                                    p.invoiceNumber ||
+                                    p.date ||
+                                    p.dueDate ||
+                                    (p.items && p.items.length > 0) ||
+                                    (p.total && parseFloat(p.total) > 0)
+                                ));
                             };
                             // Sembunyikan draft kosong & hapus dari Firestore di background
                             const meaningfulPurchases = purchases.filter(p => {
@@ -1114,7 +1128,13 @@
                             {/* HEADER - fixed top */}
                             <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white">
                                 <div className="flex items-center gap-2">
-                                    <button type="button" onClick={() => { setInvoiceModalOpen(false); setIsEditMode(false); setAttachmentFile(null); setAttachmentPreview(null); }} className="text-slate-400 hover:text-slate-700 mr-1"><Icon name="chevron-left" /></button>
+                                    <button type="button" onClick={async () => { 
+                                        // Hapus draft jika form kosong (hanya supplier, tanpa item/nomor/tanggal)
+                                        if (!isEditMode) {
+                                            const hasMeaningfulContent = invoiceData.invoiceNumber || invoiceData.date || invoiceData.dueDate || (invoiceData.items && invoiceData.items.length > 0) || (invoiceData.total && parseFloat(invoiceData.total) > 0);
+                                            if (!hasMeaningfulContent) await clearDraft();
+                                        }
+                                        setInvoiceModalOpen(false); setIsEditMode(false); setAttachmentFile(null); setAttachmentPreview(null); }} className="text-slate-400 hover:text-slate-700 mr-1"><Icon name="chevron-left" /></button>
                                     <span className="font-medium text-sm">{isEditMode ? `Edit faktur — ${invoiceData.supplier}` : `Catat faktur dari ${invoiceData.supplier}`}</span>
                                     {!isEditMode && <span className="text-[11px] px-2 py-0.5 rounded-full bg-teal-50 text-teal-600 border border-teal-200">Draf</span>}
                                     {isEditMode && <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200">Edit</span>}
