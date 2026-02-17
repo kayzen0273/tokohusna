@@ -1050,7 +1050,74 @@
                             <option value="consignment">Konsinyasi</option>
                         </select>
                     </div>
-                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1">{loading ? <div className="text-center py-10"><div className="typing-dot bg-teal-600"></div></div> : filteredPurchases.length === 0 ? <div className="text-center py-12 text-slate-400 text-xs">{purchaseSearch || purchaseFilterStatus !== 'all' ? 'Tidak ada faktur yang cocok.' : 'Belum ada faktur pembelian.'}</div> : filteredPurchases.map(p => { const dueDate = p.dueDate ? new Date(p.dueDate) : null; const isOverdue = !p.isPaid && dueDate && dueDate < new Date(); return (<div key={p.id} onClick={() => handleOpenDetail(p)} className={`p-4 rounded-xl border transition-all hover:shadow-md bg-white cursor-pointer active:scale-[0.99] ${isOverdue ? 'border-l-4 border-l-red-500 border-y-slate-100 border-r-slate-100' : 'border-slate-100'}`}><div className="flex justify-between items-start mb-2"><div><div className="flex items-center gap-2 flex-wrap"><h4 className="font-bold text-slate-800 text-sm">{p.supplier}</h4>{p.invoiceNumber && <span className="text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono">#{p.invoiceNumber}</span>}{p.isConsignment && <span className="bg-indigo-100 text-indigo-600 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">Konsinyasi</span>}</div><div className="flex items-center gap-2 mt-1"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${p.paymentMethod === 'Kredit' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>{p.paymentMethod || 'Tunai'}</span>{p.ppn > 0 && <span className="text-[9px] text-slate-400">+ PPN {formatRupiah(p.ppn)}</span>}</div><p className="text-[10px] text-slate-500 mt-1">{new Date(p.date).toLocaleDateString('id-ID', {day: 'numeric', month: 'short', year: 'numeric'})}{p.dueDate && ` • Tempo: ${new Date(p.dueDate).toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})}`}</p></div><div className="text-right"><div className="font-black text-slate-800">{formatRupiah(p.total)}</div><button onClick={(e) => { e.stopPropagation(); togglePaid(p); }} className={`mt-1 px-2 py-0.5 rounded text-[10px] font-bold border ${p.isPaid ? 'bg-green-50 text-green-600 border-green-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>{p.isPaid ? 'LUNAS' : 'BELUM LUNAS'}</button></div></div><div className="flex justify-between pt-2 border-t border-dashed border-slate-100 mt-2"><span className="text-[10px] text-slate-400 flex items-center gap-1"><Icon name="eye" /> Lihat detail</span><button onClick={(e) => { e.stopPropagation(); deletePurchase(p.id); }} className="text-[10px] text-red-400 hover:text-red-600 font-bold flex items-center gap-1"><Icon name="trash" /> Hapus</button></div></div>) })}</div>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-0 pr-1">
+                        {loading ? <div className="text-center py-10"><div className="typing-dot bg-teal-600"></div></div> : filteredPurchases.length === 0 ? <div className="text-center py-12 text-slate-400 text-xs">{purchaseSearch || purchaseFilterStatus !== 'all' ? 'Tidak ada faktur yang cocok.' : 'Belum ada faktur pembelian.'}</div> :
+                        filteredPurchases.map((p, idx) => {
+                            const dueDate = p.dueDate ? new Date(p.dueDate) : null;
+                            const isOverdue = !p.isPaid && dueDate && dueDate < new Date();
+                            const itemNames = (p.items || []).map(i => i.name).filter(Boolean);
+                            const itemDisplay = itemNames.length === 0 ? '-' : itemNames.length <= 3 ? itemNames.join(', ') : itemNames.slice(0,3).join(', ') + `, +${itemNames.length - 3} lainnya`;
+                            return (
+                                <div key={p.id} onClick={() => handleOpenDetail(p)} className={`bg-white cursor-pointer active:scale-[0.99] border-b border-slate-100 py-4 px-2 transition-all hover:bg-slate-50 ${isOverdue ? 'border-l-4 border-l-red-500' : ''}`}>
+                                    {/* Row 1: checkbox + no + invoice + amount */}
+                                    <div className="flex items-start gap-3 mb-3">
+                                        <div onClick={e => e.stopPropagation()} className="mt-0.5 flex-shrink-0">
+                                            <div className="w-5 h-5 rounded border-2 border-teal-400 flex items-center justify-center bg-white">
+                                                {p.isPaid && <Icon name="check" className="text-teal-500 text-[10px]" />}
+                                            </div>
+                                        </div>
+                                        <span className="text-sm text-slate-500 font-medium flex-shrink-0">{idx + 1}</span>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="font-bold text-teal-600 text-base truncate">{p.invoiceNumber || <span className="text-slate-400 italic text-sm">No. faktur</span>}</span>
+                                                <span className="font-bold text-slate-800 text-base whitespace-nowrap">{formatRupiah(p.total)}</span>
+                                            </div>
+                                            {p.isConsignment && <span className="inline-block bg-indigo-100 text-indigo-600 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider mt-0.5">Konsinyasi</span>}
+                                        </div>
+                                    </div>
+                                    {/* Items */}
+                                    <div className="ml-11 mb-3">
+                                        <p className="text-xs font-bold text-slate-700 mb-0.5">Barang</p>
+                                        <p className="text-sm text-slate-600 leading-snug">{itemDisplay}</p>
+                                    </div>
+                                    {/* Grid: Tgl faktur + Supplier */}
+                                    <div className="ml-11 grid grid-cols-2 gap-x-4 gap-y-2 mb-3">
+                                        <div>
+                                            <p className="text-xs font-bold text-slate-700 mb-0.5">Tgl. faktur</p>
+                                            <p className="text-sm text-slate-600">{new Date(p.date).toLocaleDateString('id-ID', {year:'numeric', month:'short', day:'numeric'})}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-bold text-slate-700 mb-0.5">Supplier</p>
+                                            <p className="text-sm text-slate-600">{p.supplier || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs font-bold text-slate-700 mb-0.5">Bayar</p>
+                                            <p className="text-sm text-slate-600">{p.paymentMethod || 'Tunai'}</p>
+                                        </div>
+                                        {p.dueDate && (
+                                            <div>
+                                                <p className="text-xs font-bold text-slate-700 mb-0.5">Jth tempo</p>
+                                                <p className={`text-sm font-medium ${isOverdue ? 'text-red-600' : 'text-slate-600'}`}>{new Date(p.dueDate).toLocaleDateString('id-ID', {year:'numeric', month:'short', day:'numeric'})}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                    {/* Status + actions */}
+                                    <div className="ml-11 flex items-center justify-between">
+                                        <div>
+                                            <p className="text-xs font-bold text-slate-700 mb-1">Status</p>
+                                            <button onClick={(e) => { e.stopPropagation(); togglePaid(p); }} className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full border text-sm font-semibold transition-all active:scale-95 ${p.isPaid ? 'bg-green-50 text-green-700 border-green-300' : 'bg-white text-slate-700 border-slate-300 hover:border-teal-400'}`}>
+                                                {p.isPaid ? 'Lunas' : 'Belum lunas'}
+                                                <Icon name="pen" className="text-xs" />
+                                            </button>
+                                        </div>
+                                        <button onClick={(e) => { e.stopPropagation(); deletePurchase(p.id); }} className="text-[11px] text-red-400 hover:text-red-600 font-bold flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-red-50 transition-all">
+                                            <Icon name="trash" /> Hapus
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
                 </div>
                 {/* Modals OUTSIDE z-10 stacking context */}
                 {supplierModalOpen && (
