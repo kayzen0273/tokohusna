@@ -624,9 +624,14 @@
             const [loading, setLoading] = useState(true);
             const [supplierModalOpen, setSupplierModalOpen] = useState(false);
             const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
+            const [detailModalOpen, setDetailModalOpen] = useState(false);
+            const [selectedPurchase, setSelectedPurchase] = useState(null);
+            const [isEditMode, setIsEditMode] = useState(false);
+            const [editingPurchaseId, setEditingPurchaseId] = useState(null);
             const [addSupplierMode, setAddSupplierMode] = useState(false);
             const [submitting, setSubmitting] = useState(false);
             const [supplierSearch, setSupplierSearch] = useState('');
+            const DRAFT_KEY = `faktur_draft_${currentProfile.id}`;
             const [invoiceData, setInvoiceData] = useState({ supplier: '', invoiceNumber: '', date: '', receivedDate: new Date().toISOString().slice(0,10), receivedTime: new Date().toTimeString().slice(0,5), dueDate: '', total: '', ppn: '', paymentMethod: 'Kredit', isPaid: false, isConsignment: false, items: [] });
             const [diskon, setDiskon] = useState('0');
             const [diskonType, setDiskonType] = useState('percent');
@@ -638,6 +643,33 @@
             const attachmentInputRef = useRef(null);
             const [supplierData, setSupplierData] = useState({ name: '', address: '', phone: '' });
             const [editingSupplier, setEditingSupplier] = useState(null);
+
+            // Load draft on mount
+            useEffect(() => {
+                try {
+                    const saved = localStorage.getItem(DRAFT_KEY);
+                    if (saved) {
+                        const draft = JSON.parse(saved);
+                        if (draft.invoiceData) setInvoiceData(draft.invoiceData);
+                        if (draft.diskon !== undefined) setDiskon(draft.diskon);
+                        if (draft.diskonType) setDiskonType(draft.diskonType);
+                        if (draft.materai !== undefined) setMaterai(draft.materai);
+                        if (draft.pengiriman !== undefined) setPengiriman(draft.pengiriman);
+                        if (draft.pembulatan !== undefined) setPembulatan(draft.pembulatan);
+                        if (draft.editingPurchaseId) setEditingPurchaseId(draft.editingPurchaseId);
+                    }
+                } catch(e) {}
+            }, []);
+
+            // Auto-save draft whenever invoiceData changes (only for new invoices, not edits)
+            useEffect(() => {
+                if (!invoiceModalOpen || isEditMode) return;
+                try {
+                    localStorage.setItem(DRAFT_KEY, JSON.stringify({ invoiceData, diskon, diskonType, materai, pengiriman, pembulatan, editingPurchaseId }));
+                } catch(e) {}
+            }, [invoiceData, diskon, diskonType, materai, pengiriman, pembulatan]);
+
+            const clearDraft = () => { try { localStorage.removeItem(DRAFT_KEY); } catch(e) {} };
             
             // Item input states
             const [itemSearch, setItemSearch] = useState('');
@@ -732,8 +764,26 @@
             }, [purchases]);
 
             const handleSelectSupplier = (supplier) => { 
+                // Check if there's a draft for this supplier
+                try {
+                    const saved = localStorage.getItem(DRAFT_KEY);
+                    if (saved) {
+                        const draft = JSON.parse(saved);
+                        if (draft.invoiceData && draft.invoiceData.supplier === supplier.name) {
+                            setInvoiceData(draft.invoiceData);
+                            if (draft.diskon !== undefined) setDiskon(draft.diskon);
+                            if (draft.diskonType) setDiskonType(draft.diskonType);
+                            if (draft.materai !== undefined) setMaterai(draft.materai);
+                            if (draft.pengiriman !== undefined) setPengiriman(draft.pengiriman);
+                            if (draft.pembulatan !== undefined) setPembulatan(draft.pembulatan);
+                            setSupplierModalOpen(false); setInvoiceModalOpen(true);
+                            return;
+                        }
+                    }
+                } catch(e) {}
                 setInvoiceData({ supplier: supplier.name, invoiceNumber: '', date: '', receivedDate: new Date().toISOString().slice(0,10), receivedTime: new Date().toTimeString().slice(0,5), dueDate: '', total: '', ppn: '', paymentMethod: 'Kredit', isPaid: false, isConsignment: false, items: [] });
                 setDiskon('0'); setDiskonType('percent'); setMaterai('0'); setPengiriman('0'); setPembulatan('0');
+                setEditingPurchaseId(null);
                 setSupplierModalOpen(false); setInvoiceModalOpen(true); 
             };
 
@@ -766,9 +816,7 @@
                 const grandTotal = dpp + ppn + numMaterai + numPengiriman + numPembulatan;
                 
                 try {
-                    // 1. Simpan faktur dengan items
-                    console.log('💾 Menyimpan faktur...');
-                    await window.addDoc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'purchases'), { 
+                    const invoicePayload = {
                         supplier: invoiceData.supplier, 
                         invoiceNumber: invoiceData.invoiceNumber || '',
                         total: grandTotal, 
@@ -786,14 +834,17 @@
                         dueDate: invoiceData.dueDate ? new Date(invoiceData.dueDate).toISOString() : null, 
                         isPaid: invoiceData.isPaid, 
                         isConsignment: invoiceData.isConsignment || false,
-                        items: invoiceData.items.map(item => ({
-                            id: item.id,
-                            name: item.name,
-                            qty: item.qty,
-                            price: item.price
-                        })),
-                        createdAt: window.serverTimestamp() 
-                    });
+                        items: invoiceData.items.map(item => ({ id: item.id, name: item.name, qty: item.qty, price: item.price })),
+                        updatedAt: window.serverTimestamp()
+                    };
+
+                    // 1. Simpan atau update faktur
+                    if (editingPurchaseId) {
+                        await window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'purchases', editingPurchaseId), invoicePayload);
+                    } else {
+                        invoicePayload.createdAt = window.serverTimestamp();
+                        await window.addDoc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'purchases'), invoicePayload);
+                    }
                     
                     console.log('✅ Faktur berhasil disimpan!');
                     console.log('📦 Items yang akan diupdate stoknya:', invoiceData.items.length, 'barang');
@@ -871,9 +922,12 @@
                     if (failedItems.length > 0) {
                         showToast(`⚠️ ${successCount} barang berhasil, ${failedItems.length} gagal: ${failedItems.join(', ')}`, "error");
                     } else {
-                        showToast(`✅ Faktur disimpan & stok ${successCount} barang berhasil diupdate!`);
+                        showToast(editingPurchaseId ? `✅ Faktur berhasil diupdate!` : `✅ Faktur disimpan & stok ${successCount} barang berhasil diupdate!`);
                     }
                     
+                    clearDraft();
+                    setEditingPurchaseId(null);
+                    setIsEditMode(false);
                     setInvoiceModalOpen(false); 
                     setInvoiceData({ supplier: '', invoiceNumber: '', date: '', receivedDate: new Date().toISOString().slice(0,10), receivedTime: new Date().toTimeString().slice(0,5), dueDate: '', total: '', ppn: '', paymentMethod: 'Kredit', isPaid: false, isConsignment: false, items: [] });
                     setDiskon('0'); setDiskonType('percent'); setMaterai('0'); setPengiriman('0'); setPembulatan('0');
@@ -915,6 +969,35 @@
             };
             
             const removeAttachment = () => { setAttachmentFile(null); setAttachmentPreview(null); if(attachmentInputRef.current) attachmentInputRef.current.value=''; };
+
+            const handleOpenDetail = (purchase) => { setSelectedPurchase(purchase); setDetailModalOpen(true); };
+
+            const handleOpenEdit = (purchase) => {
+                setEditingPurchaseId(purchase.id);
+                setIsEditMode(true);
+                const fmt = n => n ? n.toLocaleString('id-ID') : '0';
+                setInvoiceData({
+                    supplier: purchase.supplier || '',
+                    invoiceNumber: purchase.invoiceNumber || '',
+                    date: purchase.date ? new Date(purchase.date).toISOString().slice(0,10) : '',
+                    receivedDate: purchase.receivedDate || new Date().toISOString().slice(0,10),
+                    receivedTime: purchase.receivedTime || '',
+                    dueDate: purchase.dueDate ? new Date(purchase.dueDate).toISOString().slice(0,10) : '',
+                    total: purchase.subtotal !== undefined ? purchase.subtotal.toString() : (purchase.total || '').toString(),
+                    ppn: purchase.ppn ? purchase.ppn.toString() : '',
+                    paymentMethod: purchase.paymentMethod || 'Kredit',
+                    isPaid: purchase.isPaid || false,
+                    isConsignment: purchase.isConsignment || false,
+                    items: purchase.items || []
+                });
+                setDiskon(purchase.diskon ? fmt(purchase.diskon) : '0');
+                setDiskonType(purchase.diskonType || 'percent');
+                setMaterai(purchase.materai ? fmt(purchase.materai) : '0');
+                setPengiriman(purchase.pengiriman ? fmt(purchase.pengiriman) : '0');
+                setPembulatan(purchase.pembulatan ? fmt(purchase.pembulatan) : '0');
+                setDetailModalOpen(false);
+                setInvoiceModalOpen(true);
+            };
             const filteredSuppliers = suppliers.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase()));
 
             // Guard untuk mode all_stores
@@ -945,7 +1028,7 @@
                         <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-xl border border-indigo-100 shadow-sm flex items-center justify-between"><div><div className="flex items-center gap-2 mb-1"><Icon name="handshake" className="text-indigo-500" /><h4 className="font-bold text-indigo-800 text-xs">Total Konsinyasi Masuk</h4></div><div className="text-lg font-black text-indigo-900">{formatRupiah(stats.consignmentTotal)}</div></div></div>
                         <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-xl border border-indigo-100 shadow-sm flex items-center justify-between"><div><div className="flex items-center gap-2 mb-1"><Icon name="file-invoice-dollar" className="text-purple-500" /><h4 className="font-bold text-purple-800 text-xs">Konsinyasi Belum Bayar</h4></div><div className="text-lg font-black text-purple-900">{formatRupiah(stats.consignmentUnpaid)}</div></div></div>
                     </div>
-                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1">{loading ? <div className="text-center py-10"><div className="typing-dot bg-teal-600"></div></div> : purchases.length === 0 ? <div className="text-center py-12 text-slate-400 text-xs">Belum ada faktur pembelian.</div> : purchases.map(p => { const dueDate = p.dueDate ? new Date(p.dueDate) : null; const isOverdue = !p.isPaid && dueDate && dueDate < new Date(); return (<div key={p.id} className={`p-4 rounded-xl border transition-all hover:shadow-md bg-white ${isOverdue ? 'border-l-4 border-l-red-500 border-y-slate-100 border-r-slate-100' : 'border-slate-100'}`}><div className="flex justify-between items-start mb-2"><div><div className="flex items-center gap-2"><h4 className="font-bold text-slate-800 text-sm">{p.supplier}</h4>{p.isConsignment && <span className="bg-indigo-100 text-indigo-600 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">Konsinyasi</span>}</div><div className="flex items-center gap-2 mt-1"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${p.paymentMethod === 'Kredit' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>{p.paymentMethod || 'Tunai'}</span>{p.ppn > 0 && <span className="text-[9px] text-slate-400">+ PPN {formatRupiah(p.ppn)}</span>}</div><p className="text-[10px] text-slate-500 mt-1">{new Date(p.date).toLocaleDateString('id-ID', {day: 'numeric', month: 'short', year: 'numeric'})}{p.dueDate && ` • Tempo: ${new Date(p.dueDate).toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})}`}</p></div><div className="text-right"><div className="font-black text-slate-800">{formatRupiah(p.total)}</div><button onClick={() => togglePaid(p)} className={`mt-1 px-2 py-0.5 rounded text-[10px] font-bold border ${p.isPaid ? 'bg-green-50 text-green-600 border-green-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>{p.isPaid ? 'LUNAS' : 'BELUM LUNAS'}</button></div></div><div className="flex justify-end pt-2 border-t border-dashed border-slate-100 mt-2"><button onClick={() => deletePurchase(p.id)} className="text-[10px] text-red-400 hover:text-red-600 font-bold flex items-center gap-1"><Icon name="trash" /> Hapus</button></div></div>) })}</div>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1">{loading ? <div className="text-center py-10"><div className="typing-dot bg-teal-600"></div></div> : purchases.length === 0 ? <div className="text-center py-12 text-slate-400 text-xs">Belum ada faktur pembelian.</div> : purchases.map(p => { const dueDate = p.dueDate ? new Date(p.dueDate) : null; const isOverdue = !p.isPaid && dueDate && dueDate < new Date(); return (<div key={p.id} onClick={() => handleOpenDetail(p)} className={`p-4 rounded-xl border transition-all hover:shadow-md bg-white cursor-pointer active:scale-[0.99] ${isOverdue ? 'border-l-4 border-l-red-500 border-y-slate-100 border-r-slate-100' : 'border-slate-100'}`}><div className="flex justify-between items-start mb-2"><div><div className="flex items-center gap-2 flex-wrap"><h4 className="font-bold text-slate-800 text-sm">{p.supplier}</h4>{p.invoiceNumber && <span className="text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono">#{p.invoiceNumber}</span>}{p.isConsignment && <span className="bg-indigo-100 text-indigo-600 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">Konsinyasi</span>}</div><div className="flex items-center gap-2 mt-1"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${p.paymentMethod === 'Kredit' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>{p.paymentMethod || 'Tunai'}</span>{p.ppn > 0 && <span className="text-[9px] text-slate-400">+ PPN {formatRupiah(p.ppn)}</span>}</div><p className="text-[10px] text-slate-500 mt-1">{new Date(p.date).toLocaleDateString('id-ID', {day: 'numeric', month: 'short', year: 'numeric'})}{p.dueDate && ` • Tempo: ${new Date(p.dueDate).toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})}`}</p></div><div className="text-right"><div className="font-black text-slate-800">{formatRupiah(p.total)}</div><button onClick={(e) => { e.stopPropagation(); togglePaid(p); }} className={`mt-1 px-2 py-0.5 rounded text-[10px] font-bold border ${p.isPaid ? 'bg-green-50 text-green-600 border-green-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>{p.isPaid ? 'LUNAS' : 'BELUM LUNAS'}</button></div></div><div className="flex justify-between pt-2 border-t border-dashed border-slate-100 mt-2"><span className="text-[10px] text-slate-400 flex items-center gap-1"><Icon name="eye" /> Lihat detail</span><button onClick={(e) => { e.stopPropagation(); deletePurchase(p.id); }} className="text-[10px] text-red-400 hover:text-red-600 font-bold flex items-center gap-1"><Icon name="trash" /> Hapus</button></div></div>) })}</div>
                 </div>
                 {/* Modals OUTSIDE z-10 stacking context */}
                 {supplierModalOpen && (
@@ -959,12 +1042,13 @@
                             {/* HEADER - fixed top */}
                             <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white">
                                 <div className="flex items-center gap-2">
-                                    <button type="button" onClick={() => { setInvoiceModalOpen(false); setAttachmentFile(null); setAttachmentPreview(null); }} className="text-slate-400 hover:text-slate-700 mr-1"><Icon name="chevron-left" /></button>
-                                    <span className="font-medium text-sm">Catat faktur dari {invoiceData.supplier}</span>
-                                    <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">Draf</span>
+                                    <button type="button" onClick={() => { setInvoiceModalOpen(false); setIsEditMode(false); setAttachmentFile(null); setAttachmentPreview(null); }} className="text-slate-400 hover:text-slate-700 mr-1"><Icon name="chevron-left" /></button>
+                                    <span className="font-medium text-sm">{isEditMode ? `Edit faktur — ${invoiceData.supplier}` : `Catat faktur dari ${invoiceData.supplier}`}</span>
+                                    {!isEditMode && <span className="text-[11px] px-2 py-0.5 rounded-full bg-teal-50 text-teal-600 border border-teal-200">Draf</span>}
+                                    {isEditMode && <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200">Edit</span>}
                                 </div>
                                 <button type="button" onClick={handleSubmitInvoice} disabled={submitting} className="bg-teal-700 text-white border-none px-3 py-1.5 rounded-md text-xs font-medium disabled:opacity-50">
-                                    {submitting ? '...' : 'Simpan faktur'}
+                                    {submitting ? '...' : (isEditMode ? 'Update' : 'Simpan faktur')}
                                 </button>
                             </div>
 
@@ -1201,11 +1285,104 @@
 
                             {/* FOOTER - fixed bottom */}
                             <div className="flex-shrink-0 flex justify-between items-center px-4 py-3 border-t border-gray-200 bg-white">
-                                <button type="button" onClick={() => { setInvoiceModalOpen(false); setAttachmentFile(null); setAttachmentPreview(null); }} className="bg-white border border-red-400 text-red-500 px-3 py-1.5 rounded-md text-xs font-medium">
-                                    Hapus draf
+                                <button type="button" onClick={() => { clearDraft(); setEditingPurchaseId(null); setIsEditMode(false); setInvoiceModalOpen(false); setAttachmentFile(null); setAttachmentPreview(null); }} className="bg-white border border-red-400 text-red-500 px-3 py-1.5 rounded-md text-xs font-medium">
+                                    {isEditMode ? 'Batalkan Edit' : 'Hapus draf'}
                                 </button>
                                 <button type="button" onClick={handleSubmitInvoice} disabled={submitting || invoiceData.items.length === 0} className="bg-teal-700 text-white px-4 py-1.5 rounded-md text-xs font-medium disabled:opacity-50">
-                                    {submitting ? 'Menyimpan...' : 'Simpan faktur'}
+                                    {submitting ? 'Menyimpan...' : (isEditMode ? 'Update Faktur' : 'Simpan faktur')}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* DETAIL MODAL */}
+                    {detailModalOpen && selectedPurchase && (
+                        <div className="fixed inset-0 z-[500] bg-white flex flex-col fade-in" style={{fontFamily:'system-ui,-apple-system,Segoe UI,Roboto,sans-serif',fontSize:'12.5px',color:'#111827'}}>
+                            {/* HEADER */}
+                            <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white">
+                                <div className="flex items-center gap-2">
+                                    <button type="button" onClick={() => setDetailModalOpen(false)} className="text-slate-400 hover:text-slate-700 mr-1"><Icon name="chevron-left" /></button>
+                                    <div>
+                                        <span className="font-medium text-sm">{selectedPurchase.supplier}</span>
+                                        {selectedPurchase.invoiceNumber && <span className="ml-2 text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono">#{selectedPurchase.invoiceNumber}</span>}
+                                    </div>
+                                </div>
+                                <button type="button" onClick={() => handleOpenEdit(selectedPurchase)} className="flex items-center gap-1.5 bg-teal-600 text-white px-3 py-1.5 rounded-md text-xs font-bold hover:bg-teal-700 active:scale-95 transition-all">
+                                    <Icon name="pen-to-square" /> Edit
+                                </button>
+                            </div>
+
+                            {/* CONTENT */}
+                            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+                                {/* Status badges */}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${selectedPurchase.isPaid ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}>{selectedPurchase.isPaid ? '✓ LUNAS' : '✗ BELUM LUNAS'}</span>
+                                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${selectedPurchase.paymentMethod === 'Kredit' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>{selectedPurchase.paymentMethod || 'Tunai'}</span>
+                                    {selectedPurchase.isConsignment && <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">Konsinyasi</span>}
+                                </div>
+
+                                {/* Detail info */}
+                                <div className="bg-slate-50 rounded-xl p-4 space-y-2 border border-slate-100">
+                                    <div className="text-xs font-bold text-slate-500 uppercase mb-2">📄 Detail Faktur</div>
+                                    <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                                        {selectedPurchase.invoiceNumber && <div><p className="text-[10px] text-gray-400">No. Faktur</p><p className="text-xs font-bold text-slate-800 font-mono">#{selectedPurchase.invoiceNumber}</p></div>}
+                                        <div><p className="text-[10px] text-gray-400">Tgl Faktur</p><p className="text-xs font-bold text-slate-800">{selectedPurchase.date ? new Date(selectedPurchase.date).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}) : '-'}</p></div>
+                                        <div><p className="text-[10px] text-gray-400">Tgl Diterima</p><p className="text-xs font-bold text-slate-800">{selectedPurchase.receivedDate ? new Date(selectedPurchase.receivedDate).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}) : '-'}{selectedPurchase.receivedTime ? ` ${selectedPurchase.receivedTime}` : ''}</p></div>
+                                        {selectedPurchase.dueDate && <div><p className="text-[10px] text-gray-400">Jatuh Tempo</p><p className="text-xs font-bold text-slate-800">{new Date(selectedPurchase.dueDate).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'})}</p></div>}
+                                    </div>
+                                </div>
+
+                                {/* Items */}
+                                {selectedPurchase.items && selectedPurchase.items.length > 0 && (
+                                    <div>
+                                        <div className="text-xs font-bold text-slate-500 uppercase mb-2">📦 Daftar Barang ({selectedPurchase.items.length})</div>
+                                        <div className="border border-gray-200 rounded-xl overflow-hidden">
+                                            <div className="divide-y divide-gray-100">
+                                                {selectedPurchase.items.map((item, idx) => (
+                                                    <div key={idx} className="px-4 py-3 flex justify-between items-center">
+                                                        <div>
+                                                            <p className="text-xs font-bold text-slate-800">{item.name}</p>
+                                                            <p className="text-[10px] text-slate-500 mt-0.5">{item.qty} × {formatRupiah(item.price)}</p>
+                                                        </div>
+                                                        <span className="text-xs font-bold text-teal-700">{formatRupiah(item.qty * item.price)}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Summary */}
+                                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                                    <div className="divide-y divide-gray-100">
+                                        {[
+                                            ['Subtotal', selectedPurchase.subtotal || selectedPurchase.total],
+                                            selectedPurchase.diskon > 0 && ['Diskon', -selectedPurchase.diskon],
+                                            selectedPurchase.ppn > 0 && ['PPN', selectedPurchase.ppn],
+                                            selectedPurchase.materai > 0 && ['Biaya Meterai', selectedPurchase.materai],
+                                            selectedPurchase.pengiriman > 0 && ['Biaya Pengiriman', selectedPurchase.pengiriman],
+                                            selectedPurchase.pembulatan > 0 && ['Pembulatan', selectedPurchase.pembulatan],
+                                        ].filter(Boolean).map(([label, val], idx) => (
+                                            <div key={idx} className="px-4 py-2.5 flex justify-between items-center">
+                                                <span className="text-xs text-slate-500">{label}</span>
+                                                <span className={`text-xs font-bold ${val < 0 ? 'text-red-600' : 'text-slate-700'}`}>{val < 0 ? `-${formatRupiah(-val)}` : formatRupiah(val)}</span>
+                                            </div>
+                                        ))}
+                                        <div className="px-4 py-3 flex justify-between items-center bg-teal-50">
+                                            <span className="text-sm font-bold text-teal-700">Total</span>
+                                            <span className="text-base font-black text-teal-800">{formatRupiah(selectedPurchase.total)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* FOOTER */}
+                            <div className="flex-shrink-0 flex justify-between items-center px-4 py-3 border-t border-gray-200 bg-white">
+                                <button type="button" onClick={() => { if(confirm(`Hapus faktur ini?`)) { deletePurchase(selectedPurchase.id); setDetailModalOpen(false); } }} className="bg-white border border-red-400 text-red-500 px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1">
+                                    <Icon name="trash" /> Hapus
+                                </button>
+                                <button type="button" onClick={() => handleOpenEdit(selectedPurchase)} className="bg-teal-600 text-white px-4 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 hover:bg-teal-700 active:scale-95 transition-all">
+                                    <Icon name="pen-to-square" /> Edit Faktur
                                 </button>
                             </div>
                         </div>
