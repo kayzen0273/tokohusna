@@ -1105,10 +1105,14 @@
                                     <div className="ml-11 flex items-center justify-between">
                                         <div>
                                             <p className="text-xs font-bold text-slate-700 mb-1">Status</p>
-                                            <button onClick={(e) => { e.stopPropagation(); togglePaid(p); }} className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full border text-sm font-semibold transition-all active:scale-95 ${p.isPaid ? 'bg-green-50 text-green-700 border-green-300' : 'bg-white text-slate-700 border-slate-300 hover:border-teal-400'}`}>
-                                                {p.isPaid ? 'Lunas' : 'Belum lunas'}
-                                                <Icon name="pen" className="text-xs" />
-                                            </button>
+                                            {p.isPaid ? (
+                                                <span className="flex items-center px-4 py-1.5 rounded-full border text-sm font-semibold bg-green-50 text-green-700 border-green-300 cursor-default select-none">Lunas</span>
+                                            ) : (
+                                                <button onClick={(e) => { e.stopPropagation(); togglePaid(p); }} className="flex items-center gap-1.5 px-4 py-1.5 rounded-full border text-sm font-semibold bg-white text-slate-700 border-slate-300 hover:border-teal-400 transition-all active:scale-95">
+                                                    Belum lunas
+                                                    <Icon name="pen" className="text-xs" />
+                                                </button>
+                                            )}
                                         </div>
                                         <button onClick={(e) => { e.stopPropagation(); deletePurchase(p.id); }} className="text-[11px] text-red-400 hover:text-red-600 font-bold flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-red-50 transition-all">
                                             <Icon name="trash" /> Hapus
