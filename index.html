@@ -631,7 +631,6 @@
             const [addSupplierMode, setAddSupplierMode] = useState(false);
             const [submitting, setSubmitting] = useState(false);
             const [supplierSearch, setSupplierSearch] = useState('');
-            const DRAFT_KEY = `faktur_draft_${currentProfile.id}`;
             const [invoiceData, setInvoiceData] = useState({ supplier: '', invoiceNumber: '', date: '', receivedDate: new Date().toISOString().slice(0,10), receivedTime: new Date().toTimeString().slice(0,5), dueDate: '', total: '', ppn: '', paymentMethod: 'Kredit', isPaid: false, isConsignment: false, items: [] });
             const [diskon, setDiskon] = useState('0');
             const [diskonType, setDiskonType] = useState('percent');
@@ -643,33 +642,54 @@
             const attachmentInputRef = useRef(null);
             const [supplierData, setSupplierData] = useState({ name: '', address: '', phone: '' });
             const [editingSupplier, setEditingSupplier] = useState(null);
+            const draftTimerRef = useRef(null);
+            const [draftId, setDraftId] = useState(null);
+            const [lastSavedDraft, setLastSavedDraft] = useState(null);
 
-            // Load draft on mount
+            // Auto-save draft to Firestore (debounced 2s)
             useEffect(() => {
-                try {
-                    const saved = localStorage.getItem(DRAFT_KEY);
-                    if (saved) {
-                        const draft = JSON.parse(saved);
-                        if (draft.invoiceData) setInvoiceData(draft.invoiceData);
-                        if (draft.diskon !== undefined) setDiskon(draft.diskon);
-                        if (draft.diskonType) setDiskonType(draft.diskonType);
-                        if (draft.materai !== undefined) setMaterai(draft.materai);
-                        if (draft.pengiriman !== undefined) setPengiriman(draft.pengiriman);
-                        if (draft.pembulatan !== undefined) setPembulatan(draft.pembulatan);
-                        if (draft.editingPurchaseId) setEditingPurchaseId(draft.editingPurchaseId);
-                    }
-                } catch(e) {}
-            }, []);
-
-            // Auto-save draft whenever invoiceData changes (only for new invoices, not edits)
-            useEffect(() => {
-                if (!invoiceModalOpen || isEditMode) return;
-                try {
-                    localStorage.setItem(DRAFT_KEY, JSON.stringify({ invoiceData, diskon, diskonType, materai, pengiriman, pembulatan, editingPurchaseId }));
-                } catch(e) {}
+                if (!invoiceModalOpen || isEditMode || !user) return;
+                if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
+                draftTimerRef.current = setTimeout(async () => {
+                    try {
+                        const numDiskonRaw = parseInt((diskon||'0').replace(/\D/g,'')) || 0;
+                        const subtotal = safeNumber(invoiceData.total);
+                        const diskonNom = diskonType === 'percent' ? Math.floor(subtotal * numDiskonRaw / 100) : numDiskonRaw;
+                        const draftData = {
+                            status: 'draft',
+                            supplier: invoiceData.supplier || '',
+                            invoiceNumber: invoiceData.invoiceNumber || '',
+                            date: invoiceData.date || '',
+                            receivedDate: invoiceData.receivedDate || '',
+                            receivedTime: invoiceData.receivedTime || '',
+                            dueDate: invoiceData.dueDate || '',
+                            ppn: invoiceData.ppn || '',
+                            paymentMethod: invoiceData.paymentMethod || 'Kredit',
+                            isPaid: invoiceData.isPaid || false,
+                            isConsignment: invoiceData.isConsignment || false,
+                            items: invoiceData.items || [],
+                            subtotal: subtotal,
+                            total: subtotal,
+                            diskon: diskonNom,
+                            diskonType: diskonType,
+                            materai: parseInt((materai||'0').replace(/\D/g,'')) || 0,
+                            pengiriman: parseInt((pengiriman||'0').replace(/\D/g,'')) || 0,
+                            pembulatan: parseInt((pembulatan||'0').replace(/\D/g,'')) || 0,
+                            storeId: currentProfile.id,
+                            updatedAt: window.serverTimestamp(),
+                        };
+                        if (draftId) {
+                            await window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'purchases', draftId), draftData);
+                        } else {
+                            draftData.createdAt = window.serverTimestamp();
+                            const ref = await window.addDoc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'purchases'), draftData);
+                            setDraftId(ref.id);
+                        }
+                        setLastSavedDraft(new Date());
+                    } catch(e) { console.error('Draft save error', e); }
+                }, 2000);
+                return () => { if (draftTimerRef.current) clearTimeout(draftTimerRef.current); };
             }, [invoiceData, diskon, diskonType, materai, pengiriman, pembulatan]);
-
-            const clearDraft = () => { try { localStorage.removeItem(DRAFT_KEY); } catch(e) {} };
             
             // Item input states
             const [itemSearch, setItemSearch] = useState('');
@@ -764,26 +784,9 @@
             }, [purchases]);
 
             const handleSelectSupplier = (supplier) => { 
-                // Check if there's a draft for this supplier
-                try {
-                    const saved = localStorage.getItem(DRAFT_KEY);
-                    if (saved) {
-                        const draft = JSON.parse(saved);
-                        if (draft.invoiceData && draft.invoiceData.supplier === supplier.name) {
-                            setInvoiceData(draft.invoiceData);
-                            if (draft.diskon !== undefined) setDiskon(draft.diskon);
-                            if (draft.diskonType) setDiskonType(draft.diskonType);
-                            if (draft.materai !== undefined) setMaterai(draft.materai);
-                            if (draft.pengiriman !== undefined) setPengiriman(draft.pengiriman);
-                            if (draft.pembulatan !== undefined) setPembulatan(draft.pembulatan);
-                            setSupplierModalOpen(false); setInvoiceModalOpen(true);
-                            return;
-                        }
-                    }
-                } catch(e) {}
                 setInvoiceData({ supplier: supplier.name, invoiceNumber: '', date: '', receivedDate: new Date().toISOString().slice(0,10), receivedTime: new Date().toTimeString().slice(0,5), dueDate: '', total: '', ppn: '', paymentMethod: 'Kredit', isPaid: false, isConsignment: false, items: [] });
                 setDiskon('0'); setDiskonType('percent'); setMaterai('0'); setPengiriman('0'); setPembulatan('0');
-                setEditingPurchaseId(null);
+                setDraftId(null); setEditingPurchaseId(null); setIsEditMode(false);
                 setSupplierModalOpen(false); setInvoiceModalOpen(true); 
             };
 
@@ -841,7 +844,12 @@
                     // 1. Simpan atau update faktur
                     if (editingPurchaseId) {
                         await window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'purchases', editingPurchaseId), invoicePayload);
+                    } else if (draftId) {
+                        // Promote draft to real invoice
+                        invoicePayload.status = 'active';
+                        await window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'purchases', draftId), invoicePayload);
                     } else {
+                        invoicePayload.status = 'active';
                         invoicePayload.createdAt = window.serverTimestamp();
                         await window.addDoc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'purchases'), invoicePayload);
                     }
@@ -926,6 +934,7 @@
                     }
                     
                     clearDraft();
+                    setDraftId(null);
                     setEditingPurchaseId(null);
                     setIsEditMode(false);
                     setInvoiceModalOpen(false); 
@@ -972,9 +981,26 @@
 
             const handleOpenDetail = (purchase) => { setSelectedPurchase(purchase); setDetailModalOpen(true); };
 
+            const clearDraft = async () => {
+                if (draftId) {
+                    try { await window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'purchases', draftId)); } catch(e) {}
+                    setDraftId(null);
+                }
+                setLastSavedDraft(null);
+            };
+
             const handleOpenEdit = (purchase) => {
-                setEditingPurchaseId(purchase.id);
-                setIsEditMode(true);
+                const isDraft = purchase.status === 'draft';
+                if (isDraft) {
+                    // Resume draft
+                    setDraftId(purchase.id);
+                    setEditingPurchaseId(null);
+                    setIsEditMode(false);
+                } else {
+                    setEditingPurchaseId(purchase.id);
+                    setDraftId(null);
+                    setIsEditMode(true);
+                }
                 const fmt = n => n ? n.toLocaleString('id-ID') : '0';
                 setInvoiceData({
                     supplier: purchase.supplier || '',
@@ -1028,7 +1054,7 @@
                         <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-xl border border-indigo-100 shadow-sm flex items-center justify-between"><div><div className="flex items-center gap-2 mb-1"><Icon name="handshake" className="text-indigo-500" /><h4 className="font-bold text-indigo-800 text-xs">Total Konsinyasi Masuk</h4></div><div className="text-lg font-black text-indigo-900">{formatRupiah(stats.consignmentTotal)}</div></div></div>
                         <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-xl border border-indigo-100 shadow-sm flex items-center justify-between"><div><div className="flex items-center gap-2 mb-1"><Icon name="file-invoice-dollar" className="text-purple-500" /><h4 className="font-bold text-purple-800 text-xs">Konsinyasi Belum Bayar</h4></div><div className="text-lg font-black text-purple-900">{formatRupiah(stats.consignmentUnpaid)}</div></div></div>
                     </div>
-                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1">{loading ? <div className="text-center py-10"><div className="typing-dot bg-teal-600"></div></div> : purchases.length === 0 ? <div className="text-center py-12 text-slate-400 text-xs">Belum ada faktur pembelian.</div> : purchases.map(p => { const dueDate = p.dueDate ? new Date(p.dueDate) : null; const isOverdue = !p.isPaid && dueDate && dueDate < new Date(); return (<div key={p.id} onClick={() => handleOpenDetail(p)} className={`p-4 rounded-xl border transition-all hover:shadow-md bg-white cursor-pointer active:scale-[0.99] ${isOverdue ? 'border-l-4 border-l-red-500 border-y-slate-100 border-r-slate-100' : 'border-slate-100'}`}><div className="flex justify-between items-start mb-2"><div><div className="flex items-center gap-2 flex-wrap"><h4 className="font-bold text-slate-800 text-sm">{p.supplier}</h4>{p.invoiceNumber && <span className="text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono">#{p.invoiceNumber}</span>}{p.isConsignment && <span className="bg-indigo-100 text-indigo-600 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">Konsinyasi</span>}</div><div className="flex items-center gap-2 mt-1"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${p.paymentMethod === 'Kredit' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>{p.paymentMethod || 'Tunai'}</span>{p.ppn > 0 && <span className="text-[9px] text-slate-400">+ PPN {formatRupiah(p.ppn)}</span>}</div><p className="text-[10px] text-slate-500 mt-1">{new Date(p.date).toLocaleDateString('id-ID', {day: 'numeric', month: 'short', year: 'numeric'})}{p.dueDate && ` • Tempo: ${new Date(p.dueDate).toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})}`}</p></div><div className="text-right"><div className="font-black text-slate-800">{formatRupiah(p.total)}</div><button onClick={(e) => { e.stopPropagation(); togglePaid(p); }} className={`mt-1 px-2 py-0.5 rounded text-[10px] font-bold border ${p.isPaid ? 'bg-green-50 text-green-600 border-green-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>{p.isPaid ? 'LUNAS' : 'BELUM LUNAS'}</button></div></div><div className="flex justify-between pt-2 border-t border-dashed border-slate-100 mt-2"><span className="text-[10px] text-slate-400 flex items-center gap-1"><Icon name="eye" /> Lihat detail</span><button onClick={(e) => { e.stopPropagation(); deletePurchase(p.id); }} className="text-[10px] text-red-400 hover:text-red-600 font-bold flex items-center gap-1"><Icon name="trash" /> Hapus</button></div></div>) })}</div>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1">{loading ? <div className="text-center py-10"><div className="typing-dot bg-teal-600"></div></div> : purchases.length === 0 ? <div className="text-center py-12 text-slate-400 text-xs">Belum ada faktur pembelian.</div> : purchases.map(p => { const isDraft = p.status === 'draft'; const dueDate = p.dueDate ? new Date(p.dueDate) : null; const isOverdue = !p.isPaid && !isDraft && dueDate && dueDate < new Date(); return (<div key={p.id} onClick={() => handleOpenDetail(p)} className={`p-4 rounded-xl border transition-all hover:shadow-md cursor-pointer active:scale-[0.99] ${isDraft ? 'bg-amber-50 border-amber-200 border-l-4 border-l-amber-400' : isOverdue ? 'bg-white border-l-4 border-l-red-500 border-y-slate-100 border-r-slate-100' : 'bg-white border-slate-100'}`}><div className="flex justify-between items-start mb-2"><div className="flex-1 min-w-0"><div className="flex items-center gap-2 flex-wrap"><h4 className="font-bold text-slate-800 text-sm">{p.supplier || '(Belum dipilih)'}</h4>{isDraft && <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-400 text-white uppercase tracking-wider animate-pulse">Draf</span>}{p.invoiceNumber && <span className="text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono">#{p.invoiceNumber}</span>}{p.isConsignment && <span className="bg-indigo-100 text-indigo-600 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider">Konsinyasi</span>}</div><div className="flex items-center gap-2 mt-1"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${p.paymentMethod === 'Kredit' ? 'bg-amber-50 text-amber-600 border-amber-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>{p.paymentMethod || 'Kredit'}</span></div><p className="text-[10px] text-slate-500 mt-1">{isDraft ? '⏱ Draf belum disimpan' : new Date(p.date).toLocaleDateString('id-ID', {day: 'numeric', month: 'short', year: 'numeric'})}{!isDraft && p.dueDate && ` • Tempo: ${new Date(p.dueDate).toLocaleDateString('id-ID', {day: 'numeric', month: 'short'})}`}</p></div><div className="text-right ml-3 flex-shrink-0">{isDraft ? <span className="text-[10px] font-bold text-amber-600 bg-amber-100 px-2 py-1 rounded-lg">Lanjutkan →</span> : <><div className="font-black text-slate-800">{formatRupiah(p.total)}</div><button onClick={(e) => { e.stopPropagation(); togglePaid(p); }} className={`mt-1 px-2 py-0.5 rounded text-[10px] font-bold border ${p.isPaid ? 'bg-green-50 text-green-600 border-green-200' : 'bg-slate-50 text-slate-500 border-slate-200'}`}>{p.isPaid ? 'LUNAS' : 'BELUM LUNAS'}</button></>}</div></div><div className="flex justify-between pt-2 border-t border-dashed border-slate-100 mt-2"><span className="text-[10px] text-slate-400 flex items-center gap-1"><Icon name="eye" /> {isDraft ? 'Tap untuk lanjutkan' : 'Lihat detail'}</span><button onClick={(e) => { e.stopPropagation(); deletePurchase(p.id); }} className="text-[10px] text-red-400 hover:text-red-600 font-bold flex items-center gap-1"><Icon name="trash" /> Hapus</button></div></div>) })}</div>
                 </div>
                 {/* Modals OUTSIDE z-10 stacking context */}
                 {supplierModalOpen && (
@@ -1054,7 +1080,7 @@
 
                             {/* CONTENT - scrollable */}
                             <div className="flex-1 overflow-y-auto px-4 py-3 pb-24 space-y-5">
-                                <p className="text-xs text-green-600">✓ Draf tersimpan otomatis</p>
+                                <p className="text-xs text-green-600">{lastSavedDraft ? `✓ Draf tersimpan ${lastSavedDraft.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'})}` : (isEditMode ? '' : '⏳ Menunggu perubahan...')}</p>
 
                                 {/* SECTION: Detail Faktur */}
                                 <div>
@@ -1285,7 +1311,7 @@
 
                             {/* FOOTER - fixed bottom */}
                             <div className="flex-shrink-0 flex justify-between items-center px-4 py-3 border-t border-gray-200 bg-white">
-                                <button type="button" onClick={() => { clearDraft(); setEditingPurchaseId(null); setIsEditMode(false); setInvoiceModalOpen(false); setAttachmentFile(null); setAttachmentPreview(null); }} className="bg-white border border-red-400 text-red-500 px-3 py-1.5 rounded-md text-xs font-medium">
+                                <button type="button" onClick={async () => { await clearDraft(); setDraftId(null); setEditingPurchaseId(null); setIsEditMode(false); setInvoiceModalOpen(false); setAttachmentFile(null); setAttachmentPreview(null); }} className="bg-white border border-red-400 text-red-500 px-3 py-1.5 rounded-md text-xs font-medium">
                                     {isEditMode ? 'Batalkan Edit' : 'Hapus draf'}
                                 </button>
                                 <button type="button" onClick={handleSubmitInvoice} disabled={submitting || invoiceData.items.length === 0} className="bg-teal-700 text-white px-4 py-1.5 rounded-md text-xs font-medium disabled:opacity-50">
@@ -1303,12 +1329,15 @@
                                 <div className="flex items-center gap-2">
                                     <button type="button" onClick={() => setDetailModalOpen(false)} className="text-slate-400 hover:text-slate-700 mr-1"><Icon name="chevron-left" /></button>
                                     <div>
-                                        <span className="font-medium text-sm">{selectedPurchase.supplier}</span>
-                                        {selectedPurchase.invoiceNumber && <span className="ml-2 text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono">#{selectedPurchase.invoiceNumber}</span>}
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-medium text-sm">{selectedPurchase.supplier || 'Draf'}</span>
+                                            {selectedPurchase.status === 'draft' && <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-400 text-white uppercase">Draf</span>}
+                                            {selectedPurchase.invoiceNumber && <span className="text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono">#{selectedPurchase.invoiceNumber}</span>}
+                                        </div>
                                     </div>
                                 </div>
-                                <button type="button" onClick={() => handleOpenEdit(selectedPurchase)} className="flex items-center gap-1.5 bg-teal-600 text-white px-3 py-1.5 rounded-md text-xs font-bold hover:bg-teal-700 active:scale-95 transition-all">
-                                    <Icon name="pen-to-square" /> Edit
+                                <button type="button" onClick={() => handleOpenEdit(selectedPurchase)} className={`flex items-center gap-1.5 text-white px-3 py-1.5 rounded-md text-xs font-bold hover:opacity-90 active:scale-95 transition-all ${selectedPurchase.status === 'draft' ? 'bg-amber-500' : 'bg-teal-600'}`}>
+                                    <Icon name={selectedPurchase.status === 'draft' ? 'play' : 'pen-to-square'} /> {selectedPurchase.status === 'draft' ? 'Lanjutkan' : 'Edit'}
                                 </button>
                             </div>
 
@@ -1381,8 +1410,8 @@
                                 <button type="button" onClick={() => { if(confirm(`Hapus faktur ini?`)) { deletePurchase(selectedPurchase.id); setDetailModalOpen(false); } }} className="bg-white border border-red-400 text-red-500 px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1">
                                     <Icon name="trash" /> Hapus
                                 </button>
-                                <button type="button" onClick={() => handleOpenEdit(selectedPurchase)} className="bg-teal-600 text-white px-4 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 hover:bg-teal-700 active:scale-95 transition-all">
-                                    <Icon name="pen-to-square" /> Edit Faktur
+                                <button type="button" onClick={() => handleOpenEdit(selectedPurchase)} className={`text-white px-4 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 active:scale-95 transition-all ${selectedPurchase.status === 'draft' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-teal-600 hover:bg-teal-700'}`}>
+                                    <Icon name={selectedPurchase.status === 'draft' ? 'play' : 'pen-to-square'} /> {selectedPurchase.status === 'draft' ? 'Lanjutkan Draf' : 'Edit Faktur'}
                                 </button>
                             </div>
                         </div>
