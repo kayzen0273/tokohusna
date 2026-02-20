@@ -2291,7 +2291,8 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 setSearch(''); 
                 setCancelModal(false); 
                 setActiveCartId(null);
-                showToast("Transaksi dibatalkan & keranjang dikosongkan", "info"); 
+                showToast("Transaksi dibatalkan & keranjang dikosongkan", "info");
+                setIsSessionActive(false);
             };
             
             const resumeTransaction = async (pendingItem) => { 
