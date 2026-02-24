@@ -1831,6 +1831,32 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             const [paymentAmount, setPaymentAmount] = useState('');
             const [checkoutModal, setCheckoutModal] = useState(false);
             const [paymentMethod, setPaymentMethod] = useState(''); // '', 'tunai', 'qris', 'transfer'
+            const [paymentProofImage, setPaymentProofImage] = useState(null); // base64 bukti bayar
+            const proofInputRef = React.useRef(null);
+
+            const handleProofImageChange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    // Compress image using canvas
+                    const img = new window.Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX = 800;
+                        let w = img.width, h = img.height;
+                        if (w > MAX || h > MAX) {
+                            if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+                            else { w = Math.round(w * MAX / h); h = MAX; }
+                        }
+                        canvas.width = w; canvas.height = h;
+                        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                        setPaymentProofImage(canvas.toDataURL('image/jpeg', 0.7));
+                    };
+                    img.src = ev.target.result;
+                };
+                reader.readAsDataURL(file);
+            };
             const [isProcessing, setIsProcessing] = useState(false);
             const [paymentSuccess, setPaymentSuccess] = useState(false);
             const [receiptData, setReceiptData] = useState(null);
@@ -2370,6 +2396,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         pay: finalPay, 
                         change: finalChange, 
                         paymentMethod: paymentMethod || 'tunai',
+                        paymentProofImage: paymentProofImage || null,
                         status: 'success', 
                         cashierName: cashierName || user.email || 'Admin',
                         storeId: currentProfile.id || 'default',
@@ -2400,6 +2427,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 setCart([]); 
                 setPaymentAmount(''); 
                 setPaymentMethod('');
+                setPaymentProofImage(null);
                 setIsSessionActive(false); 
                 setActiveCartId(null);
                 // cashierName TETAP disimpan untuk sesi berikutnya
@@ -2823,7 +2851,22 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                 <h3 className="text-base font-bold text-slate-800 mb-1">Scan QRIS</h3>
                                 <div className="text-2xl font-black text-teal-700 mb-3">{formatRupiah(grandTotal)}</div>
                                 <div className="flex justify-center mb-3"><img src={settings.qrisImageUrl} alt="QRIS" className="w-56 h-56 object-contain rounded-2xl border border-slate-200 shadow" /></div>
-                                <p className="text-xs text-slate-400 mb-4">Scan QR di atas dengan aplikasi dompet digital apapun</p>
+                                <p className="text-xs text-slate-400 mb-3">Scan QR di atas dengan aplikasi dompet digital apapun</p>
+                                {/* UPLOAD BUKTI */}
+                                <input ref={proofInputRef} type="file" accept="image/*" className="hidden" onChange={handleProofImageChange} />
+                                <div className="mb-4">
+                                    {paymentProofImage ? (
+                                        <div className="relative inline-block">
+                                            <img src={paymentProofImage} alt="Bukti" className="w-full max-h-32 object-contain rounded-xl border-2 border-teal-300 shadow" />
+                                            <button onClick={() => setPaymentProofImage(null)} className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs flex items-center justify-center shadow"><Icon name="xmark" /></button>
+                                            <p className="text-[10px] text-teal-600 font-bold mt-1">✅ Bukti tersimpan</p>
+                                        </div>
+                                    ) : (
+                                        <button onClick={() => proofInputRef.current && proofInputRef.current.click()} className="w-full py-2.5 rounded-xl border-2 border-dashed border-slate-300 text-slate-400 hover:border-teal-400 hover:text-teal-600 hover:bg-teal-50 transition-all text-xs font-bold flex items-center justify-center gap-2">
+                                            <Icon name="camera" /> Upload / Foto Bukti Pembayaran <span className="text-[10px] font-normal opacity-70">(opsional)</span>
+                                        </button>
+                                    )}
+                                </div>
                                 <button onClick={handleCheckout} disabled={isProcessing} className="w-full py-3.5 bg-teal-600 text-white rounded-xl font-bold shadow-lg disabled:opacity-50 flex justify-center items-center gap-2">{isProcessing ? <div className="typing-dot bg-white"></div> : <><Icon name="check" /> Konfirmasi Sudah Bayar</>}</button>
                             </div>
                         ) : paymentMethod === 'transfer' ? (
@@ -2831,11 +2874,26 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                 <button onClick={() => setPaymentMethod('')} className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 mb-3"><Icon name="arrow-left" /> Kembali</button>
                                 <h3 className="text-base font-bold text-slate-800 mb-1">Transfer Bank</h3>
                                 <div className="text-2xl font-black text-teal-700 mb-3">{formatRupiah(grandTotal)}</div>
-                                <div className="bg-teal-50 border border-teal-200 rounded-2xl p-4 mb-4 text-left">
+                                <div className="bg-teal-50 border border-teal-200 rounded-2xl p-4 mb-3 text-left">
                                     <p className="text-xs text-teal-600 font-bold mb-1 uppercase">Info Rekening</p>
                                     <p className="font-black text-slate-800 text-lg whitespace-pre-wrap">{settings.transferInfo}</p>
                                 </div>
-                                <p className="text-xs text-slate-400 mb-4">Transfer sejumlah total di atas ke rekening tersebut</p>
+                                <p className="text-xs text-slate-400 mb-3">Transfer sejumlah total di atas ke rekening tersebut</p>
+                                {/* UPLOAD BUKTI */}
+                                <input ref={proofInputRef} type="file" accept="image/*" className="hidden" onChange={handleProofImageChange} />
+                                <div className="mb-4">
+                                    {paymentProofImage ? (
+                                        <div className="relative inline-block w-full">
+                                            <img src={paymentProofImage} alt="Bukti" className="w-full max-h-32 object-contain rounded-xl border-2 border-teal-300 shadow" />
+                                            <button onClick={() => setPaymentProofImage(null)} className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs flex items-center justify-center shadow"><Icon name="xmark" /></button>
+                                            <p className="text-[10px] text-teal-600 font-bold mt-1">✅ Bukti tersimpan</p>
+                                        </div>
+                                    ) : (
+                                        <button onClick={() => proofInputRef.current && proofInputRef.current.click()} className="w-full py-2.5 rounded-xl border-2 border-dashed border-slate-300 text-slate-400 hover:border-teal-400 hover:text-teal-600 hover:bg-teal-50 transition-all text-xs font-bold flex items-center justify-center gap-2">
+                                            <Icon name="camera" /> Upload / Foto Bukti Pembayaran <span className="text-[10px] font-normal opacity-70">(opsional)</span>
+                                        </button>
+                                    )}
+                                </div>
                                 <button onClick={handleCheckout} disabled={isProcessing} className="w-full py-3.5 bg-teal-600 text-white rounded-xl font-bold shadow-lg disabled:opacity-50 flex justify-center items-center gap-2">{isProcessing ? <div className="typing-dot bg-white"></div> : <><Icon name="check" /> Konfirmasi Sudah Bayar</>}</button>
                             </div>
                         ) : null}
@@ -3126,13 +3184,27 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         <div className="flex gap-2"><div className="relative flex-1"><select className="w-full appearance-none pl-3 pr-8 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-sky-500" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} ><option value="all">Semua Status</option><option value="success">Sukses</option><option value="partial">Retur Sebagian</option><option value="returned">Retur Full (Batal)</option></select><Icon name="filter" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" /></div><div className="relative flex-1"><select className="w-full appearance-none pl-3 pr-8 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-sky-500" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} ><option value="newest">Terbaru</option><option value="oldest">Terlama</option><option value="highest">Total Terbanyak</option><option value="lowest">Total Tersedikit</option></select><Icon name="arrow-down-wide-short" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" /></div></div>
                     </div>
                     <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1">
-                        {loading ? <div className="text-center py-10 text-slate-400"><div className="typing-dot bg-sky-500"></div> Loading...</div> : processedTransactions.length === 0 ? (<div className="text-center py-12 flex flex-col items-center opacity-60"><div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3"><Icon name="calendar-xmark" className="text-2xl text-slate-400" /></div><p className="font-semibold text-slate-500">Tidak ada transaksi</p><p className="text-xs text-slate-400">Sesuai filter pencarian</p></div>) : processedTransactions.map(tx => (<div key={tx.id} onClick={() => setSelectedTx(tx)} className={`p-4 rounded-2xl border shadow-sm cursor-pointer transition-all hover:shadow-md ${tx.status === 'returned' ? 'bg-red-50 border-red-100 opacity-80' : 'bg-white border-slate-100 hover:border-sky-300'}`}><div className="flex justify-between items-start mb-2"><div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{new Date(tx.date.seconds ? tx.date.toDate() : tx.date).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})} WIB {tx.storeName && `• ${tx.storeName}`}</p><h4 className={`font-black text-lg ${tx.status === 'returned' ? 'text-red-500 line-through' : 'text-slate-800'}`}>{formatRupiah(tx.total)}</h4></div>{tx.status === 'returned' ? <span className="bg-red-100 text-red-600 text-[10px] font-bold px-2 py-1 rounded-full">BATAL</span> : (tx.status === 'partial' ? <span className="bg-amber-100 text-amber-600 text-[10px] font-bold px-2 py-1 rounded-full">SEBAGIAN</span> : <span className="bg-green-100 text-green-600 text-[10px] font-bold px-2 py-1 rounded-full">SUKSES</span>)}</div><div className="text-xs text-slate-500 truncate">{tx.items.map(i => i.name).join(', ')}</div><div className="mt-3 flex justify-between items-center border-t border-dashed border-slate-200 pt-2"><span className="text-[10px] font-bold text-slate-400">{tx.items.length} Barang</span><span className="text-[10px] text-sky-600 font-bold flex items-center gap-1">Lihat Detail <Icon name="chevron-right" /></span></div></div>))}
+                        {loading ? <div className="text-center py-10 text-slate-400"><div className="typing-dot bg-sky-500"></div> Loading...</div> : processedTransactions.length === 0 ? (<div className="text-center py-12 flex flex-col items-center opacity-60"><div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3"><Icon name="calendar-xmark" className="text-2xl text-slate-400" /></div><p className="font-semibold text-slate-500">Tidak ada transaksi</p><p className="text-xs text-slate-400">Sesuai filter pencarian</p></div>) : processedTransactions.map(tx => (<div key={tx.id} onClick={() => setSelectedTx(tx)} className={`p-4 rounded-2xl border shadow-sm cursor-pointer transition-all hover:shadow-md ${tx.status === 'returned' ? 'bg-red-50 border-red-100 opacity-80' : 'bg-white border-slate-100 hover:border-sky-300'}`}><div className="flex justify-between items-start mb-2"><div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{new Date(tx.date.seconds ? tx.date.toDate() : tx.date).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})} WIB {tx.storeName && `• ${tx.storeName}`}</p><h4 className={`font-black text-lg ${tx.status === 'returned' ? 'text-red-500 line-through' : 'text-slate-800'}`}>{formatRupiah(tx.total)}</h4></div>{tx.status === 'returned' ? <span className="bg-red-100 text-red-600 text-[10px] font-bold px-2 py-1 rounded-full">BATAL</span> : (tx.status === 'partial' ? <span className="bg-amber-100 text-amber-600 text-[10px] font-bold px-2 py-1 rounded-full">SEBAGIAN</span> : <span className="bg-green-100 text-green-600 text-[10px] font-bold px-2 py-1 rounded-full">SUKSES</span>)}</div><div className="text-xs text-slate-500 truncate">{tx.items.map(i => i.name).join(', ')}</div><div className="mt-3 flex justify-between items-center border-t border-dashed border-slate-200 pt-2"><span className="text-[10px] font-bold text-slate-400">{tx.items.length} Barang</span><div className="flex items-center gap-2">{tx.paymentProofImage && <span className="text-[10px] bg-teal-100 text-teal-700 font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1"><Icon name="camera" /> Bukti</span>}{tx.paymentMethod && tx.paymentMethod !== 'tunai' && <span className="text-[10px] bg-sky-100 text-sky-700 font-bold px-1.5 py-0.5 rounded-full">{tx.paymentMethod === 'qris' ? 'QRIS' : 'Transfer'}</span>}<span className="text-[10px] text-sky-600 font-bold flex items-center gap-1">Lihat Detail <Icon name="chevron-right" /></span></div></div></div>))}
                     </div>
                     {selectedTx && (
                         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
                             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-0 overflow-hidden flex flex-col max-h-[90vh]">
                                 <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center"><div><h3 className="font-bold text-slate-800">Detail Transaksi</h3><p className="text-[10px] text-slate-500">{selectedTx.id} {selectedTx.storeName ? `(${selectedTx.storeName})` : ''}</p></div><button onClick={() => setSelectedTx(null)} className="w-8 h-8 rounded-full bg-white text-slate-400 hover:text-slate-600 flex items-center justify-center shadow-sm"><Icon name="xmark" /></button></div>
-                                <div className="p-5 overflow-y-auto flex-1"><div className="space-y-4">{selectedTx.items.map((item, idx) => { const returnedQty = item.returnedQty || 0; const remainingQty = item.cartQty - returnedQty; const isFullyReturned = remainingQty === 0; return (<div key={idx} className={`p-3 rounded-xl border ${isFullyReturned ? 'bg-red-50 border-red-100' : 'bg-slate-50 border-slate-100'}`}><div className="flex justify-between items-start mb-2"><div className="flex-1"><p className={`font-bold text-sm ${isFullyReturned ? 'text-red-600 line-through' : 'text-slate-700'}`}>{item.name}</p><p className="text-[10px] text-slate-500">{item.cartQty} x {formatRupiah(item.price)}</p>{returnedQty > 0 && <span className="text-[9px] font-bold text-red-500 bg-red-100 px-1.5 py-0.5 rounded-sm">Sudah Retur: {returnedQty}</span>}</div><div className="text-right"><p className="font-bold text-slate-800 text-sm">{formatRupiah(item.cartQty * item.price)}</p>{selectedTx.status !== 'returned' && remainingQty > 0 && (<button onClick={() => openReturModal(selectedTx, item, idx)} className="mt-2 bg-white border border-red-200 text-red-500 text-[10px] font-bold px-2 py-1 rounded-lg hover:bg-red-50 transition-colors shadow-sm">Retur Item</button>)}</div></div></div>); })}</div><div className="my-4 border-t border-dashed border-slate-300"></div><div className="flex justify-between text-sm mb-1"><span className="text-slate-500">Total</span><span className="font-bold text-slate-800">{formatRupiah(selectedTx.total)}</span></div><div className="flex justify-between text-sm mb-1"><span className="text-slate-500">Bayar</span><span className="font-bold text-slate-800">{formatRupiah(selectedTx.pay)}</span></div><div className="flex justify-between text-sm"><span className="text-slate-500">Kembali</span><span className="font-bold text-green-600">{formatRupiah(selectedTx.change)}</span></div></div>
+                                <div className="p-5 overflow-y-auto flex-1"><div className="space-y-4">{selectedTx.items.map((item, idx) => { const returnedQty = item.returnedQty || 0; const remainingQty = item.cartQty - returnedQty; const isFullyReturned = remainingQty === 0; return (<div key={idx} className={`p-3 rounded-xl border ${isFullyReturned ? 'bg-red-50 border-red-100' : 'bg-slate-50 border-slate-100'}`}><div className="flex justify-between items-start mb-2"><div className="flex-1"><p className={`font-bold text-sm ${isFullyReturned ? 'text-red-600 line-through' : 'text-slate-700'}`}>{item.name}</p><p className="text-[10px] text-slate-500">{item.cartQty} x {formatRupiah(item.price)}</p>{returnedQty > 0 && <span className="text-[9px] font-bold text-red-500 bg-red-100 px-1.5 py-0.5 rounded-sm">Sudah Retur: {returnedQty}</span>}</div><div className="text-right"><p className="font-bold text-slate-800 text-sm">{formatRupiah(item.cartQty * item.price)}</p>{selectedTx.status !== 'returned' && remainingQty > 0 && (<button onClick={() => openReturModal(selectedTx, item, idx)} className="mt-2 bg-white border border-red-200 text-red-500 text-[10px] font-bold px-2 py-1 rounded-lg hover:bg-red-50 transition-colors shadow-sm">Retur Item</button>)}</div></div></div>); })}</div><div className="my-4 border-t border-dashed border-slate-300"></div><div className="flex justify-between text-sm mb-1"><span className="text-slate-500">Total</span><span className="font-bold text-slate-800">{formatRupiah(selectedTx.total)}</span></div><div className="flex justify-between text-sm mb-1"><span className="text-slate-500">Metode</span><span className="font-bold text-slate-800">{selectedTx.paymentMethod === 'qris' ? '💳 QRIS' : selectedTx.paymentMethod === 'transfer' ? '🏦 Transfer' : '💵 Tunai'}</span></div><div className="flex justify-between text-sm mb-1"><span className="text-slate-500">Bayar</span><span className="font-bold text-slate-800">{formatRupiah(selectedTx.pay)}</span></div><div className="flex justify-between text-sm"><span className="text-slate-500">Kembali</span><span className="font-bold text-green-600">{formatRupiah(selectedTx.change)}</span></div>
+                                    {/* BUKTI PEMBAYARAN */}
+                                    {selectedTx.paymentProofImage && (
+                                        <div className="mt-4">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <div className="w-5 h-5 rounded-full bg-teal-100 flex items-center justify-center"><Icon name="camera" className="text-teal-600 text-[10px]" /></div>
+                                                <span className="text-xs font-bold text-teal-700 uppercase tracking-wide">Bukti Pembayaran</span>
+                                            </div>
+                                            <div className="rounded-2xl overflow-hidden border-2 border-teal-200 shadow-sm cursor-pointer" onClick={() => window.open(selectedTx.paymentProofImage, '_blank')}>
+                                                <img src={selectedTx.paymentProofImage} alt="Bukti Pembayaran" className="w-full object-contain max-h-64 bg-slate-50" />
+                                            </div>
+                                            <p className="text-[10px] text-slate-400 mt-1 text-center">Ketuk gambar untuk memperbesar</p>
+                                        </div>
+                                    )}
+                                </div>
                                 <div className="p-5 bg-slate-50 border-t border-slate-100 flex gap-3"><button onClick={() => handleWAHistory(selectedTx)} className="flex-1 py-3 rounded-xl bg-green-500 text-white hover:bg-green-600 font-bold shadow-sm active:scale-95 text-sm flex items-center justify-center gap-2"><Icon name="image" /> Gambar Struk (WA)</button><button onClick={() => handlePrint(selectedTx)} className="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg active:scale-95 text-sm flex items-center justify-center gap-2"><Icon name="print" /> Cetak Struk</button></div>
                             </div>
                         </div>
