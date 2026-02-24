@@ -2783,127 +2783,189 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         </div>
                     </div>
                     {checkoutModal && (
-                    <div className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
+                    <div className="fixed inset-0 z-[100] bg-white flex flex-col fade-in">
                         {!paymentSuccess ? (
-                            <div className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-sm relative">
-                                {/* HEADER */}
-                                <div className="flex items-center justify-between p-5 border-b border-slate-100">
-                                    {paymentMethod ? (
-                                        <button onClick={() => setPaymentMethod(null)} className="text-slate-400 hover:text-slate-600 flex items-center gap-1 text-sm"><Icon name="arrow-left" /> Kembali</button>
-                                    ) : (
-                                        <span className="font-bold text-slate-800">Metode Pembayaran</span>
-                                    )}
-                                    <div className="text-right">
-                                        <p className="text-xs text-slate-400">Total</p>
-                                        <p className="font-black text-xl text-slate-800">{formatRupiah(grandTotal)}</p>
-                                    </div>
-                                    <button onClick={() => { setCheckoutModal(false); setPaymentMethod(null); }} className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 ml-2"><Icon name="xmark" /></button>
-                                </div>
-
-                                {/* STEP 1: PILIH METODE */}
+                            <>
+                                {/* ===== HALAMAN PILIH METODE (mirip foto) ===== */}
                                 {!paymentMethod && (
-                                    <div className="p-5 space-y-3 pb-8">
-                                        {/* Tunai */}
-                                        <button onClick={() => setPaymentMethod('tunai')} className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-slate-100 hover:border-sky-300 hover:bg-sky-50 active:scale-95 transition-all group">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-xl bg-sky-100 flex items-center justify-center text-sky-600 group-hover:bg-sky-200 transition-colors"><Icon name="money-bill-wave" /></div>
-                                                <span className="font-bold text-slate-700">Tunai</span>
-                                            </div>
-                                            <Icon name="chevron-right" className="text-slate-300 group-hover:text-sky-500 transition-colors" />
-                                        </button>
+                                    <div className="flex flex-col h-full">
+                                        {/* Top bar */}
+                                        <div className="flex items-center px-4 pt-5 pb-2">
+                                            <button onClick={() => { setCheckoutModal(false); setPaymentMethod(null); }} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-500 transition-colors">
+                                                <Icon name="xmark" className="text-lg" />
+                                            </button>
+                                            <span className="text-sm text-slate-400 font-medium ml-2">{cart.length > 0 ? '#' + (new Date().toISOString().slice(2,10).replace(/-/g,'') + String(Math.floor(Math.random()*90+10))) : ''}</span>
+                                        </div>
 
-                                        {/* QRIS */}
-                                        <button onClick={() => setPaymentMethod('qris')} className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-slate-100 hover:border-emerald-300 hover:bg-emerald-50 active:scale-95 transition-all group" disabled={!settings.qrisImageUrl}>
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-600 group-hover:bg-emerald-200 transition-colors"><Icon name="qrcode" /></div>
-                                                <div className="text-left">
-                                                    <span className="font-bold text-slate-700">QRIS</span>
-                                                    {!settings.qrisImageUrl && <p className="text-[10px] text-slate-400">Belum dikonfigurasi di Pengaturan</p>}
-                                                </div>
-                                            </div>
-                                            <Icon name="chevron-right" className="text-slate-300 group-hover:text-emerald-500 transition-colors" />
-                                        </button>
+                                        {/* Amount */}
+                                        <div className="px-6 pt-4 pb-6">
+                                            <p className="text-5xl font-black text-slate-900 leading-tight">{formatRupiah(grandTotal)}</p>
+                                        </div>
 
-                                        {/* Transfer */}
-                                        <button onClick={() => setPaymentMethod('transfer')} className="w-full flex items-center justify-between p-4 rounded-2xl border-2 border-slate-100 hover:border-purple-300 hover:bg-purple-50 active:scale-95 transition-all group" disabled={!settings.transferAccountNumber}>
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 group-hover:bg-purple-200 transition-colors"><Icon name="building-columns" /></div>
-                                                <div className="text-left">
-                                                    <span className="font-bold text-slate-700">Transfer Bank</span>
-                                                    {!settings.transferAccountNumber && <p className="text-[10px] text-slate-400">Belum dikonfigurasi di Pengaturan</p>}
+                                        {/* Section Title */}
+                                        <div className="px-6 pb-4">
+                                            <h2 className="text-2xl font-bold text-slate-900">Metode pembayaran</h2>
+                                        </div>
+
+                                        {/* Payment Options */}
+                                        <div className="px-4 space-y-3 flex-1">
+                                            {/* Tunai */}
+                                            <button onClick={() => setPaymentMethod('tunai')} className="w-full flex items-center justify-between px-4 py-4 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 active:scale-[0.98] transition-all shadow-sm">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center">
+                                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="2" y="6" width="20" height="12" rx="2" stroke="#0d9488" strokeWidth="1.8"/><circle cx="12" cy="12" r="3" stroke="#0d9488" strokeWidth="1.8"/><path d="M6 6V5M18 6V5M6 18v1M18 18v1" stroke="#0d9488" strokeWidth="1.8" strokeLinecap="round"/></svg>
+                                                    </div>
+                                                    <span className="font-semibold text-slate-800 text-base">Tunai</span>
                                                 </div>
-                                            </div>
-                                            <Icon name="chevron-right" className="text-slate-300 group-hover:text-purple-500 transition-colors" />
-                                        </button>
+                                                <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 5l5 5-5 5" stroke="#0d9488" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                            </button>
+
+                                            {/* QRIS */}
+                                            <button onClick={() => settings.qrisImageUrl ? setPaymentMethod('qris') : null} className="w-full flex items-center justify-between px-4 py-4 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 active:scale-[0.98] transition-all shadow-sm">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center font-black text-slate-800 text-[10px] tracking-tighter">QRIS</div>
+                                                    <span className="font-semibold text-slate-800 text-base">QRIS</span>
+                                                    {!settings.qrisImageUrl && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-500 text-white">Baru</span>}
+                                                </div>
+                                                {settings.qrisImageUrl ? (
+                                                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 5l5 5-5 5" stroke="#0d9488" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                                ) : (
+                                                    <span className="text-sm font-bold text-teal-600">Aktifkan sekarang</span>
+                                                )}
+                                            </button>
+
+                                            {/* Transfer */}
+                                            <button onClick={() => settings.transferAccountNumber ? setPaymentMethod('transfer') : null} className="w-full flex items-center justify-between px-4 py-4 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 active:scale-[0.98] transition-all shadow-sm">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-10 h-10 rounded-xl bg-teal-50 flex items-center justify-center">
+                                                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3" stroke="#0d9488" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                                    </div>
+                                                    <span className="font-semibold text-slate-800 text-base">Transfer</span>
+                                                    {!settings.transferAccountNumber && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-500 text-white">Baru</span>}
+                                                </div>
+                                                {settings.transferAccountNumber ? (
+                                                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M7.5 5l5 5-5 5" stroke="#0d9488" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                                ) : (
+                                                    <span className="text-sm font-bold text-teal-600">Aktifkan sekarang</span>
+                                                )}
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
 
-                                {/* STEP 2a: TUNAI */}
+                                {/* ===== HALAMAN TUNAI ===== */}
                                 {paymentMethod === 'tunai' && (
-                                    <div className="p-5 pb-6">
-                                        <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-4">
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Pilih Nominal Cepat</label>
-                                            <div className="grid grid-cols-2 gap-2 mb-4">{getPaymentSuggestions.map((amount, idx) => (<button key={idx} onClick={() => setPaymentAmount(amount.toString())} className={`py-2 px-1 rounded-lg text-xs font-bold border transition-all active:scale-95 ${safeNumber(paymentAmount) === amount ? 'bg-sky-600 text-white border-sky-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-sky-50 hover:border-sky-300'}`}>{amount === grandTotal ? 'Uang Pas' : formatRupiah(amount)}</button>))}</div>
-                                            <div className="space-y-1">
-                                                <label className="text-[10px] font-bold text-slate-400 uppercase">Atau Ketik Manual</label>
-                                                <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">Rp</span><input autoFocus type="number" className="w-full pl-10 pr-3 py-3 rounded-lg border border-slate-200 focus:ring-2 focus:ring-sky-500 outline-none font-bold text-lg text-slate-800" placeholder="0" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} /></div>
+                                    <div className="flex flex-col h-full">
+                                        <div className="flex items-center px-4 pt-5 pb-2">
+                                            <button onClick={() => setPaymentMethod(null)} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-500 transition-colors">
+                                                <Icon name="arrow-left" className="text-lg" />
+                                            </button>
+                                            <span className="font-bold text-slate-800 ml-2">Tunai</span>
+                                        </div>
+                                        <div className="px-6 pt-4 pb-6">
+                                            <p className="text-5xl font-black text-slate-900">{formatRupiah(grandTotal)}</p>
+                                        </div>
+                                        <div className="px-4 flex-1 overflow-y-auto">
+                                            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-4">
+                                                <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Pilih Nominal Cepat</label>
+                                                <div className="grid grid-cols-2 gap-2 mb-4">{getPaymentSuggestions.map((amount, idx) => (<button key={idx} onClick={() => setPaymentAmount(amount.toString())} className={`py-3 px-1 rounded-xl text-sm font-bold border transition-all active:scale-95 ${safeNumber(paymentAmount) === amount ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-teal-50 hover:border-teal-300'}`}>{amount === grandTotal ? 'Uang Pas' : formatRupiah(amount)}</button>))}</div>
+                                                <div className="space-y-1">
+                                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Atau Ketik Manual</label>
+                                                    <div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">Rp</span><input autoFocus type="number" className="w-full pl-10 pr-3 py-3.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-teal-500 outline-none font-bold text-xl text-slate-800 bg-white" placeholder="0" value={paymentAmount} onChange={e => setPaymentAmount(e.target.value)} /></div>
+                                                </div>
+                                                <div className={`mt-4 flex justify-between text-base font-bold transition-colors ${change < 0 ? 'text-red-500' : 'text-teal-600'}`}><span>Kembalian</span><span>{change < 0 ? '-' : formatRupiah(change)}</span></div>
                                             </div>
-                                            <div className={`mt-3 flex justify-between text-sm transition-colors ${change < 0 ? 'text-red-500' : 'text-green-600'}`}><span className="font-medium">Kembalian</span><span className="font-bold">{change < 0 ? '-' : formatRupiah(change)}</span></div>
                                         </div>
-                                        <button onClick={handleCheckout} disabled={change < 0 || isProcessing} className="w-full py-3.5 bg-sky-600 text-white rounded-xl font-bold shadow-lg disabled:opacity-50 disabled:bg-slate-400 flex justify-center items-center gap-2">{isProcessing ? <div className="typing-dot bg-white"></div> : <><Icon name="wallet" /> BAYAR TUNAI</>}</button>
+                                        <div className="px-4 pb-8 pt-3">
+                                            <button onClick={handleCheckout} disabled={change < 0 || isProcessing} className="w-full py-4 bg-teal-600 text-white rounded-2xl font-bold text-base shadow-lg disabled:opacity-50 disabled:bg-slate-400 flex justify-center items-center gap-2 active:scale-[0.98] transition-all">{isProcessing ? <div className="typing-dot bg-white"></div> : <><Icon name="wallet" /> BAYAR TUNAI</>}</button>
+                                        </div>
                                     </div>
                                 )}
 
-                                {/* STEP 2b: QRIS */}
+                                {/* ===== HALAMAN QRIS ===== */}
                                 {paymentMethod === 'qris' && (
-                                    <div className="p-5 pb-6">
-                                        <p className="text-center text-sm text-slate-500 mb-3">Scan QR Code berikut untuk membayar</p>
-                                        <div className="flex justify-center mb-4">
-                                            <img src={settings.qrisImageUrl} alt="QR QRIS" className="max-h-56 rounded-2xl border-2 border-emerald-200 shadow-lg" />
+                                    <div className="flex flex-col h-full">
+                                        <div className="flex items-center px-4 pt-5 pb-2">
+                                            <button onClick={() => setPaymentMethod(null)} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-500 transition-colors">
+                                                <Icon name="arrow-left" className="text-lg" />
+                                            </button>
+                                            <span className="font-bold text-slate-800 ml-2">QRIS</span>
                                         </div>
-                                        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center mb-4">
-                                            <p className="text-xs text-emerald-700 font-bold">Total yang harus dibayar:</p>
-                                            <p className="text-2xl font-black text-emerald-800">{formatRupiah(grandTotal)}</p>
+                                        <div className="px-6 pt-4 pb-2">
+                                            <p className="text-5xl font-black text-slate-900">{formatRupiah(grandTotal)}</p>
+                                            <p className="text-slate-400 text-sm mt-1">Scan QR Code di bawah untuk membayar</p>
                                         </div>
-                                        <button onClick={handleCheckout} disabled={isProcessing} className="w-full py-3.5 bg-emerald-600 text-white rounded-xl font-bold shadow-lg disabled:opacity-50 flex justify-center items-center gap-2">{isProcessing ? <div className="typing-dot bg-white"></div> : <><Icon name="check" /> Konfirmasi Pembayaran QRIS</>}</button>
-                                    </div>
-                                )}
-
-                                {/* STEP 2c: TRANSFER */}
-                                {paymentMethod === 'transfer' && (
-                                    <div className="p-5 pb-6">
-                                        <p className="text-center text-sm text-slate-500 mb-3">Transfer ke rekening berikut</p>
-                                        <div className="bg-purple-50 border-2 border-purple-200 rounded-2xl p-4 mb-4">
-                                            <div className="text-center mb-3">
-                                                <div className="inline-flex items-center gap-2 bg-white px-3 py-1.5 rounded-full border border-purple-200 shadow-sm mb-2">
-                                                    <Icon name="building-columns" className="text-purple-500" />
-                                                    <span className="font-black text-purple-700 text-sm">{settings.transferBankName || 'Bank'}</span>
+                                        <div className="flex-1 flex items-center justify-center px-6">
+                                            <div className="w-full max-w-xs">
+                                                <div className="bg-white border-2 border-slate-100 rounded-3xl p-4 shadow-sm flex items-center justify-center">
+                                                    <img src={settings.qrisImageUrl} alt="QR QRIS" className="w-full rounded-2xl" style={{maxHeight: '280px', objectFit: 'contain'}} />
+                                                </div>
+                                                <div className="mt-3 bg-teal-50 border border-teal-100 rounded-2xl p-3 text-center">
+                                                    <p className="text-xs text-teal-600 font-semibold">Total Pembayaran</p>
+                                                    <p className="text-xl font-black text-teal-800">{formatRupiah(grandTotal)}</p>
                                                 </div>
                                             </div>
-                                            <div className="bg-white rounded-xl p-3 text-center border border-purple-100 mb-2">
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase mb-1">Nomor Rekening</p>
-                                                <p className="text-2xl font-black text-slate-800 tracking-widest font-mono">{settings.transferAccountNumber}</p>
-                                                <p className="text-sm text-slate-500 mt-1">a.n. <span className="font-bold text-slate-700">{settings.transferAccountName}</span></p>
-                                            </div>
-                                            <div className="bg-purple-100 rounded-xl p-3 text-center">
-                                                <p className="text-xs text-purple-700 font-bold">Nominal Transfer:</p>
-                                                <p className="text-2xl font-black text-purple-900">{formatRupiah(grandTotal)}</p>
-                                            </div>
                                         </div>
-                                        <button onClick={handleCheckout} disabled={isProcessing} className="w-full py-3.5 bg-purple-600 text-white rounded-xl font-bold shadow-lg disabled:opacity-50 flex justify-center items-center gap-2">{isProcessing ? <div className="typing-dot bg-white"></div> : <><Icon name="check" /> Konfirmasi Pembayaran Transfer</>}</button>
+                                        <div className="px-4 pb-8 pt-3">
+                                            <button onClick={handleCheckout} disabled={isProcessing} className="w-full py-4 bg-teal-600 text-white rounded-2xl font-bold text-base shadow-lg disabled:opacity-50 flex justify-center items-center gap-2 active:scale-[0.98] transition-all">{isProcessing ? <div className="typing-dot bg-white"></div> : <><Icon name="check" /> Konfirmasi Sudah Dibayar</>}</button>
+                                        </div>
                                     </div>
                                 )}
-                            </div>
+
+                                {/* ===== HALAMAN TRANSFER ===== */}
+                                {paymentMethod === 'transfer' && (
+                                    <div className="flex flex-col h-full">
+                                        <div className="flex items-center px-4 pt-5 pb-2">
+                                            <button onClick={() => setPaymentMethod(null)} className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-slate-100 text-slate-500 transition-colors">
+                                                <Icon name="arrow-left" className="text-lg" />
+                                            </button>
+                                            <span className="font-bold text-slate-800 ml-2">Transfer Bank</span>
+                                        </div>
+                                        <div className="px-6 pt-4 pb-4">
+                                            <p className="text-5xl font-black text-slate-900">{formatRupiah(grandTotal)}</p>
+                                            <p className="text-slate-400 text-sm mt-1">Transfer ke rekening berikut</p>
+                                        </div>
+                                        <div className="flex-1 px-4 overflow-y-auto">
+                                            <div className="bg-white border-2 border-slate-100 rounded-3xl p-6 shadow-sm">
+                                                <div className="flex items-center gap-3 mb-5 pb-4 border-b border-slate-100">
+                                                    <div className="w-12 h-12 rounded-2xl bg-teal-50 flex items-center justify-center">
+                                                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v3M12 14v3M16 14v3" stroke="#0d9488" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-xs text-slate-400 font-semibold">Bank</p>
+                                                        <p className="font-black text-slate-800 text-lg">{settings.transferBankName || 'Bank'}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="mb-4">
+                                                    <p className="text-xs text-slate-400 font-semibold mb-1">Nomor Rekening</p>
+                                                    <p className="text-3xl font-black text-slate-900 tracking-wider font-mono">{settings.transferAccountNumber}</p>
+                                                </div>
+                                                <div>
+                                                    <p className="text-xs text-slate-400 font-semibold mb-1">Atas Nama</p>
+                                                    <p className="font-bold text-slate-700 text-base">{settings.transferAccountName}</p>
+                                                </div>
+                                            </div>
+                                            <div className="mt-3 bg-teal-50 border border-teal-100 rounded-2xl p-4 text-center">
+                                                <p className="text-xs text-teal-600 font-semibold">Nominal Transfer</p>
+                                                <p className="text-2xl font-black text-teal-800">{formatRupiah(grandTotal)}</p>
+                                            </div>
+                                        </div>
+                                        <div className="px-4 pb-8 pt-3">
+                                            <button onClick={handleCheckout} disabled={isProcessing} className="w-full py-4 bg-teal-600 text-white rounded-2xl font-bold text-base shadow-lg disabled:opacity-50 flex justify-center items-center gap-2 active:scale-[0.98] transition-all">{isProcessing ? <div className="typing-dot bg-white"></div> : <><Icon name="check" /> Konfirmasi Sudah Ditransfer</>}</button>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
                         ) : (
-                            <div className="bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl w-full max-w-sm p-8 relative flex flex-col items-center text-center pop-in">
+                            <div className="flex flex-col h-full items-center justify-center p-8 text-center pop-in">
                                 <div className="w-24 h-24 relative mb-4"><svg className="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52"><circle className="checkmark__circle" cx="26" cy="26" r="25" fill="none"/><path className="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/></svg></div>
                                 <h2 className="text-2xl font-black text-slate-800 mb-1">Transaksi Selesai</h2>
                                 <p className="text-slate-500 text-sm mb-1">Via: <span className="font-bold text-slate-700">{receiptData?.paymentMethod || 'Tunai'}</span></p>
                                 <p className="text-slate-500 text-sm mb-8">{receiptData?.paymentMethod === 'Tunai' ? <>Kembalian: <span className="font-bold text-slate-800">{formatRupiah(receiptData.change)}</span></> : 'Pembayaran non-tunai tercatat'}</p>
-                                <div className="w-full space-y-3">
-                                    <button onClick={handlePrintAction} className="w-full py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><Icon name="print" /> Cetak Bluetooth</button>
-                                    <button onClick={handleWA} className="w-full py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><Icon name="image" /> Kirim Gambar Struk (WA)</button>
-                                    <button onClick={handleCloseSuccess} className="w-full py-3 rounded-xl border-2 border-slate-100 text-slate-600 font-bold hover:bg-slate-50 active:scale-95 transition-all">Selesaikan Tanpa Struk</button>
+                                <div className="w-full max-w-xs space-y-3">
+                                    <button onClick={handlePrintAction} className="w-full py-3 rounded-2xl bg-slate-800 text-white font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><Icon name="print" /> Cetak Bluetooth</button>
+                                    <button onClick={handleWA} className="w-full py-3 rounded-2xl bg-green-500 hover:bg-green-600 text-white font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><Icon name="image" /> Kirim Gambar Struk (WA)</button>
+                                    <button onClick={handleCloseSuccess} className="w-full py-3 rounded-2xl border-2 border-slate-100 text-slate-600 font-bold hover:bg-slate-50 active:scale-95 transition-all">Selesaikan Tanpa Struk</button>
                                 </div>
                             </div>
                         )}
