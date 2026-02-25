@@ -2002,6 +2002,16 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             }, [user, currentProfile]);
 
             // NEW: Listen untuk active carts real-time dari semua user
+            // Device ID permanen untuk filter cart sendiri (tidak hilang saat refresh)
+            const DEVICE_ID = useMemo(() => {
+                let id = localStorage.getItem('pos_device_id');
+                if (!id) {
+                    id = 'dev_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+                    localStorage.setItem('pos_device_id', id);
+                }
+                return id;
+            }, []);
+
             useEffect(() => {
                 if (!user) return;
                 const q = window.query(
@@ -2010,16 +2020,16 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 );
                 const unsub = window.onSnapshot(q, (snapshot) => {
                     const allActiveCarts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    // Filter: hanya tampilkan cart dari toko yang sama dan bukan cart milik sendiri
+                    // Filter: toko sama, bukan cart milik perangkat ini (pakai deviceId permanen)
                     const filtered = allActiveCarts.filter(c => 
                         (c.storeId === currentProfile.id) && 
-                        (c.id !== activeCartId) &&
+                        (c.deviceId !== DEVICE_ID) &&
                         c.isActive
                     );
                     setActiveCarts(filtered);
                 });
                 return () => unsub();
-            }, [user, currentProfile, activeCartId]);
+            }, [user, currentProfile, DEVICE_ID]);
 
             // Ref untuk mencegah loop sync saat update datang dari luar
             const isExternalUpdate = useRef(false);
@@ -2171,7 +2181,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 try {
                     const cartRef = await window.addDoc(
                         window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts'),
-                        { cashierName: finalName, storeId: currentProfile.id, storeName: currentProfile.name, items: [], total: 0, updatedAt: window.serverTimestamp(), isActive: true }
+                        { cashierName: finalName, storeId: currentProfile.id, storeName: currentProfile.name, items: [], total: 0, updatedAt: window.serverTimestamp(), isActive: true, deviceId: DEVICE_ID }
                     );
                     setCashierName(finalName);
                     setActiveCartId(cartRef.id);
@@ -2559,7 +2569,8 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                             items: pendingItem.items,
                             total: pendingItem.total,
                             updatedAt: window.serverTimestamp(),
-                            isActive: true
+                            isActive: true,
+                            deviceId: DEVICE_ID
                         }
                     );
                     
