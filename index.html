@@ -2024,23 +2024,32 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             // Ref untuk mencegah loop sync saat update datang dari luar
             const isExternalUpdate = useRef(false);
 
-            // ===== AUTO-SAVE CART TO LOCALSTORAGE (REFRESH RECOVERY) =====
+            // ===== AUTO-SAVE CART (REFRESH RECOVERY) =====
             const CART_BACKUP_KEY = `cart_backup_${currentProfile.id}`;
+            const ACTIVE_CART_ID_KEY = `active_cart_id_${currentProfile.id}`;
 
             // Simpan cart ke localStorage setiap kali cart berubah saat sesi aktif
             useEffect(() => {
-                if (isSessionActive && cart.length > 0) {
-                    localStorage.setItem(CART_BACKUP_KEY, JSON.stringify({
-                        cart,
-                        cashierName,
-                        storeId: currentProfile.id,
-                        storeName: currentProfile.name,
-                        timestamp: Date.now()
-                    }));
-                }
+                if (!isSessionActive || cart.length === 0) return;
+                localStorage.setItem(CART_BACKUP_KEY, JSON.stringify({
+                    cart,
+                    cashierName,
+                    storeId: currentProfile.id,
+                    storeName: currentProfile.name,
+                    timestamp: Date.now()
+                }));
             }, [cart, isSessionActive, cashierName]);
 
-            // Handler sebelum halaman di-refresh/tutup: paksa simpan ke localStorage
+            // Simpan activeCartId ke localStorage agar bisa dihapus saat recovery
+            useEffect(() => {
+                if (activeCartId) {
+                    localStorage.setItem(ACTIVE_CART_ID_KEY, activeCartId);
+                } else {
+                    localStorage.removeItem(ACTIVE_CART_ID_KEY);
+                }
+            }, [activeCartId]);
+
+            // beforeunload: paksa simpan cart terbaru sebelum refresh/tutup
             useEffect(() => {
                 const handleBeforeUnload = () => {
                     if (isSessionActive && cart.length > 0) {
@@ -2055,37 +2064,53 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 };
                 window.addEventListener('beforeunload', handleBeforeUnload);
                 return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-            }, [isSessionActive, cart, cashierName, currentProfile, CART_BACKUP_KEY]);
+            }, [isSessionActive, cart, cashierName, currentProfile]);
 
-            // Saat komponen mount + user tersedia: cek localStorage, auto-save ke pending cart
+            // Recovery saat app dibuka kembali setelah refresh:
+            // 1. Hapus active_cart lama dari Firestore (agar tidak muncul sebagai "Kasir Lain")
+            // 2. Simpan sebagai pending_cart saja
             useEffect(() => {
                 if (!user) return;
                 const saved = localStorage.getItem(CART_BACKUP_KEY);
+                const staleActiveCartId = localStorage.getItem(ACTIVE_CART_ID_KEY);
+
+                // Bersihkan localStorage terlebih dahulu agar tidak recovery berulang
+                localStorage.removeItem(CART_BACKUP_KEY);
+                localStorage.removeItem(ACTIVE_CART_ID_KEY);
+
+                // Hapus active_cart lama dari Firestore agar tidak muncul sebagai kasir lain
+                if (staleActiveCartId) {
+                    window.deleteDoc(
+                        window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', staleActiveCartId)
+                    ).catch(() => {});
+                }
+
                 if (!saved) return;
                 try {
                     const backup = JSON.parse(saved);
                     const isRecent = (Date.now() - backup.timestamp) < 86400000; // 24 jam
-                    if (backup.cart && backup.cart.length > 0 && isRecent) {
-                        const grandTotalBackup = backup.cart.reduce((acc, item) => acc + (safeNumber(item.price) * item.cartQty), 0);
-                        window.addDoc(
-                            window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pending_carts'),
-                            {
-                                date: new Date().toISOString(),
-                                items: backup.cart,
-                                total: grandTotalBackup,
-                                cashierName: backup.cashierName || 'Kasir',
-                                device: navigator.userAgent,
-                                storeProfile: backup.storeName,
-                                storeId: backup.storeId,
-                                createdAt: window.serverTimestamp(),
-                                recoveredFromRefresh: true
-                            }
-                        ).then(() => {
-                            showToast('🔄 Keranjang sebelumnya otomatis disimpan sebagai Tertunda');
-                        }).catch(err => console.error('Gagal menyimpan keranjang recovery:', err));
-                    }
+                    if (!backup.cart || backup.cart.length === 0 || !isRecent) return;
+
+                    const grandTotalBackup = backup.cart.reduce(
+                        (acc, item) => acc + (safeNumber(item.price) * item.cartQty), 0
+                    );
+                    window.addDoc(
+                        window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pending_carts'),
+                        {
+                            date: new Date().toISOString(),
+                            items: backup.cart,
+                            total: grandTotalBackup,
+                            cashierName: backup.cashierName || 'Kasir',
+                            device: navigator.userAgent,
+                            storeProfile: backup.storeName,
+                            storeId: backup.storeId,
+                            createdAt: window.serverTimestamp(),
+                            recoveredFromRefresh: true
+                        }
+                    ).then(() => {
+                        showToast('🔄 Keranjang disimpan otomatis sebagai Tertunda');
+                    }).catch(err => console.error('Gagal recovery keranjang:', err));
                 } catch(e) { console.error('Error parsing backup cart:', e); }
-                localStorage.removeItem(CART_BACKUP_KEY);
             }, [user]);
             // ===== END AUTO-SAVE =====
 
@@ -2489,6 +2514,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     }
                 }
                 
+                clearCartBackup(); // Sesi berakhir normal, hapus flag & backup
                 setIsSessionActive(false); 
                 setSearch(''); 
                 setCart([]);
@@ -2511,6 +2537,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 setSearch(''); 
                 setCancelModal(false); 
                 setActiveCartId(null);
+                clearCartBackup(); // Sesi berakhir normal
                 showToast("Transaksi dibatalkan & keranjang dikosongkan", "info");
                 setIsSessionActive(false);
             };
@@ -2590,6 +2617,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         }
                     }
                     
+                    clearCartBackup(); // Checkout berhasil, hapus flag
                     setReceiptData({ ...newTransaction, id: docRef.id, date: new Date() }); 
                     setPaymentSuccess(true); showToast("Transaksi Berhasil!");
                 } catch (error) { console.error(error); showToast("Transaksi Gagal", "error"); } finally { setIsProcessing(false); }
@@ -2603,6 +2631,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 setPaymentAmount(''); 
                 setPaymentMethod('');
                 setPaymentProofImage(null);
+                clearCartBackup(); // Sesi berakhir normal
                 setIsSessionActive(false); 
                 setActiveCartId(null);
                 // cashierName TETAP disimpan untuk sesi berikutnya
