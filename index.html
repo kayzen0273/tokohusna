@@ -2024,6 +2024,71 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             // Ref untuk mencegah loop sync saat update datang dari luar
             const isExternalUpdate = useRef(false);
 
+            // ===== AUTO-SAVE CART TO LOCALSTORAGE (REFRESH RECOVERY) =====
+            const CART_BACKUP_KEY = `cart_backup_${currentProfile.id}`;
+
+            // Simpan cart ke localStorage setiap kali cart berubah saat sesi aktif
+            useEffect(() => {
+                if (isSessionActive && cart.length > 0) {
+                    localStorage.setItem(CART_BACKUP_KEY, JSON.stringify({
+                        cart,
+                        cashierName,
+                        storeId: currentProfile.id,
+                        storeName: currentProfile.name,
+                        timestamp: Date.now()
+                    }));
+                }
+            }, [cart, isSessionActive, cashierName]);
+
+            // Handler sebelum halaman di-refresh/tutup: paksa simpan ke localStorage
+            useEffect(() => {
+                const handleBeforeUnload = () => {
+                    if (isSessionActive && cart.length > 0) {
+                        localStorage.setItem(CART_BACKUP_KEY, JSON.stringify({
+                            cart,
+                            cashierName,
+                            storeId: currentProfile.id,
+                            storeName: currentProfile.name,
+                            timestamp: Date.now()
+                        }));
+                    }
+                };
+                window.addEventListener('beforeunload', handleBeforeUnload);
+                return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+            }, [isSessionActive, cart, cashierName, currentProfile, CART_BACKUP_KEY]);
+
+            // Saat komponen mount + user tersedia: cek localStorage, auto-save ke pending cart
+            useEffect(() => {
+                if (!user) return;
+                const saved = localStorage.getItem(CART_BACKUP_KEY);
+                if (!saved) return;
+                try {
+                    const backup = JSON.parse(saved);
+                    const isRecent = (Date.now() - backup.timestamp) < 86400000; // 24 jam
+                    if (backup.cart && backup.cart.length > 0 && isRecent) {
+                        const grandTotalBackup = backup.cart.reduce((acc, item) => acc + (safeNumber(item.price) * item.cartQty), 0);
+                        window.addDoc(
+                            window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pending_carts'),
+                            {
+                                date: new Date().toISOString(),
+                                items: backup.cart,
+                                total: grandTotalBackup,
+                                cashierName: backup.cashierName || 'Kasir',
+                                device: navigator.userAgent,
+                                storeProfile: backup.storeName,
+                                storeId: backup.storeId,
+                                createdAt: window.serverTimestamp(),
+                                recoveredFromRefresh: true
+                            }
+                        ).then(() => {
+                            showToast('🔄 Keranjang sebelumnya otomatis disimpan sebagai Tertunda');
+                        }).catch(err => console.error('Gagal menyimpan keranjang recovery:', err));
+                    }
+                } catch(e) { console.error('Error parsing backup cart:', e); }
+                localStorage.removeItem(CART_BACKUP_KEY);
+            }, [user]);
+            // ===== END AUTO-SAVE =====
+
             // Sync cart ke Firestore setiap kali cart berubah (outgoing)
             useEffect(() => {
                 if (!isSessionActive || !activeCartId || !cashierName) return;
