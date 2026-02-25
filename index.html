@@ -2514,7 +2514,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     }
                 }
                 
-                clearCartBackup(); // Sesi berakhir normal, hapus flag & backup
+                localStorage.removeItem(CART_BACKUP_KEY); localStorage.removeItem(ACTIVE_CART_ID_KEY);
                 setIsSessionActive(false); 
                 setSearch(''); 
                 setCart([]);
@@ -2537,7 +2537,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 setSearch(''); 
                 setCancelModal(false); 
                 setActiveCartId(null);
-                clearCartBackup(); // Sesi berakhir normal
+                localStorage.removeItem(CART_BACKUP_KEY); localStorage.removeItem(ACTIVE_CART_ID_KEY);
                 showToast("Transaksi dibatalkan & keranjang dikosongkan", "info");
                 setIsSessionActive(false);
             };
@@ -2617,7 +2617,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         }
                     }
                     
-                    clearCartBackup(); // Checkout berhasil, hapus flag
+                    localStorage.removeItem(CART_BACKUP_KEY); localStorage.removeItem(ACTIVE_CART_ID_KEY);
                     setReceiptData({ ...newTransaction, id: docRef.id, date: new Date() }); 
                     setPaymentSuccess(true); showToast("Transaksi Berhasil!");
                 } catch (error) { console.error(error); showToast("Transaksi Gagal", "error"); } finally { setIsProcessing(false); }
@@ -2631,7 +2631,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 setPaymentAmount(''); 
                 setPaymentMethod('');
                 setPaymentProofImage(null);
-                clearCartBackup(); // Sesi berakhir normal
+                localStorage.removeItem(CART_BACKUP_KEY); localStorage.removeItem(ACTIVE_CART_ID_KEY);
                 setIsSessionActive(false); 
                 setActiveCartId(null);
                 // cashierName TETAP disimpan untuk sesi berikutnya
