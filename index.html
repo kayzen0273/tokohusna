@@ -2007,6 +2007,9 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 if (!user) return;
                 const savedCartId = localStorage.getItem('activeCartId');
                 if (!savedCartId) return;
+                // Cegah recovery berjalan 2x akibat user & currentProfile berubah hampir bersamaan
+                if (hasRecovered.current) return;
+                hasRecovered.current = true;
 
                 const recoverAbandonedCart = async () => {
                     try {
@@ -2028,8 +2031,8 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                     total: data.total || 0,
                                     cashierName: data.cashierName || localStorage.getItem('cashierName') || 'Kasir',
                                     device: navigator.userAgent,
-                                    storeProfile: currentProfile.name,
-                                    storeId: currentProfile.id,
+                                    storeProfile: data.storeName || currentProfile.name,
+                                    storeId: data.storeId || currentProfile.id,
                                     createdAt: window.serverTimestamp(),
                                     recoveredFromRefresh: true
                                 }
@@ -2070,6 +2073,8 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
 
             // Ref untuk mencegah loop sync saat update datang dari luar
             const isExternalUpdate = useRef(false);
+            // Ref untuk mencegah recovery berjalan lebih dari 1x akibat user/currentProfile berubah bersamaan
+            const hasRecovered = useRef(false);
 
             // Sync cart ke Firestore setiap kali cart berubah (outgoing)
             useEffect(() => {
