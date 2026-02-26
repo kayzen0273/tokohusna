@@ -421,6 +421,166 @@
         };
 
         // --- SETTINGS COMPONENT ---
+        // === RESET KERANJANG PANEL ===
+        const ResetKeranjangPanel = ({ SubHeader, c }) => {
+            const [pendingCount, setPendingCount] = useState(0);
+            const [activeCount, setActiveCount] = useState(0);
+            const [loadingReset, setLoadingReset] = useState({ pending: false, active: false, all: false });
+            const [confirmModal, setConfirmModal] = useState(null); // 'pending' | 'active' | 'all'
+
+            // Live count dari Firestore
+            useEffect(() => {
+                const q1 = window.query(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pending_carts'));
+                const unsub1 = window.onSnapshot(q1, snap => setPendingCount(snap.size));
+                const q2 = window.query(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts'));
+                const unsub2 = window.onSnapshot(q2, snap => setActiveCount(snap.size));
+                return () => { unsub1(); unsub2(); };
+            }, []);
+
+            const deleteCollection = async (collName, setKey) => {
+                setLoadingReset(prev => ({ ...prev, [setKey]: true }));
+                try {
+                    const snap = await window.getDocs(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', collName));
+                    const batch = window.writeBatch(window.db);
+                    snap.docs.forEach(d => batch.delete(d.ref));
+                    await batch.commit();
+                    // Hapus activeCartId dari localStorage jika reset active_carts
+                    if (collName === 'active_carts' || setKey === 'all') {
+                        localStorage.removeItem('activeCartId');
+                    }
+                } finally {
+                    setLoadingReset(prev => ({ ...prev, [setKey]: false }));
+                    setConfirmModal(null);
+                }
+            };
+
+            const handleConfirm = async () => {
+                if (confirmModal === 'pending') await deleteCollection('pending_carts', 'pending');
+                else if (confirmModal === 'active') await deleteCollection('active_carts', 'active');
+                else if (confirmModal === 'all') {
+                    setLoadingReset(prev => ({ ...prev, all: true }));
+                    try {
+                        const [snapP, snapA] = await Promise.all([
+                            window.getDocs(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pending_carts')),
+                            window.getDocs(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts')),
+                        ]);
+                        const batch = window.writeBatch(window.db);
+                        snapP.docs.forEach(d => batch.delete(d.ref));
+                        snapA.docs.forEach(d => batch.delete(d.ref));
+                        await batch.commit();
+                        localStorage.removeItem('activeCartId');
+                    } finally {
+                        setLoadingReset(prev => ({ ...prev, all: false }));
+                        setConfirmModal(null);
+                    }
+                }
+            };
+
+            const modalConfig = {
+                pending: { title: 'Hapus Semua Keranjang Tertunda?', msg: `Akan menghapus ${pendingCount} keranjang tertunda secara permanen.`, color: 'orange' },
+                active: { title: 'Hapus Semua Keranjang Aktif?', msg: `Akan menghapus ${activeCount} sesi kasir yang sedang aktif secara permanen.`, color: 'red' },
+                all: { title: 'Hapus SEMUA Keranjang?', msg: `Akan menghapus ${pendingCount + activeCount} keranjang (tertunda + aktif) sekaligus. Tindakan ini tidak bisa dibatalkan!`, color: 'red' },
+            };
+
+            return (
+                <div className={`bg-white/90 backdrop-blur-sm rounded-[30px] shadow-soft border ${c.border} overflow-hidden`}>
+                    <SubHeader />
+                    <div className="p-5 space-y-4">
+
+                        {/* Info ringkasan */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 text-center">
+                                <div className="text-3xl font-black text-orange-600">{pendingCount}</div>
+                                <div className="text-xs font-bold text-orange-500 mt-1">Keranjang Tertunda</div>
+                            </div>
+                            <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-center">
+                                <div className="text-3xl font-black text-red-600">{activeCount}</div>
+                                <div className="text-xs font-bold text-red-500 mt-1">Sesi Kasir Aktif</div>
+                            </div>
+                        </div>
+
+                        <p className="text-[11px] text-slate-400 bg-slate-50 rounded-xl p-3 border border-slate-100">
+                            ⚠️ Reset akan menghapus data keranjang dari Firestore secara permanen. Riwayat transaksi yang sudah selesai <b>tidak</b> akan terpengaruh.
+                        </p>
+
+                        {/* Tombol reset per jenis */}
+                        <div className="space-y-2">
+                            <button
+                                onClick={() => setConfirmModal('pending')}
+                                disabled={pendingCount === 0 || loadingReset.pending}
+                                className="w-full flex items-center gap-3 p-4 rounded-2xl border-2 border-orange-200 bg-orange-50 hover:bg-orange-100 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                <div className="w-10 h-10 rounded-xl bg-orange-500 text-white flex items-center justify-center flex-shrink-0">
+                                    {loadingReset.pending ? <div className="typing-dot bg-white"></div> : <Icon name="clock-rotate-left" />}
+                                </div>
+                                <div className="flex-1 text-left">
+                                    <p className="font-bold text-orange-800 text-sm">Kosongkan Keranjang Tertunda</p>
+                                    <p className="text-[11px] text-orange-500">{pendingCount} keranjang tertunda akan dihapus</p>
+                                </div>
+                                <Icon name="trash" className="text-orange-400" />
+                            </button>
+
+                            <button
+                                onClick={() => setConfirmModal('active')}
+                                disabled={activeCount === 0 || loadingReset.active}
+                                className="w-full flex items-center gap-3 p-4 rounded-2xl border-2 border-red-200 bg-red-50 hover:bg-red-100 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                <div className="w-10 h-10 rounded-xl bg-red-500 text-white flex items-center justify-center flex-shrink-0">
+                                    {loadingReset.active ? <div className="typing-dot bg-white"></div> : <Icon name="cash-register" />}
+                                </div>
+                                <div className="flex-1 text-left">
+                                    <p className="font-bold text-red-800 text-sm">Kosongkan Sesi Kasir Aktif</p>
+                                    <p className="text-[11px] text-red-500">{activeCount} sesi aktif akan dihapus</p>
+                                </div>
+                                <Icon name="trash" className="text-red-400" />
+                            </button>
+
+                            <button
+                                onClick={() => setConfirmModal('all')}
+                                disabled={(pendingCount + activeCount) === 0 || loadingReset.all}
+                                className="w-full flex items-center gap-3 p-4 rounded-2xl border-2 border-red-400 bg-red-600 hover:bg-red-700 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                <div className="w-10 h-10 rounded-xl bg-white/20 text-white flex items-center justify-center flex-shrink-0">
+                                    {loadingReset.all ? <div className="typing-dot bg-white"></div> : <Icon name="trash-can" />}
+                                </div>
+                                <div className="flex-1 text-left">
+                                    <p className="font-black text-white text-sm">Hapus Semua Keranjang</p>
+                                    <p className="text-[11px] text-red-200">Tertunda + Aktif ({pendingCount + activeCount} total)</p>
+                                </div>
+                                <Icon name="triangle-exclamation" className="text-yellow-300" />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Modal Konfirmasi */}
+                    {confirmModal && (() => {
+                        const mc = modalConfig[confirmModal];
+                        return (
+                            <div className="fixed inset-0 bg-black/60 z-[200] flex items-end md:items-center justify-center p-4">
+                                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 slide-up">
+                                    <div className="text-center mb-5">
+                                        <div className="w-16 h-16 rounded-full bg-red-100 text-red-500 flex items-center justify-center text-3xl mx-auto mb-3">
+                                            <Icon name="triangle-exclamation" />
+                                        </div>
+                                        <h3 className="font-black text-slate-800 text-lg">{mc.title}</h3>
+                                        <p className="text-sm text-slate-500 mt-1">{mc.msg}</p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button onClick={() => setConfirmModal(null)} className="py-3 rounded-xl border-2 border-slate-200 text-slate-700 font-bold text-sm hover:bg-slate-50 active:scale-95 transition-all">
+                                            Batal
+                                        </button>
+                                        <button onClick={handleConfirm} className="py-3 rounded-xl bg-red-600 text-white font-bold text-sm hover:bg-red-700 active:scale-95 transition-all">
+                                            Ya, Hapus
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
+                </div>
+            );
+        };
+
         const SettingsView = ({ settings, onSave, loading }) => {
             const [localSettings, setLocalSettings] = useState(settings);
             const [profiles, setProfiles] = useState(() => settings.storeProfiles || [{ id: 'default', name: settings.storeName || APP_NAME, address: settings.storeAddress || '', footer: settings.receiptFooter || "Terima Kasih", headers: [] }]);
@@ -533,6 +693,7 @@
                 { id: 'kasir', label: 'Identitas Kasir', desc: 'Nama kasir default perangkat ini', icon: 'user-tie', color: 'sky' },
                 { id: 'pembayaran', label: 'Metode Pembayaran', desc: 'Setting QRIS dan rekening transfer', icon: 'credit-card', color: 'teal' },
                 { id: 'whatsapp', label: 'Format WhatsApp', desc: 'Info pengiriman gambar struk via WA', icon: 'whatsapp', color: 'green' },
+                { id: 'reset_keranjang', label: 'Reset Keranjang', desc: 'Hapus semua keranjang aktif & tertunda', icon: 'trash-can', color: 'red' },
             ];
 
             const colorMap = {
@@ -540,6 +701,7 @@
                 slate: { bg: 'bg-slate-50', border: 'border-slate-200', icon: 'bg-slate-700', text: 'text-slate-800', btn: 'bg-slate-800 hover:bg-slate-900' },
                 teal: { bg: 'bg-teal-50', border: 'border-teal-200', icon: 'bg-teal-600', text: 'text-teal-800', btn: 'bg-teal-600 hover:bg-teal-700' },
                 green: { bg: 'bg-green-50', border: 'border-green-200', icon: 'bg-green-600', text: 'text-green-800', btn: 'bg-green-600 hover:bg-green-700' },
+                red: { bg: 'bg-red-50', border: 'border-red-200', icon: 'bg-red-600', text: 'text-red-800', btn: 'bg-red-600 hover:bg-red-700' },
             };
 
             return (
@@ -737,6 +899,10 @@
                                     </div>
                                 </div>
                             </div>
+                        );
+
+                        if (activeMenu === 'reset_keranjang') return (
+                            <ResetKeranjangPanel SubHeader={SubHeader} c={c} />
                         );
 
                         return null;
@@ -1985,6 +2151,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             const [showHelpCancelModal, setShowHelpCancelModal] = useState(false);
             const [priceModal, setPriceModal] = useState({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 }); // Modal pilih harga
             const [editingCartItem, setEditingCartItem] = useState(null); // Track item yang sedang diedit dari cart
+            const [showClearAllModal, setShowClearAllModal] = useState(false); // Modal konfirmasi hapus semua keranjang
 
             useEffect(() => {
                 if (!user) return;
@@ -2002,19 +2169,6 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             }, [user, currentProfile]);
 
             // NEW: Listen untuk active carts real-time dari semua user
-            // Device ID permanen untuk filter cart sendiri (tidak hilang saat refresh)
-            const DEVICE_ID = useMemo(() => {
-                let id = localStorage.getItem('pos_device_id');
-                if (!id) {
-                    id = 'dev_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-                    localStorage.setItem('pos_device_id', id);
-                }
-                return id;
-            }, []);
-
-            // Simpan raw carts dari Firestore (tanpa filter stale) untuk dicek real-time
-            const [rawActiveCarts, setRawActiveCarts] = useState([]);
-
             useEffect(() => {
                 if (!user) return;
                 const q = window.query(
@@ -2022,145 +2176,20 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     window.orderBy('updatedAt', 'desc')
                 );
                 const unsub = window.onSnapshot(q, (snapshot) => {
-                    const all = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    setRawActiveCarts(all);
+                    const allActiveCarts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    // Filter: hanya tampilkan cart dari toko yang sama dan bukan cart milik sendiri
+                    const filtered = allActiveCarts.filter(c => 
+                        (c.storeId === currentProfile.id) && 
+                        (c.id !== activeCartId) &&
+                        c.isActive
+                    );
+                    setActiveCarts(filtered);
                 });
                 return () => unsub();
-            }, [user]);
-
-            // Filter stale carts secara real-time setiap 1 detik
-            // Cart dianggap mati jika lastSeen > 12 detik lalu (heartbeat 5s + buffer 7s)
-            useEffect(() => {
-                const STALE_MS = 12000;
-                const refilter = () => {
-                    const now = Date.now();
-                    const filtered = rawActiveCarts.filter(c => {
-                        if (c.storeId !== currentProfile.id) return false;
-                        if (c.deviceId === DEVICE_ID) return false;
-                        if (!c.isActive) return false;
-                        if (c.lastSeen) {
-                            const lastSeen = c.lastSeen.toMillis ? c.lastSeen.toMillis() : c.lastSeen;
-                            if (now - lastSeen > STALE_MS) return false;
-                        }
-                        return true;
-                    });
-                    setActiveCarts(filtered);
-                };
-                refilter(); // jalankan segera saat rawActiveCarts berubah
-                const interval = setInterval(refilter, 1000); // cek ulang tiap 1 detik
-                return () => clearInterval(interval);
-            }, [rawActiveCarts, currentProfile, DEVICE_ID]);
+            }, [user, currentProfile, activeCartId]);
 
             // Ref untuk mencegah loop sync saat update datang dari luar
             const isExternalUpdate = useRef(false);
-
-            // ===== AUTO-SAVE CART (REFRESH RECOVERY) =====
-            const CART_BACKUP_KEY = `cart_backup_${currentProfile.id}`;
-            const ACTIVE_CART_ID_KEY = `active_cart_id_${currentProfile.id}`;
-
-            // Simpan cart ke localStorage setiap kali cart berubah saat sesi aktif
-            useEffect(() => {
-                if (!isSessionActive || cart.length === 0) return;
-                localStorage.setItem(CART_BACKUP_KEY, JSON.stringify({
-                    cart,
-                    cashierName,
-                    storeId: currentProfile.id,
-                    storeName: currentProfile.name,
-                    timestamp: Date.now()
-                }));
-            }, [cart, isSessionActive, cashierName]);
-
-            // Simpan activeCartId ke localStorage agar bisa dihapus saat recovery
-            useEffect(() => {
-                if (activeCartId) {
-                    localStorage.setItem(ACTIVE_CART_ID_KEY, activeCartId);
-                } else {
-                    localStorage.removeItem(ACTIVE_CART_ID_KEY);
-                }
-            }, [activeCartId]);
-
-            // HEARTBEAT: update lastSeen di Firestore setiap 10 detik selama sesi aktif
-            // Device lain hanya tampilkan cart dengan lastSeen < 30 detik → jika refresh, 
-            // heartbeat berhenti dan cart otomatis menghilang dari device lain dalam 30 detik
-            useEffect(() => {
-                if (!isSessionActive || !activeCartId) return;
-                const sendHeartbeat = async () => {
-                    try {
-                        await window.updateDoc(
-                            window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', activeCartId),
-                            { lastSeen: window.serverTimestamp() }
-                        );
-                    } catch(e) {}
-                };
-                sendHeartbeat(); // kirim segera saat sesi mulai
-                const interval = setInterval(sendHeartbeat, 5000); // lalu tiap 5 detik
-                return () => clearInterval(interval);
-            }, [isSessionActive, activeCartId]);
-
-            // beforeunload: simpan cart ke localStorage saja
-            useEffect(() => {
-                const handleBeforeUnload = () => {
-                    if (isSessionActive && cart.length > 0) {
-                        localStorage.setItem(CART_BACKUP_KEY, JSON.stringify({
-                            cart,
-                            cashierName,
-                            storeId: currentProfile.id,
-                            storeName: currentProfile.name,
-                            timestamp: Date.now()
-                        }));
-                    }
-                };
-                window.addEventListener('beforeunload', handleBeforeUnload);
-                return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-            }, [isSessionActive, cart, cashierName, currentProfile]);
-
-            // Recovery saat app dibuka kembali setelah refresh:
-            // 1. Hapus active_cart lama dari Firestore (heartbeat sudah berhenti, ini hapus tuntas)
-            // 2. Simpan keranjang sebagai pending_cart
-            useEffect(() => {
-                if (!user) return;
-                const saved = localStorage.getItem(CART_BACKUP_KEY);
-                const staleActiveCartId = localStorage.getItem(ACTIVE_CART_ID_KEY);
-
-                // Bersihkan localStorage agar tidak recovery berulang
-                localStorage.removeItem(CART_BACKUP_KEY);
-                localStorage.removeItem(ACTIVE_CART_ID_KEY);
-
-                // Hapus active_cart lama dari Firestore
-                if (staleActiveCartId) {
-                    window.deleteDoc(
-                        window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', staleActiveCartId)
-                    ).catch(() => {});
-                }
-
-                if (!saved) return;
-                try {
-                    const backup = JSON.parse(saved);
-                    const isRecent = (Date.now() - backup.timestamp) < 86400000;
-                    if (!backup.cart || backup.cart.length === 0 || !isRecent) return;
-
-                    const grandTotalBackup = backup.cart.reduce(
-                        (acc, item) => acc + (safeNumber(item.price) * item.cartQty), 0
-                    );
-                    window.addDoc(
-                        window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pending_carts'),
-                        {
-                            date: new Date().toISOString(),
-                            items: backup.cart,
-                            total: grandTotalBackup,
-                            cashierName: backup.cashierName || 'Kasir',
-                            device: navigator.userAgent,
-                            storeProfile: backup.storeName,
-                            storeId: backup.storeId,
-                            createdAt: window.serverTimestamp(),
-                            recoveredFromRefresh: true
-                        }
-                    ).then(() => {
-                        showToast('🔄 Keranjang disimpan otomatis sebagai Tertunda');
-                    }).catch(err => console.error('Gagal recovery keranjang:', err));
-                } catch(e) { console.error('Error parsing backup cart:', e); }
-            }, [user]);
-            // ===== END AUTO-SAVE =====
 
             // Sync cart ke Firestore setiap kali cart berubah (outgoing)
             useEffect(() => {
@@ -2219,7 +2248,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 try {
                     const cartRef = await window.addDoc(
                         window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts'),
-                        { cashierName: finalName, storeId: currentProfile.id, storeName: currentProfile.name, items: [], total: 0, updatedAt: window.serverTimestamp(), isActive: true, deviceId: DEVICE_ID }
+                        { cashierName: finalName, storeId: currentProfile.id, storeName: currentProfile.name, items: [], total: 0, updatedAt: window.serverTimestamp(), isActive: true }
                     );
                     setCashierName(finalName);
                     setActiveCartId(cartRef.id);
@@ -2533,6 +2562,40 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 return Array.from(suggestions).sort((a,b) => a-b).slice(0, 6);
             }, [grandTotal]);
 
+            // === HAPUS SEMUA: Kosongkan semua pending & active carts di toko ini ===
+            const handleClearAllCarts = async () => {
+                try {
+                    const batch = window.writeBatch(window.db);
+
+                    // Hapus semua pending_carts
+                    const pendingSnap = await window.getDocs(
+                        window.query(
+                            window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pending_carts'),
+                            window.where('storeId', '==', currentProfile.id)
+                        )
+                    );
+                    pendingSnap.forEach(d => batch.delete(d.ref));
+
+                    // Hapus semua active_carts
+                    const activeSnap = await window.getDocs(
+                        window.query(
+                            window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts'),
+                            window.where('storeId', '==', currentProfile.id)
+                        )
+                    );
+                    activeSnap.forEach(d => batch.delete(d.ref));
+
+                    await batch.commit();
+                    localStorage.removeItem('activeCartId');
+                    setShowClearAllModal(false);
+                    showToast(`Semua keranjang telah dihapus 🗑️`, "info");
+                } catch (error) {
+                    console.error('Error clearing all carts:', error);
+                    showToast("Gagal menghapus keranjang", "error");
+                    setShowClearAllModal(false);
+                }
+            };
+
             const handleBack = async () => { 
                 if (cart.length > 0) { 
                     try {
@@ -2562,7 +2625,6 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     }
                 }
                 
-                localStorage.removeItem(CART_BACKUP_KEY); localStorage.removeItem(ACTIVE_CART_ID_KEY);
                 setIsSessionActive(false); 
                 setSearch(''); 
                 setCart([]);
@@ -2585,7 +2647,6 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 setSearch(''); 
                 setCancelModal(false); 
                 setActiveCartId(null);
-                localStorage.removeItem(CART_BACKUP_KEY); localStorage.removeItem(ACTIVE_CART_ID_KEY);
                 showToast("Transaksi dibatalkan & keranjang dikosongkan", "info");
                 setIsSessionActive(false);
             };
@@ -2607,8 +2668,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                             items: pendingItem.items,
                             total: pendingItem.total,
                             updatedAt: window.serverTimestamp(),
-                            isActive: true,
-                            deviceId: DEVICE_ID
+                            isActive: true
                         }
                     );
                     
@@ -2666,7 +2726,6 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         }
                     }
                     
-                    localStorage.removeItem(CART_BACKUP_KEY); localStorage.removeItem(ACTIVE_CART_ID_KEY);
                     setReceiptData({ ...newTransaction, id: docRef.id, date: new Date() }); 
                     setPaymentSuccess(true); showToast("Transaksi Berhasil!");
                 } catch (error) { console.error(error); showToast("Transaksi Gagal", "error"); } finally { setIsProcessing(false); }
@@ -2680,7 +2739,6 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 setPaymentAmount(''); 
                 setPaymentMethod('');
                 setPaymentProofImage(null);
-                localStorage.removeItem(CART_BACKUP_KEY); localStorage.removeItem(ACTIVE_CART_ID_KEY);
                 setIsSessionActive(false); 
                 setActiveCartId(null);
                 // cashierName TETAP disimpan untuk sesi berikutnya
@@ -2857,7 +2915,12 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                 <div className="w-full mb-6 fade-in">
                                     <div className="flex items-center justify-between mb-3 px-1">
                                         <div className="flex items-center gap-2"><Icon name="clock-rotate-left" className="text-sky-600" /><h3 className="font-bold text-slate-700 text-sm">Tertunda di {currentProfile.name}</h3></div>
-                                        <span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-bold">{pendingCarts.length} sesi</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-bold">{pendingCarts.length} sesi</span>
+                                            <button onClick={() => setShowClearAllModal(true)} className="text-[10px] bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-700 px-2 py-1 rounded-full font-bold border border-red-200 transition-colors flex items-center gap-1 active:scale-95">
+                                                <Icon name="trash" className="text-[9px]" /> Hapus Semua
+                                            </button>
+                                        </div>
                                     </div>
                                     <div className="space-y-3">
                                         {pendingCarts.map(pending => (
@@ -2889,7 +2952,14 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                             <Icon name="users" className="text-emerald-500" />
                                             <h3 className="font-bold text-slate-700 text-sm">Kasir Lain Sedang Aktif</h3>
                                         </div>
-                                        <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold animate-pulse">{activeCarts.length} LIVE</span>
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold animate-pulse">{activeCarts.length} LIVE</span>
+                                            {pendingCarts.length === 0 && (
+                                                <button onClick={() => setShowClearAllModal(true)} className="text-[10px] bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-700 px-2 py-1 rounded-full font-bold border border-red-200 transition-colors flex items-center gap-1 active:scale-95">
+                                                    <Icon name="trash" className="text-[9px]" /> Hapus Semua
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                     <p className="text-[10px] text-slate-400 px-1 mb-3">🤝 Klik <b>Ikut Bantu</b> untuk scan barang bareng ke keranjang mereka secara real-time.</p>
                                     <div className="space-y-4">
@@ -2979,6 +3049,40 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                             <button onClick={() => handleStartSession(cashierName || localStorage.getItem('cashierName') || '')} className="group relative w-full aspect-square md:aspect-video rounded-3xl border-4 border-dashed border-sky-300 bg-sky-50/50 hover:bg-sky-100 hover:border-sky-400 transition-all flex flex-col items-center justify-center gap-4 active:scale-95"><div className="w-20 h-20 rounded-full bg-white text-sky-500 shadow-soft flex items-center justify-center text-4xl group-hover:scale-110 transition-transform"><Icon name="cart-plus" /></div><div className="text-center"><h2 className="text-2xl font-black text-slate-700 group-hover:text-sky-700">+ Penjualan Baru</h2><p className="text-sm text-slate-500 font-medium mt-1">Mulai sesi kasir di toko ini</p>{(cashierName || localStorage.getItem('cashierName')) && <p className="text-xs text-sky-600 font-bold mt-1">👤 {cashierName || localStorage.getItem('cashierName')}</p>}</div></button>
                         </div>
                         
+                        {/* Modal Konfirmasi Hapus Semua Keranjang */}
+                        {showClearAllModal && (
+                            <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
+                                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-7 relative pop-in">
+                                    <div className="text-center mb-5">
+                                        <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center text-3xl mx-auto mb-3 text-red-500">
+                                            <Icon name="trash-can" />
+                                        </div>
+                                        <h2 className="text-lg font-black text-slate-800 mb-1">Hapus Semua Keranjang?</h2>
+                                        <p className="text-sm text-slate-500 leading-relaxed">
+                                            Semua <span className="font-bold text-red-600">{pendingCarts.length} keranjang tertunda</span>
+                                            {activeCarts.length > 0 && <span> dan <span className="font-bold text-emerald-600">{activeCarts.length} keranjang aktif</span></span>}
+                                            {' '}di <span className="font-bold">{currentProfile.name}</span> akan dihapus permanen.
+                                        </p>
+                                        <p className="text-xs text-red-400 font-bold mt-2 bg-red-50 rounded-xl px-3 py-2">⚠️ Tindakan ini tidak dapat dibatalkan</p>
+                                    </div>
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => setShowClearAllModal(false)}
+                                            className="flex-1 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm transition-all active:scale-95"
+                                        >
+                                            Batal
+                                        </button>
+                                        <button
+                                            onClick={handleClearAllCarts}
+                                            className="flex-1 py-3 rounded-2xl bg-red-500 hover:bg-red-600 text-white font-black text-sm shadow-lg shadow-red-200 transition-all active:scale-95 flex items-center justify-center gap-2"
+                                        >
+                                            <Icon name="trash" /> Hapus Semua
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* NEW: Modal Input Nama Kasir - Render sebagai overlay */}
                         {showCashierModal && (
                             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
@@ -4238,7 +4342,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             const handleNavClick = (tabId, event) => { setActiveTab(tabId); if (tabId !== 'list') setShowOnlyLowStock(false); setIsSidebarOpen(false); };
             
             const menuItems = [ 
-                { id: 'cashier', label: 'Kasir', icon: 'cash-register', enabled: settingsData.enableCashier !== false, badge: notifCounts.pendingCarts + notifCounts.activeCarts }, 
+                { id: 'cashier', label: 'Kasir', icon: 'cash-register', enabled: settingsData.enableCashier !== false, badge: notifCounts.pendingCarts }, 
                 { id: 'history', label: 'Riwayat', icon: 'clock-rotate-left', enabled: settingsData.enableHistory !== false }, 
                 { id: 'purchases', label: 'Faktur Pembelian', icon: 'file-invoice-dollar', enabled: settingsData.enablePurchases !== false }, 
                 { id: 'home', label: 'Dashboard', icon: 'chart-pie', enabled: true }, 
