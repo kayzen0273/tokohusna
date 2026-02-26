@@ -2012,6 +2012,9 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 return id;
             }, []);
 
+            // Simpan raw carts dari Firestore (tanpa filter stale) untuk dicek real-time
+            const [rawActiveCarts, setRawActiveCarts] = useState([]);
+
             useEffect(() => {
                 if (!user) return;
                 const q = window.query(
@@ -2019,14 +2022,22 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     window.orderBy('updatedAt', 'desc')
                 );
                 const unsub = window.onSnapshot(q, (snapshot) => {
+                    const all = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setRawActiveCarts(all);
+                });
+                return () => unsub();
+            }, [user]);
+
+            // Filter stale carts secara real-time setiap 1 detik
+            // Cart dianggap mati jika lastSeen > 12 detik lalu (heartbeat 5s + buffer 7s)
+            useEffect(() => {
+                const STALE_MS = 12000;
+                const refilter = () => {
                     const now = Date.now();
-                    const STALE_MS = 30000; // 30 detik — cart dianggap mati jika tidak ada heartbeat
-                    const allActiveCarts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    const filtered = allActiveCarts.filter(c => {
+                    const filtered = rawActiveCarts.filter(c => {
                         if (c.storeId !== currentProfile.id) return false;
                         if (c.deviceId === DEVICE_ID) return false;
                         if (!c.isActive) return false;
-                        // Cek lastSeen: jika lebih dari 30 detik lalu, anggap sudah mati
                         if (c.lastSeen) {
                             const lastSeen = c.lastSeen.toMillis ? c.lastSeen.toMillis() : c.lastSeen;
                             if (now - lastSeen > STALE_MS) return false;
@@ -2034,9 +2045,11 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         return true;
                     });
                     setActiveCarts(filtered);
-                });
-                return () => unsub();
-            }, [user, currentProfile, DEVICE_ID]);
+                };
+                refilter(); // jalankan segera saat rawActiveCarts berubah
+                const interval = setInterval(refilter, 1000); // cek ulang tiap 1 detik
+                return () => clearInterval(interval);
+            }, [rawActiveCarts, currentProfile, DEVICE_ID]);
 
             // Ref untuk mencegah loop sync saat update datang dari luar
             const isExternalUpdate = useRef(false);
@@ -2080,7 +2093,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     } catch(e) {}
                 };
                 sendHeartbeat(); // kirim segera saat sesi mulai
-                const interval = setInterval(sendHeartbeat, 10000); // lalu tiap 10 detik
+                const interval = setInterval(sendHeartbeat, 5000); // lalu tiap 5 detik
                 return () => clearInterval(interval);
             }, [isSessionActive, activeCartId]);
 
