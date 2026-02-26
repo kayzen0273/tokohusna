@@ -2019,13 +2019,20 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     window.orderBy('updatedAt', 'desc')
                 );
                 const unsub = window.onSnapshot(q, (snapshot) => {
+                    const now = Date.now();
+                    const STALE_MS = 30000; // 30 detik — cart dianggap mati jika tidak ada heartbeat
                     const allActiveCarts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    // Filter: toko sama, bukan cart milik perangkat ini (pakai deviceId permanen)
-                    const filtered = allActiveCarts.filter(c => 
-                        (c.storeId === currentProfile.id) && 
-                        (c.deviceId !== DEVICE_ID) &&
-                        c.isActive
-                    );
+                    const filtered = allActiveCarts.filter(c => {
+                        if (c.storeId !== currentProfile.id) return false;
+                        if (c.deviceId === DEVICE_ID) return false;
+                        if (!c.isActive) return false;
+                        // Cek lastSeen: jika lebih dari 30 detik lalu, anggap sudah mati
+                        if (c.lastSeen) {
+                            const lastSeen = c.lastSeen.toMillis ? c.lastSeen.toMillis() : c.lastSeen;
+                            if (now - lastSeen > STALE_MS) return false;
+                        }
+                        return true;
+                    });
                     setActiveCarts(filtered);
                 });
                 return () => unsub();
@@ -2037,8 +2044,6 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             // ===== AUTO-SAVE CART (REFRESH RECOVERY) =====
             const CART_BACKUP_KEY = `cart_backup_${currentProfile.id}`;
             const ACTIVE_CART_ID_KEY = `active_cart_id_${currentProfile.id}`;
-            const FB_PROJECT = 'toko-husna-c6415';
-            const FB_APPID_PATH = window.appId;
 
             // Simpan cart ke localStorage setiap kali cart berubah saat sesi aktif
             useEffect(() => {
@@ -2052,7 +2057,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 }));
             }, [cart, isSessionActive, cashierName]);
 
-            // Simpan activeCartId ke localStorage agar bisa dihapus saat refresh
+            // Simpan activeCartId ke localStorage agar bisa dihapus saat recovery
             useEffect(() => {
                 if (activeCartId) {
                     localStorage.setItem(ACTIVE_CART_ID_KEY, activeCartId);
@@ -2061,11 +2066,27 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 }
             }, [activeCartId]);
 
-            // beforeunload: simpan cart + LANGSUNG tandai active_cart sebagai tidak aktif
-            // via Firestore REST API (sinkron pakai sendBeacon agar tidak dibatalkan browser)
+            // HEARTBEAT: update lastSeen di Firestore setiap 10 detik selama sesi aktif
+            // Device lain hanya tampilkan cart dengan lastSeen < 30 detik → jika refresh, 
+            // heartbeat berhenti dan cart otomatis menghilang dari device lain dalam 30 detik
+            useEffect(() => {
+                if (!isSessionActive || !activeCartId) return;
+                const sendHeartbeat = async () => {
+                    try {
+                        await window.updateDoc(
+                            window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', activeCartId),
+                            { lastSeen: window.serverTimestamp() }
+                        );
+                    } catch(e) {}
+                };
+                sendHeartbeat(); // kirim segera saat sesi mulai
+                const interval = setInterval(sendHeartbeat, 10000); // lalu tiap 10 detik
+                return () => clearInterval(interval);
+            }, [isSessionActive, activeCartId]);
+
+            // beforeunload: simpan cart ke localStorage saja
             useEffect(() => {
                 const handleBeforeUnload = () => {
-                    // Simpan cart ke localStorage
                     if (isSessionActive && cart.length > 0) {
                         localStorage.setItem(CART_BACKUP_KEY, JSON.stringify({
                             cart,
@@ -2075,24 +2096,13 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                             timestamp: Date.now()
                         }));
                     }
-
-                    // Tandai active_cart sebagai TIDAK AKTIF via Firestore REST (sinkron)
-                    const cartId = localStorage.getItem(ACTIVE_CART_ID_KEY);
-                    if (cartId) {
-                        const url = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents/artifacts/${FB_APPID_PATH}/public/data/active_carts/${cartId}?updateMask.fieldPaths=isActive`;
-                        const body = JSON.stringify({
-                            fields: { isActive: { booleanValue: false } }
-                        });
-                        // sendBeacon berjalan sinkron dan TIDAK dibatalkan saat halaman tutup
-                        navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }));
-                    }
                 };
                 window.addEventListener('beforeunload', handleBeforeUnload);
                 return () => window.removeEventListener('beforeunload', handleBeforeUnload);
             }, [isSessionActive, cart, cashierName, currentProfile]);
 
             // Recovery saat app dibuka kembali setelah refresh:
-            // 1. Hapus active_cart lama dari Firestore (sudah ditandai isActive=false, sekarang hapus tuntas)
+            // 1. Hapus active_cart lama dari Firestore (heartbeat sudah berhenti, ini hapus tuntas)
             // 2. Simpan keranjang sebagai pending_cart
             useEffect(() => {
                 if (!user) return;
@@ -2103,7 +2113,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 localStorage.removeItem(CART_BACKUP_KEY);
                 localStorage.removeItem(ACTIVE_CART_ID_KEY);
 
-                // Hapus tuntas active_cart lama dari Firestore
+                // Hapus active_cart lama dari Firestore
                 if (staleActiveCartId) {
                     window.deleteDoc(
                         window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', staleActiveCartId)
