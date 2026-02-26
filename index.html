@@ -398,11 +398,19 @@
                 });
                 const validTotal = receipt.items.reduce((acc, item) => acc + (item.price * (item.cartQty - (item.returnedQty || 0))), 0);
                 const subtotalBt = receipt.items.reduce((acc, item) => acc + ((item.originalPrice || item.price) * (item.cartQty - (item.returnedQty || 0))), 0);
-                const diskonBt = subtotalBt - validTotal;
+                const diskonBtRp = subtotalBt - validTotal;
+                const discountedBt = receipt.items.filter(i => i.discount && i.discount.value > 0);
+                const uniqTypesBt = [...new Set(discountedBt.map(i => i.discount.type))];
+                const uniqValuesBt = [...new Set(discountedBt.map(i => i.discount.value))];
+                let diskonLabelBt = 'DISKON';
+                if (discountedBt.length > 0 && uniqTypesBt.length === 1) {
+                    if (uniqTypesBt[0] === '%') { diskonLabelBt = uniqValuesBt.length === 1 ? ('DISKON ' + uniqValuesBt[0] + '%') : 'DISKON (%)'; }
+                    else { diskonLabelBt = uniqValuesBt.length === 1 ? ('DISKON Rp' + formatRupiah(uniqValuesBt[0]).replace('Rp','')) : 'DISKON (Rp)'; }
+                }
                 encoder.line();
                 const printRow = (label, value) => { const valStr = formatRupiah(value).replace('Rp', ''); const spaces = 32 - label.length - valStr.length; encoder.text(label + " ".repeat(Math.max(1, spaces)) + valStr).newline(); };
                 printRow("SUBTOTAL", subtotalBt);
-                if (diskonBt > 0) { printRow("DISKON", diskonBt); }
+                if (diskonBtRp > 0) { printRow(diskonLabelBt, diskonBtRp); }
                 encoder.line();
                 encoder.bold(true); printRow("TOTAL", validTotal); encoder.bold(false);
                 const payMethod = receipt.paymentMethod || 'tunai';
@@ -3418,7 +3426,26 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
                             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-0 overflow-hidden flex flex-col max-h-[90vh]">
                                 <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center"><div><h3 className="font-bold text-slate-800">Detail Transaksi</h3><p className="text-[10px] text-slate-500">{selectedTx.id} {selectedTx.storeName ? `(${selectedTx.storeName})` : ''}</p></div><button onClick={() => setSelectedTx(null)} className="w-8 h-8 rounded-full bg-white text-slate-400 hover:text-slate-600 flex items-center justify-center shadow-sm"><Icon name="xmark" /></button></div>
-                                <div className="p-5 overflow-y-auto flex-1"><div className="space-y-4">{selectedTx.items.map((item, idx) => { const returnedQty = item.returnedQty || 0; const remainingQty = item.cartQty - returnedQty; const isFullyReturned = remainingQty === 0; return (<div key={idx} className={`p-3 rounded-xl border ${isFullyReturned ? 'bg-red-50 border-red-100' : 'bg-slate-50 border-slate-100'}`}><div className="flex justify-between items-start mb-2"><div className="flex-1"><p className={`font-bold text-sm ${isFullyReturned ? 'text-red-600 line-through' : 'text-slate-700'}`}>{item.name}</p><p className="text-[10px] text-slate-500">{item.cartQty} x {formatRupiah(item.price)}</p>{returnedQty > 0 && <span className="text-[9px] font-bold text-red-500 bg-red-100 px-1.5 py-0.5 rounded-sm">Sudah Retur: {returnedQty}</span>}</div><div className="text-right"><p className="font-bold text-slate-800 text-sm">{formatRupiah(item.cartQty * item.price)}</p>{selectedTx.status !== 'returned' && remainingQty > 0 && (<button onClick={() => openReturModal(selectedTx, item, idx)} className="mt-2 bg-white border border-red-200 text-red-500 text-[10px] font-bold px-2 py-1 rounded-lg hover:bg-red-50 transition-colors shadow-sm">Retur Item</button>)}</div></div></div>); })}</div><div className="my-4 border-t border-dashed border-slate-300"></div>{(() => { const subtotalTx = selectedTx.items.reduce((acc, item) => acc + ((item.originalPrice || item.price) * (item.cartQty - (item.returnedQty || 0))), 0); const diskonTx = subtotalTx - selectedTx.total; return (<><div className="flex justify-between text-sm mb-1"><span className="text-slate-500">Subtotal</span><span className="font-medium text-slate-700">{formatRupiah(subtotalTx)}</span></div>{diskonTx > 0 && (<div className="flex justify-between text-sm mb-1"><span className="text-slate-500">Diskon</span><span className="font-medium text-red-500">- {formatRupiah(diskonTx)}</span></div>)}<div className="flex justify-between text-sm mb-1 pt-1 border-t border-slate-100"><span className="font-bold text-slate-700">Total</span><span className="font-bold text-slate-800">{formatRupiah(selectedTx.total)}</span></div></>); })()}<div className="flex justify-between text-sm mb-1 mt-2"><span className="text-slate-500">Metode</span><span className="font-bold text-slate-800">{selectedTx.paymentMethod === 'qris' ? '💳 QRIS' : selectedTx.paymentMethod === 'transfer' ? '🏦 Transfer' : '💵 Tunai'}</span></div><div className="flex justify-between text-sm mb-1"><span className="text-slate-500">Bayar</span><span className="font-bold text-slate-800">{formatRupiah(selectedTx.pay)}</span></div><div className="flex justify-between text-sm"><span className="text-slate-500">Kembali</span><span className="font-bold text-green-600">{formatRupiah(selectedTx.change)}</span></div>
+                                <div className="p-5 overflow-y-auto flex-1"><div className="space-y-4">{selectedTx.items.map((item, idx) => { const returnedQty = item.returnedQty || 0; const remainingQty = item.cartQty - returnedQty; const isFullyReturned = remainingQty === 0; return (<div key={idx} className={`p-3 rounded-xl border ${isFullyReturned ? 'bg-red-50 border-red-100' : 'bg-slate-50 border-slate-100'}`}><div className="flex justify-between items-start mb-2"><div className="flex-1"><p className={`font-bold text-sm ${isFullyReturned ? 'text-red-600 line-through' : 'text-slate-700'}`}>{item.name}</p><p className="text-[10px] text-slate-500">{item.cartQty} x {formatRupiah(item.price)}</p>{returnedQty > 0 && <span className="text-[9px] font-bold text-red-500 bg-red-100 px-1.5 py-0.5 rounded-sm">Sudah Retur: {returnedQty}</span>}</div><div className="text-right"><p className="font-bold text-slate-800 text-sm">{formatRupiah(item.cartQty * item.price)}</p>{selectedTx.status !== 'returned' && remainingQty > 0 && (<button onClick={() => openReturModal(selectedTx, item, idx)} className="mt-2 bg-white border border-red-200 text-red-500 text-[10px] font-bold px-2 py-1 rounded-lg hover:bg-red-50 transition-colors shadow-sm">Retur Item</button>)}</div></div></div>); })}</div><div className="my-4 border-t border-dashed border-slate-300"></div>{(() => {
+  const subtotalTx = selectedTx.items.reduce((acc, item) => acc + ((item.originalPrice || item.price) * (item.cartQty - (item.returnedQty || 0))), 0);
+  const diskonTxRp = subtotalTx - selectedTx.total;
+  const discountedItems = selectedTx.items.filter(i => i.discount && i.discount.value > 0);
+  const uniqTypes = [...new Set(discountedItems.map(i => i.discount.type))];
+  const uniqValues = [...new Set(discountedItems.map(i => i.discount.value))];
+  let diskonLabel = 'Diskon';
+  if (discountedItems.length > 0 && uniqTypes.length === 1) {
+    if (uniqTypes[0] === '%') {
+      diskonLabel = uniqValues.length === 1 ? ('Diskon ' + uniqValues[0] + '%') : 'Diskon (%)';
+    } else {
+      diskonLabel = uniqValues.length === 1 ? ('Diskon ' + formatRupiah(uniqValues[0])) : 'Diskon (Rp)';
+    }
+  }
+  return (<>
+    <div className="flex justify-between text-sm mb-1"><span className="text-slate-500">Subtotal</span><span className="font-medium text-slate-700">{formatRupiah(subtotalTx)}</span></div>
+    {diskonTxRp > 0 && (<div className="flex justify-between text-sm mb-1"><span className="text-red-400 font-medium">{diskonLabel}</span><span className="font-medium text-red-500">- {formatRupiah(diskonTxRp)}</span></div>)}
+    <div className="flex justify-between text-sm mb-1 pt-1 border-t border-slate-100"><span className="font-bold text-slate-700">Total</span><span className="font-bold text-slate-800">{formatRupiah(selectedTx.total)}</span></div>
+  </>);
+})()}<div className="flex justify-between text-sm mb-1 mt-2"><span className="text-slate-500">Metode</span><span className="font-bold text-slate-800">{selectedTx.paymentMethod === 'qris' ? '💳 QRIS' : selectedTx.paymentMethod === 'transfer' ? '🏦 Transfer' : '💵 Tunai'}</span></div><div className="flex justify-between text-sm mb-1"><span className="text-slate-500">Bayar</span><span className="font-bold text-slate-800">{formatRupiah(selectedTx.pay)}</span></div><div className="flex justify-between text-sm"><span className="text-slate-500">Kembali</span><span className="font-bold text-green-600">{formatRupiah(selectedTx.change)}</span></div>
                                     {/* BUKTI PEMBAYARAN - hanya untuk QRIS & Transfer */}
                                     {(selectedTx.paymentMethod === 'qris' || selectedTx.paymentMethod === 'transfer') && (
                                         <div className="mt-4">
@@ -4193,7 +4220,26 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                      return headers.map((h, i) => <p key={i} className="text-sm text-gray-600">{h}</p>);
                                 })()}
                             </div> 
-                            <div className="border-b-2 border-dashed border-gray-300 my-2"></div> <div className="flex justify-between text-xs mb-1"> <span>Tgl: {new Date(receiptToPrint.date.seconds ? receiptToPrint.date.toDate() : receiptToPrint.date).toLocaleString('id-ID')}</span> </div> <div className="flex justify-between text-xs mb-2"> <span>Ref: {receiptToPrint.id ? receiptToPrint.id.slice(-8).toUpperCase() : '-'}</span> <span>Kasir: {receiptToPrint.cashierName || 'Admin'}</span> </div> <div className="border-b-2 border-dashed border-gray-300 my-2"></div> <div className="space-y-2 mb-4"> {receiptToPrint.items.map((item, idx) => { const validQty = item.cartQty - (item.returnedQty || 0); if (validQty <= 0) return null; return ( <div key={idx} className="text-sm"> <div className="font-bold">{item.name}</div> <div className="flex justify-between"> <span>{validQty} x {formatRupiah(item.price)}</span> <span>{formatRupiah(validQty * item.price)}</span> </div> </div> ); })} </div> <div className="border-b-2 border-dashed border-gray-300 my-2"></div> {(() => { const subtotalReceipt = receiptToPrint.items.reduce((acc, item) => acc + ((item.originalPrice || item.price) * (item.cartQty - (item.returnedQty || 0))), 0); const diskonReceipt = subtotalReceipt - receiptToPrint.total; return (<><div className="flex justify-between text-sm mb-1"><span>Subtotal</span><span>{formatRupiah(subtotalReceipt)}</span></div>{diskonReceipt > 0 && (<div className="flex justify-between text-sm mb-1"><span>Diskon</span><span>- {formatRupiah(diskonReceipt)}</span></div>)}<div className="border-t border-dashed border-gray-300 my-1"></div></>); })()} <div className="flex justify-between font-bold text-lg mb-1"> <span>TOTAL</span> <span>{formatRupiah(receiptToPrint.total)}</span> </div> {receiptToPrint.pay !== undefined && ( <div className="flex justify-between text-sm"> <span>{receiptToPrint.paymentMethod === 'qris' ? 'QRIS' : receiptToPrint.paymentMethod === 'transfer' ? 'Transfer' : 'Tunai'}</span> <span>{formatRupiah(receiptToPrint.pay)}</span> </div> )} {(!receiptToPrint.paymentMethod || receiptToPrint.paymentMethod === 'tunai') && receiptToPrint.change !== undefined && ( <div className="flex justify-between text-sm"> <span>Kembali</span> <span>{formatRupiah(receiptToPrint.change)}</span> </div> )} <div className="border-b-2 border-dashed border-gray-300 my-4"></div> 
+                            <div className="border-b-2 border-dashed border-gray-300 my-2"></div> <div className="flex justify-between text-xs mb-1"> <span>Tgl: {new Date(receiptToPrint.date.seconds ? receiptToPrint.date.toDate() : receiptToPrint.date).toLocaleString('id-ID')}</span> </div> <div className="flex justify-between text-xs mb-2"> <span>Ref: {receiptToPrint.id ? receiptToPrint.id.slice(-8).toUpperCase() : '-'}</span> <span>Kasir: {receiptToPrint.cashierName || 'Admin'}</span> </div> <div className="border-b-2 border-dashed border-gray-300 my-2"></div> <div className="space-y-2 mb-4"> {receiptToPrint.items.map((item, idx) => { const validQty = item.cartQty - (item.returnedQty || 0); if (validQty <= 0) return null; return ( <div key={idx} className="text-sm"> <div className="font-bold">{item.name}</div> <div className="flex justify-between"> <span>{validQty} x {formatRupiah(item.price)}</span> <span>{formatRupiah(validQty * item.price)}</span> </div> </div> ); })} </div> <div className="border-b-2 border-dashed border-gray-300 my-2"></div> {(() => {
+  const subtotalR = receiptToPrint.items.reduce((acc, item) => acc + ((item.originalPrice || item.price) * (item.cartQty - (item.returnedQty || 0))), 0);
+  const diskonR = subtotalR - receiptToPrint.total;
+  const discountedR = receiptToPrint.items.filter(i => i.discount && i.discount.value > 0);
+  const uniqTypesR = [...new Set(discountedR.map(i => i.discount.type))];
+  const uniqValuesR = [...new Set(discountedR.map(i => i.discount.value))];
+  let diskonLabelR = 'Diskon';
+  if (discountedR.length > 0 && uniqTypesR.length === 1) {
+    if (uniqTypesR[0] === '%') {
+      diskonLabelR = uniqValuesR.length === 1 ? ('Diskon ' + uniqValuesR[0] + '%') : 'Diskon (%)';
+    } else {
+      diskonLabelR = uniqValuesR.length === 1 ? ('Diskon ' + formatRupiah(uniqValuesR[0])) : 'Diskon (Rp)';
+    }
+  }
+  return (<>
+    <div className="flex justify-between text-sm mb-1"><span>Subtotal</span><span>{formatRupiah(subtotalR)}</span></div>
+    {diskonR > 0 && (<div className="flex justify-between text-sm mb-1"><span>{diskonLabelR}</span><span>- {formatRupiah(diskonR)}</span></div>)}
+    <div className="border-t border-dashed border-gray-300 my-1"></div>
+  </>);
+})()} <div className="flex justify-between font-bold text-lg mb-1"> <span>TOTAL</span> <span>{formatRupiah(receiptToPrint.total)}</span> </div> {receiptToPrint.pay !== undefined && ( <div className="flex justify-between text-sm"> <span>{receiptToPrint.paymentMethod === 'qris' ? 'QRIS' : receiptToPrint.paymentMethod === 'transfer' ? 'Transfer' : 'Tunai'}</span> <span>{formatRupiah(receiptToPrint.pay)}</span> </div> )} {(!receiptToPrint.paymentMethod || receiptToPrint.paymentMethod === 'tunai') && receiptToPrint.change !== undefined && ( <div className="flex justify-between text-sm"> <span>Kembali</span> <span>{formatRupiah(receiptToPrint.change)}</span> </div> )} <div className="border-b-2 border-dashed border-gray-300 my-4"></div> 
                             <div className="text-center text-xs text-gray-500 whitespace-pre-wrap"> 
                                 {/* DYNAMIC FOOTER LOGIC */}
                                 {(() => {
