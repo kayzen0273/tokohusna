@@ -4418,6 +4418,19 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             const [rotating, setRotating] = useState(null);
             const [selectedId, setSelectedId] = useState(null);
             const [confirmDelete, setConfirmDelete] = useState(null);
+            const [boardMode, setBoardMode] = useState('global'); // 'global' | 'private'
+            const [newNoteMode, setNewNoteMode] = useState('global'); // mode saat tambah catatan baru
+            const [showInfoBanner, setShowInfoBanner] = useState(true);
+            const [pageModal, setPageModal] = useState(false);
+            const [pageText, setPageText] = useState('');
+            const [pageStyle, setPageStyle] = useState('lined'); // 'lined'|'blank'|'grid'|'dotted'
+            const [pageColor, setPageColor] = useState('#ffffff');
+            const [pageFont, setPageFont] = useState("'Inter', sans-serif");
+            const [pageTitle, setPageTitle] = useState('');
+            const [newPageMode, setNewPageMode] = useState('global');
+            const [editPageItem, setEditPageItem] = useState(null);
+            const [editPageIdx, setEditPageIdx] = useState(0); // index halaman yg sedang diedit
+            const [pageIndices, setPageIndices] = useState({}); // {itemId: currentPageIndex}
             const boardRef = useRef(null);
             const photoInputRef = useRef(null);
 
@@ -4463,17 +4476,21 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             const [noteFont, setNoteFont] = useState(NOTE_FONTS[0].value);
             const [noteAlign, setNoteAlign] = useState('left');
 
-            const getCol = () => window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan');
+            const getGlobalCol = () => window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan');
+            const getPrivateCol = () => window.collection(window.db, 'artifacts', window.appId, 'users', user?.uid || 'anon', 'catatan');
+            const getCol = () => boardMode === 'global' ? getGlobalCol() : getPrivateCol();
 
             useEffect(() => {
                 if (!user) return;
-                const q = window.query(getCol(), window.orderBy('createdAt', 'desc'));
+                setLoading(true);
+                const col = boardMode === 'global' ? getGlobalCol() : getPrivateCol();
+                const q = window.query(col, window.orderBy('createdAt', 'desc'));
                 const unsub = window.onSnapshot(q, snap => {
                     setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
                     setLoading(false);
                 });
                 return () => unsub();
-            }, [user]);
+            }, [user, boardMode]);
 
             const addNote = async () => {
                 if (!noteText.trim()) return;
@@ -4483,12 +4500,16 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 const x = 40 + Math.random() * Math.max(0, bw - 220);
                 const y = 40 + Math.random() * Math.max(0, bh - 200);
                 const rot = (Math.random() - 0.5) * 8;
-                await window.addDoc(getCol(), {
+                const targetCol = newNoteMode === 'global' ? getGlobalCol() : getPrivateCol();
+                await window.addDoc(targetCol, {
                     type: 'note', noteStyle, text: noteText, fontFamily: noteFont, textAlign: noteAlign,
                     color: noteStyle === 'sticky' ? noteColor : (NOTE_COLORS.find(c => c.bg === noteColor) ? '#1e293b' : noteColor),
-                    x, y, rotation: rot, createdAt: window.serverTimestamp()
+                    x, y, rotation: rot, createdAt: window.serverTimestamp(),
+                    visibility: newNoteMode, createdBy: user?.uid || 'anon'
                 });
                 setNoteText(''); setAddModal(false);
+                // If we added to a different board than currently viewing, switch to it
+                if (newNoteMode !== boardMode) setBoardMode(newNoteMode);
             };
 
             const addPhoto = async (e) => {
@@ -4512,9 +4533,11 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         const x = 40 + Math.random() * Math.max(0, bw - 180);
                         const y = 40 + Math.random() * Math.max(0, bh - 220);
                         const rot = (Math.random() - 0.5) * 12;
-                        await window.addDoc(getCol(), {
+                        const targetCol = boardMode === 'global' ? getGlobalCol() : getPrivateCol();
+                        await window.addDoc(targetCol, {
                             type: 'photo', url: compressed, x, y, rotation: rot, photoScale: 1,
-                            createdAt: window.serverTimestamp()
+                            createdAt: window.serverTimestamp(),
+                            visibility: boardMode, createdBy: user?.uid || 'anon'
                         });
                     };
                     img.src = ev.target.result;
@@ -4523,18 +4546,104 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 e.target.value = '';
             };
 
-            const deleteItem = async (id) => {
-                await window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan', id));
+            const PAGE_COLORS = [
+                { bg: '#ffffff', label: 'Putih', border: '#e2e8f0' },
+                { bg: '#fef9ee', label: 'Krem', border: '#fde68a' },
+                { bg: '#f0fdf4', label: 'Hijau Muda', border: '#86efac' },
+                { bg: '#eff6ff', label: 'Biru Muda', border: '#93c5fd' },
+                { bg: '#fdf2f8', label: 'Merah Muda', border: '#f0abfc' },
+                { bg: '#fffbeb', label: 'Kuning', border: '#fcd34d' },
+            ];
+            const PAGE_FONTS = [
+                { label: 'Normal',    value: "'Inter', sans-serif" },
+                { label: 'Caveat',    value: "'Caveat', cursive" },
+                { label: 'Kalam',     value: "'Kalam', cursive" },
+                { label: 'Courier',   value: "'Courier Prime', monospace" },
+                { label: 'Nunito',    value: "'Nunito', sans-serif" },
+                { label: 'Quicksand', value: "'Quicksand', sans-serif" },
+            ];
+            const getPageBackground = (style, color) => {
+                if (style === 'lined')  return { background: `repeating-linear-gradient(transparent, transparent 27px, #bfdbfe 27px, #bfdbfe 28px), ${color}` };
+                if (style === 'grid')   return { background: `repeating-linear-gradient(#e2e8f0 0, #e2e8f0 1px, transparent 1px, transparent 28px), repeating-linear-gradient(90deg, #e2e8f0 0, #e2e8f0 1px, transparent 1px, transparent 28px), ${color}` };
+                if (style === 'dotted') return { background: `radial-gradient(circle, #94a3b8 1px, transparent 1px) ${color}`, backgroundSize: '28px 28px' };
+                return { background: color };
+            };
+            const addPage = async () => {
+                const board = boardRef.current;
+                const bw = board ? board.offsetWidth : 600;
+                const bh = board ? board.offsetHeight : 500;
+                const x = 40 + Math.random() * Math.max(0, bw - 280);
+                const y = 40 + Math.random() * Math.max(0, bh - 360);
+                const rot = (Math.random() - 0.5) * 4;
+                const targetCol = newPageMode === 'global' ? getGlobalCol() : getPrivateCol();
+                await window.addDoc(targetCol, {
+                    type: 'page', pageStyle, fontFamily: pageFont,
+                    color: pageColor,
+                    pages: [{ title: pageTitle, text: pageText }],
+                    x, y, rotation: rot, photoScale: 1,
+                    createdAt: window.serverTimestamp(),
+                    visibility: newPageMode, createdBy: user?.uid || 'anon'
+                });
+                setPageText(''); setPageTitle(''); setPageModal(false);
+                if (newPageMode !== boardMode) setBoardMode(newPageMode);
             };
 
-            const savePosition = async (id, x, y) =>
-                window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan', id), { x, y });
+            const updatePage = async () => {
+                if (!editPageItem) return;
+                const d = boardMode === 'global'
+                    ? window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan', editPageItem.id)
+                    : window.doc(window.db, 'artifacts', window.appId, 'users', user?.uid || 'anon', 'catatan', editPageItem.id);
+                await window.updateDoc(d, {
+                    pageStyle: editPageItem.pageStyle,
+                    color: editPageItem.color,
+                    fontFamily: editPageItem.fontFamily,
+                    pages: editPageItem.pages,
+                });
+                setEditPageItem(null);
+                setEditPageIdx(0);
+            };
 
-            const saveScale = async (id, photoScale) =>
-                window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan', id), { photoScale });
+            // Helper: ambil array pages dari item (backward compat item lama pakai text/title)
+            const getPages = (item) => {
+                if (item.pages && item.pages.length > 0) return item.pages;
+                return [{ title: item.title || '', text: item.text || '' }];
+            };
 
-            const saveRotation = async (id, rotation) =>
-                window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan', id), { rotation });
+            const goPage = (itemId, dir, total) => {
+                setPageIndices(prev => {
+                    const cur = prev[itemId] || 0;
+                    const next = Math.max(0, Math.min(total - 1, cur + dir));
+                    return { ...prev, [itemId]: next };
+                });
+            };
+
+            const deleteItem = async (id) => {
+                const col = boardMode === 'global'
+                    ? window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan', id)
+                    : window.doc(window.db, 'artifacts', window.appId, 'users', user?.uid || 'anon', 'catatan', id);
+                await window.deleteDoc(col);
+            };
+
+            const savePosition = async (id, x, y) => {
+                const d = boardMode === 'global'
+                    ? window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan', id)
+                    : window.doc(window.db, 'artifacts', window.appId, 'users', user?.uid || 'anon', 'catatan', id);
+                window.updateDoc(d, { x, y });
+            };
+
+            const saveScale = async (id, photoScale) => {
+                const d = boardMode === 'global'
+                    ? window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan', id)
+                    : window.doc(window.db, 'artifacts', window.appId, 'users', user?.uid || 'anon', 'catatan', id);
+                window.updateDoc(d, { photoScale });
+            };
+
+            const saveRotation = async (id, rotation) => {
+                const d = boardMode === 'global'
+                    ? window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan', id)
+                    : window.doc(window.db, 'artifacts', window.appId, 'users', user?.uid || 'anon', 'catatan', id);
+                window.updateDoc(d, { rotation });
+            };
 
             const getPinchDist = (touches) => {
                 const dx = touches[0].clientX - touches[1].clientX;
@@ -4691,23 +4800,46 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 window._scaleTimer = setTimeout(() => saveScale(item.id, newScale), 400);
             };
 
-            const noteCount = items.filter(i => i.type === 'note').length;
-            const photoCount = items.filter(i => i.type === 'photo').length;
+            // counts computed inline in header
 
             return (
                 <div className="flex flex-col" style={{ height: '100%', padding: '16px', overflow: 'hidden', boxSizing: 'border-box' }}>
+                    
+                    {/* Info Banner */}
+                    {showInfoBanner && (
+                        <div className="mb-3 rounded-2xl flex-shrink-0 overflow-hidden"
+                            style={{ background: 'linear-gradient(135deg, #e0f2fe 0%, #f0fdf4 100%)', border: '1.5px solid #7dd3fc' }}>
+                            <div className="flex items-start gap-3 p-3 pr-2">
+                                <div className="flex-shrink-0 w-9 h-9 rounded-xl bg-white flex items-center justify-center shadow-sm text-lg">💡</div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold text-sky-800 mb-0.5">Papan Catatan Punya 2 Mode!</p>
+                                    <p className="text-[10px] text-sky-700 leading-relaxed">
+                                        <span className="inline-flex items-center gap-1 font-semibold"><span>🌍</span> Global</span> — catatan terlihat & bisa diedit semua pengguna. &nbsp;
+                                        <span className="inline-flex items-center gap-1 font-semibold"><span>🔒</span> Pribadi</span> — catatan hanya milikmu, tidak terlihat pengguna lain.
+                                    </p>
+                                </div>
+                                <button onClick={() => setShowInfoBanner(false)}
+                                    className="flex-shrink-0 w-6 h-6 rounded-full bg-white/70 hover:bg-white text-sky-500 text-xs font-bold flex items-center justify-center transition-all">✕</button>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Header */}
-                    <div className="flex items-center justify-between mb-4 flex-shrink-0">
+                    <div className="flex items-center justify-between mb-3 flex-shrink-0">
                         <div>
                             <h1 className="text-xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
                                 <span>📌</span> Papan Catatan
                             </h1>
-                            <p className="text-xs text-slate-400 mt-0.5">{noteCount} catatan · {photoCount} foto</p>
+                            <p className="text-xs text-slate-400 mt-0.5">{items.filter(i=>i.type==='note').length} catatan · {items.filter(i=>i.type==='photo').length} foto · {items.filter(i=>i.type==='page').length} halaman</p>
                         </div>
                         <div className="flex items-center gap-2">
                             <button onClick={() => photoInputRef.current?.click()}
                                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 shadow-sm active:scale-95 transition-all">
                                 <Icon name="image" className="text-sm text-rose-400" /> Foto
+                            </button>
+                            <button onClick={() => setPageModal(true)}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 shadow-sm active:scale-95 transition-all">
+                                📄 Halaman
                             </button>
                             <button onClick={() => setAddModal(true)}
                                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-white font-bold text-xs shadow-md active:scale-95 transition-all">
@@ -4715,10 +4847,24 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                             </button>
                         </div>
                     </div>
+
+                    {/* Mode Toggle Tabs */}
+                    <div className="flex gap-2 mb-3 flex-shrink-0">
+                        <button onClick={() => setBoardMode('global')}
+                            className={`flex-1 py-2.5 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm ${boardMode === 'global' ? 'bg-sky-500 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'}`}>
+                            <span>🌍</span> Global
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${boardMode === 'global' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400'}`}>Semua User</span>
+                        </button>
+                        <button onClick={() => setBoardMode('private')}
+                            className={`flex-1 py-2.5 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm ${boardMode === 'private' ? 'bg-violet-500 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'}`}>
+                            <span>🔒</span> Pribadi
+                            <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${boardMode === 'private' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-400'}`}>Hanya Kamu</span>
+                        </button>
+                    </div>
                     <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={addPhoto} />
 
                     {/* Board */}
-                    <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', borderRadius: '1.5rem', border: '2px dashed #e2d9c8', minHeight: 0 }}>
+                    <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', borderRadius: '1.5rem', border: `2px dashed ${boardMode === 'private' ? '#c4b5fd' : '#e2d9c8'}`, minHeight: 0 }}>
                     <div ref={boardRef}
                         className="relative rounded-3xl"
                         onClick={e => { if (e.target === boardRef.current) setSelectedId(null); }}
@@ -4747,9 +4893,9 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
 
                         {!loading && items.length === 0 && (
                             <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300 pointer-events-none">
-                                <div className="text-6xl mb-3 opacity-40">📌</div>
-                                <p className="font-bold text-lg opacity-50">Papan kosong~</p>
-                                <p className="text-xs mt-1 opacity-40">Tambah catatan atau tempel foto</p>
+                                <div className="text-6xl mb-3 opacity-40">{boardMode === 'private' ? '🔒' : '📌'}</div>
+                                <p className="font-bold text-lg opacity-50">Papan {boardMode === 'private' ? 'Pribadi' : 'Global'} kosong~</p>
+                                <p className="text-xs mt-1 opacity-40">{boardMode === 'private' ? 'Hanya kamu yang bisa lihat' : 'Bisa dilihat semua pengguna'}</p>
                             </div>
                         )}
 
@@ -4898,6 +5044,87 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                     </div>
                                 );
                             }
+
+                            if (item.type === 'page') {
+                                const pages = getPages(item);
+                                const curIdx = Math.min(pageIndices[item.id] || 0, pages.length - 1);
+                                const curPage = pages[curIdx];
+                                const pgBg = getPageBackground(item.pageStyle, item.color || '#ffffff');
+                                const pgColor = PAGE_COLORS.find(c => c.bg === item.color) || PAGE_COLORS[0];
+                                const totalPages = pages.length;
+                                return (
+                                    <div key={item.id} style={{
+                                        ...baseStyle,
+                                        width: 260, minHeight: 340,
+                                        borderRadius: '4px 12px 12px 4px',
+                                        border: `1px solid ${pgColor.border}`,
+                                        boxShadow: isDraggingThis ? '0 24px 48px rgba(0,0,0,0.22)' : '3px 4px 18px rgba(0,0,0,0.12)',
+                                        overflow: 'hidden', display: 'flex', flexDirection: 'column',
+                                        transformOrigin: 'center center',
+                                    }}
+                                        onMouseDown={e => onMouseDown(e, item)}
+                                        onTouchStart={e => onTouchStart(e, item)}
+                                        onWheel={e => onWheel(e, item)}>
+                                        {rotateHandle}
+                                        <div style={{ position: 'absolute', top: 0, left: 36, bottom: 0, width: 1.5, background: 'rgba(248,113,113,0.5)', pointerEvents: 'none', zIndex: 1 }} />
+                                        {[0.10, 0.25, 0.40, 0.55, 0.70, 0.85].map((pct, i) => (
+                                            <div key={i} style={{
+                                                position: 'absolute', left: -7, top: `${pct * 100}%`,
+                                                width: 14, height: 14, borderRadius: '50%',
+                                                border: '2px solid #cbd5e1', background: 'white',
+                                                transform: 'translateY(-50%)', zIndex: 3, pointerEvents: 'none',
+                                            }} />
+                                        ))}
+                                        {/* Konten halaman aktif */}
+                                        <div style={{ ...pgBg, flex: 1, padding: '12px 12px 44px 48px', position: 'relative', minHeight: 290, overflow: 'hidden' }}>
+                                            {curPage.title ? (
+                                                <div style={{
+                                                    fontFamily: item.fontFamily || "'Inter', sans-serif",
+                                                    fontSize: 12, fontWeight: 700, color: '#1e293b',
+                                                    marginBottom: 4, paddingBottom: 4,
+                                                    borderBottom: '1.5px solid #fca5a5', wordBreak: 'break-word',
+                                                }}>{curPage.title}</div>
+                                            ) : null}
+                                            <p style={{
+                                                fontFamily: item.fontFamily || "'Inter', sans-serif",
+                                                fontSize: 11.5, lineHeight: '28px', color: '#374151',
+                                                wordBreak: 'break-word', whiteSpace: 'pre-wrap', margin: 0,
+                                            }}>{curPage.text}</p>
+                                        </div>
+                                        {/* Footer navigasi */}
+                                        <div style={{
+                                            position: 'absolute', bottom: 0, left: 0, right: 0, height: 36,
+                                            background: `${item.color || '#fff'}f0`,
+                                            borderTop: `1px solid ${pgColor.border}`,
+                                            display: 'flex', alignItems: 'center', padding: '0 8px 0 44px',
+                                        }}
+                                            onMouseDown={e => e.stopPropagation()}
+                                            onTouchStart={e => e.stopPropagation()}>
+                                            <button onClick={() => goPage(item.id, -1, totalPages)} disabled={curIdx === 0}
+                                                style={{ width: 22, height: 22, borderRadius: 6, border: '1.5px solid #e2e8f0', background: curIdx === 0 ? '#f8fafc' : 'white', color: curIdx === 0 ? '#cbd5e1' : '#475569', fontSize: 13, cursor: curIdx === 0 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>‹</button>
+                                            <span style={{ flex: 1, textAlign: 'center', fontSize: 9, color: '#94a3b8', fontWeight: 600 }}>
+                                                {item.pageStyle === 'lined' ? '≡' : item.pageStyle === 'grid' ? '⊞' : item.pageStyle === 'dotted' ? '∷' : '□'} {curIdx + 1}/{totalPages}
+                                            </span>
+                                            <button onClick={() => goPage(item.id, 1, totalPages)} disabled={curIdx === totalPages - 1}
+                                                style={{ width: 22, height: 22, borderRadius: 6, border: '1.5px solid #e2e8f0', background: curIdx === totalPages - 1 ? '#f8fafc' : 'white', color: curIdx === totalPages - 1 ? '#cbd5e1' : '#475569', fontSize: 13, cursor: curIdx === totalPages - 1 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>›</button>
+                                        </div>
+                                        {/* Edit button */}
+                                        <button
+                                            onMouseDown={e => e.stopPropagation()} onTouchStart={e => e.stopPropagation()}
+                                            onClick={() => { setEditPageItem({ ...item, pages: getPages(item) }); setEditPageIdx(curIdx); }}
+                                            style={{
+                                                position: 'absolute', bottom: 40, left: 44,
+                                                background: 'rgba(99,102,241,0.85)', border: 'none', cursor: 'pointer',
+                                                fontSize: 10, color: 'white', padding: '2px 7px',
+                                                borderRadius: 6, lineHeight: '1.6',
+                                                transform: `scale(${counterScale})`, transformOrigin: 'bottom left',
+                                                opacity: isSelected ? 1 : 0, pointerEvents: isSelected ? 'auto' : 'none',
+                                                transition: 'opacity 0.15s', boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+                                            }}>✏️ Edit</button>
+                                        {deleteBtn('tr')}
+                                    </div>
+                                );
+                            }
                             return null;
                         })}
                     </div>
@@ -4938,6 +5165,24 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                             onClick={e => { if (e.target === e.currentTarget) setAddModal(false); }}>
                             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6" style={{ animation: 'slideUp 0.4s cubic-bezier(0.16,1,0.3,1)' }}>
                                 <h3 className="font-bold text-slate-800 text-lg mb-4 flex items-center gap-2">✏️ Tulis Catatan</h3>
+
+                                {/* Visibility Mode Selector */}
+                                <div className="mb-4 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Visibilitas Catatan</p>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => setNewNoteMode('global')}
+                                            className={`flex-1 py-2 rounded-xl text-xs font-bold border-2 transition-all flex items-center justify-center gap-1 ${newNoteMode === 'global' ? 'bg-sky-500 text-white border-sky-500 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-sky-200'}`}>
+                                            🌍 Global
+                                        </button>
+                                        <button onClick={() => setNewNoteMode('private')}
+                                            className={`flex-1 py-2 rounded-xl text-xs font-bold border-2 transition-all flex items-center justify-center gap-1 ${newNoteMode === 'private' ? 'bg-violet-500 text-white border-violet-500 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-violet-200'}`}>
+                                            🔒 Pribadi
+                                        </button>
+                                    </div>
+                                    <p className="text-[9px] text-slate-400 mt-1.5 text-center">
+                                        {newNoteMode === 'global' ? '🌍 Terlihat & bisa diedit oleh semua pengguna' : '🔒 Hanya kamu yang bisa lihat & edit'}
+                                    </p>
+                                </div>
 
                                 <div className="flex gap-2 mb-3">
                                     <button onClick={() => setNoteStyle('sticky')}
@@ -5021,6 +5266,255 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                             </div>
                         </div>
                     )}
+                    {/* Modal Kertas Halaman */}
+                    {pageModal && (
+                        <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/30 backdrop-blur-sm p-4"
+                            onClick={e => { if (e.target === e.currentTarget) setPageModal(false); }}>
+                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 max-h-[92vh] overflow-y-auto" style={{ animation: 'slideUp 0.4s cubic-bezier(0.16,1,0.3,1)' }}>
+                                <h3 className="font-bold text-slate-800 text-lg mb-4 flex items-center gap-2">📄 Kertas Halaman</h3>
+
+                                {/* Visibilitas */}
+                                <div className="mb-4 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Visibilitas</p>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => setNewPageMode('global')}
+                                            className={`flex-1 py-2 rounded-xl text-xs font-bold border-2 transition-all flex items-center justify-center gap-1 ${newPageMode === 'global' ? 'bg-sky-500 text-white border-sky-500 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-sky-200'}`}>
+                                            🌍 Global
+                                        </button>
+                                        <button onClick={() => setNewPageMode('private')}
+                                            className={`flex-1 py-2 rounded-xl text-xs font-bold border-2 transition-all flex items-center justify-center gap-1 ${newPageMode === 'private' ? 'bg-violet-500 text-white border-violet-500 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:border-violet-200'}`}>
+                                            🔒 Pribadi
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Gaya Kertas */}
+                                <div className="mb-4">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Gaya Kertas</p>
+                                    <div className="grid grid-cols-4 gap-2">
+                                        {[
+                                            { val: 'lined',  label: 'Bergaris', icon: '≡' },
+                                            { val: 'grid',   label: 'Kotak',    icon: '⊞' },
+                                            { val: 'dotted', label: 'Titik',    icon: '∷' },
+                                            { val: 'blank',  label: 'Polos',    icon: '□' },
+                                        ].map(s => (
+                                            <button key={s.val} onClick={() => setPageStyle(s.val)}
+                                                className={`py-3 rounded-xl text-xs font-bold border-2 flex flex-col items-center gap-1 transition-all ${pageStyle === s.val ? 'border-emerald-400 bg-emerald-50 text-emerald-700 shadow-sm' : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-300'}`}>
+                                                <span className="text-lg leading-none">{s.icon}</span>
+                                                <span className="text-[9px]">{s.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Warna Kertas */}
+                                <div className="mb-4">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Warna Kertas</p>
+                                    <div className="flex gap-2 flex-wrap">
+                                        {PAGE_COLORS.map(c => (
+                                            <button key={c.bg} onClick={() => setPageColor(c.bg)}
+                                                title={c.label}
+                                                style={{
+                                                    width: 28, height: 28, borderRadius: 8,
+                                                    background: c.bg, border: pageColor === c.bg ? `3px solid ${c.border}` : `2px solid ${c.border}`,
+                                                    boxShadow: pageColor === c.bg ? `0 0 0 2px ${c.border}` : 'none',
+                                                    transition: 'all 0.15s', cursor: 'pointer',
+                                                }} />
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Font */}
+                                <div className="mb-4">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Font</p>
+                                    <div className="grid grid-cols-3 gap-1.5">
+                                        {PAGE_FONTS.map(f => (
+                                            <button key={f.value} onClick={() => setPageFont(f.value)}
+                                                style={{ fontFamily: f.value }}
+                                                className={`px-2 py-2 rounded-xl text-sm border-2 transition-all text-center truncate ${pageFont === f.value ? 'border-emerald-400 bg-emerald-50 text-emerald-700 shadow-sm' : 'border-slate-100 bg-slate-50 text-slate-600'}`}>
+                                                {f.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Preview Mini */}
+                                <div className="mb-4 rounded-2xl overflow-hidden border border-slate-200 shadow-inner" style={{ height: 120 }}>
+                                    <div style={{
+                                        ...getPageBackground(pageStyle, pageColor),
+                                        height: '100%', padding: '10px 12px 10px 28px',
+                                        position: 'relative', overflow: 'hidden',
+                                    }}>
+                                        <div style={{ position: 'absolute', top: 0, left: 24, bottom: 0, width: 1.5, background: 'rgba(248,113,113,0.4)' }} />
+                                        {pageTitle && (
+                                            <p style={{ fontFamily: pageFont, fontSize: 11, fontWeight: 700, color: '#1e293b', marginBottom: 2, borderBottom: '1.5px solid #fca5a5', paddingBottom: 2 }}>{pageTitle}</p>
+                                        )}
+                                        <p style={{ fontFamily: pageFont, fontSize: 10, lineHeight: '28px', color: '#374151', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                            {pageText || 'Preview halaman...'}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Judul & Teks */}
+                                <input
+                                    className="w-full p-3 rounded-xl text-sm outline-none border-2 border-slate-100 focus:border-emerald-300 transition-colors mb-2"
+                                    style={{ fontFamily: pageFont }}
+                                    placeholder="Judul halaman (opsional)"
+                                    value={pageTitle}
+                                    onChange={e => setPageTitle(e.target.value)}
+                                />
+                                <textarea
+                                    className="w-full h-36 p-3 rounded-xl text-sm resize-none outline-none border-2 border-slate-100 focus:border-emerald-300 transition-colors mb-4"
+                                    style={{ fontFamily: pageFont, lineHeight: 1.7 }}
+                                    placeholder="Tulis isi halaman di sini..."
+                                    value={pageText}
+                                    onChange={e => setPageText(e.target.value)}
+                                />
+
+                                <div className="flex gap-2">
+                                    <button onClick={() => setPageModal(false)}
+                                        className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-500 font-bold text-sm hover:bg-slate-50">
+                                        Batal
+                                    </button>
+                                    <button onClick={addPage}
+                                        className="flex-1 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm shadow-md active:scale-95 transition-all">
+                                        Tempel Halaman! 📄
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    {/* Modal Edit Kertas Halaman */}
+                    {editPageItem && (() => {
+                        const ep = editPageItem;
+                        const curPg = ep.pages[editPageIdx] || { title: '', text: '' };
+                        const updateCurPage = (field, val) => {
+                            const newPages = ep.pages.map((p, i) => i === editPageIdx ? { ...p, [field]: val } : p);
+                            setEditPageItem(prev => ({ ...prev, pages: newPages }));
+                        };
+                        const addNewPage = () => {
+                            const newPages = [...ep.pages, { title: '', text: '' }];
+                            setEditPageItem(prev => ({ ...prev, pages: newPages }));
+                            setEditPageIdx(newPages.length - 1);
+                        };
+                        const deleteCurPage = () => {
+                            if (ep.pages.length <= 1) return;
+                            const newPages = ep.pages.filter((_, i) => i !== editPageIdx);
+                            setEditPageItem(prev => ({ ...prev, pages: newPages }));
+                            setEditPageIdx(Math.max(0, editPageIdx - 1));
+                        };
+                        return (
+                        <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/30 backdrop-blur-sm p-4"
+                            onClick={e => { if (e.target === e.currentTarget) setEditPageItem(null); }}>
+                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 max-h-[92vh] overflow-y-auto" style={{ animation: 'slideUp 0.4s cubic-bezier(0.16,1,0.3,1)' }}>
+                                <h3 className="font-bold text-slate-800 text-lg mb-4 flex items-center gap-2">✏️ Edit Kertas Halaman</h3>
+
+                                {/* Navigasi Halaman */}
+                                <div className="mb-4 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Halaman</p>
+                                        <div className="flex items-center gap-1.5">
+                                            <button onClick={deleteCurPage} disabled={ep.pages.length <= 1}
+                                                className="px-2 py-1 rounded-lg text-[10px] font-bold border border-red-200 bg-red-50 text-red-400 disabled:opacity-30 hover:bg-red-100 transition-all">
+                                                🗑 Hapus
+                                            </button>
+                                            <button onClick={addNewPage}
+                                                className="px-2 py-1 rounded-lg text-[10px] font-bold bg-emerald-500 text-white hover:bg-emerald-600 transition-all shadow-sm">
+                                                + Halaman
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button onClick={() => setEditPageIdx(i => Math.max(0, i - 1))} disabled={editPageIdx === 0}
+                                            className="w-8 h-8 rounded-xl border-2 border-slate-200 bg-white text-slate-600 font-bold text-sm disabled:opacity-30 hover:bg-slate-50 transition-all flex items-center justify-center">‹</button>
+                                        <div className="flex-1 flex gap-1 overflow-x-auto py-1">
+                                            {ep.pages.map((_, i) => (
+                                                <button key={i} onClick={() => setEditPageIdx(i)}
+                                                    className={`flex-shrink-0 w-7 h-7 rounded-lg text-xs font-bold border-2 transition-all ${i === editPageIdx ? 'bg-emerald-500 text-white border-emerald-500 shadow-md' : 'bg-white text-slate-400 border-slate-200 hover:border-emerald-300'}`}>
+                                                    {i + 1}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <button onClick={() => setEditPageIdx(i => Math.min(ep.pages.length - 1, i + 1))} disabled={editPageIdx === ep.pages.length - 1}
+                                            className="w-8 h-8 rounded-xl border-2 border-slate-200 bg-white text-slate-600 font-bold text-sm disabled:opacity-30 hover:bg-slate-50 transition-all flex items-center justify-center">›</button>
+                                    </div>
+                                    <p className="text-[9px] text-slate-400 text-center mt-1.5">Halaman {editPageIdx + 1} dari {ep.pages.length}</p>
+                                </div>
+
+                                {/* Preview */}
+                                <div className="mb-4 rounded-2xl overflow-hidden border border-slate-200 shadow-inner" style={{ height: 100 }}>
+                                    <div style={{ ...getPageBackground(ep.pageStyle, ep.color || '#ffffff'), height: '100%', padding: '8px 10px 8px 26px', position: 'relative', overflow: 'hidden' }}>
+                                        <div style={{ position: 'absolute', top: 0, left: 22, bottom: 0, width: 1.5, background: 'rgba(248,113,113,0.4)' }} />
+                                        {curPg.title && <p style={{ fontFamily: ep.fontFamily, fontSize: 10, fontWeight: 700, color: '#1e293b', borderBottom: '1.5px solid #fca5a5', paddingBottom: 2, marginBottom: 2 }}>{curPg.title}</p>}
+                                        <p style={{ fontFamily: ep.fontFamily, fontSize: 9.5, lineHeight: '28px', color: '#374151', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{curPg.text || 'Isi halaman...'}</p>
+                                    </div>
+                                </div>
+
+                                {/* Judul & Isi halaman ini */}
+                                <input className="w-full p-3 rounded-xl text-sm outline-none border-2 border-slate-100 focus:border-emerald-300 transition-colors mb-2"
+                                    style={{ fontFamily: ep.fontFamily }}
+                                    placeholder={`Judul halaman ${editPageIdx + 1} (opsional)`}
+                                    value={curPg.title || ''}
+                                    onChange={e => updateCurPage('title', e.target.value)} />
+                                <textarea className="w-full h-32 p-3 rounded-xl text-sm resize-none outline-none border-2 border-slate-100 focus:border-emerald-300 transition-colors mb-4"
+                                    style={{ fontFamily: ep.fontFamily, lineHeight: 1.7 }}
+                                    placeholder={`Tulis isi halaman ${editPageIdx + 1}...`}
+                                    value={curPg.text || ''}
+                                    onChange={e => updateCurPage('text', e.target.value)} />
+
+                                {/* Gaya Kertas */}
+                                <div className="mb-3">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Gaya Kertas</p>
+                                    <div className="grid grid-cols-4 gap-1.5">
+                                        {[{ val:'lined',label:'Bergaris',icon:'≡'},{val:'grid',label:'Kotak',icon:'⊞'},{val:'dotted',label:'Titik',icon:'∷'},{val:'blank',label:'Polos',icon:'□'}].map(s => (
+                                            <button key={s.val} onClick={() => setEditPageItem(prev => ({ ...prev, pageStyle: s.val }))}
+                                                className={`py-2.5 rounded-xl text-xs font-bold border-2 flex flex-col items-center gap-0.5 transition-all ${ep.pageStyle === s.val ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-slate-100 bg-slate-50 text-slate-500'}`}>
+                                                <span className="text-base leading-none">{s.icon}</span>
+                                                <span className="text-[8px]">{s.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Warna & Font */}
+                                <div className="flex gap-3 mb-4">
+                                    <div className="flex-1">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Warna</p>
+                                        <div className="flex gap-1.5 flex-wrap">
+                                            {PAGE_COLORS.map(c => (
+                                                <button key={c.bg} onClick={() => setEditPageItem(prev => ({ ...prev, color: c.bg }))} title={c.label}
+                                                    style={{ width: 24, height: 24, borderRadius: 6, background: c.bg, border: ep.color === c.bg ? `3px solid ${c.border}` : `2px solid ${c.border}`, boxShadow: ep.color === c.bg ? `0 0 0 2px ${c.border}` : 'none', cursor: 'pointer' }} />
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Font</p>
+                                        <div className="grid grid-cols-2 gap-1">
+                                            {PAGE_FONTS.map(f => (
+                                                <button key={f.value} onClick={() => setEditPageItem(prev => ({ ...prev, fontFamily: f.value }))}
+                                                    style={{ fontFamily: f.value }}
+                                                    className={`px-1 py-1.5 rounded-lg text-xs border-2 transition-all text-center truncate ${ep.fontFamily === f.value ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-slate-100 bg-slate-50 text-slate-600'}`}>
+                                                    {f.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-2">
+                                    <button onClick={() => { setEditPageItem(null); setEditPageIdx(0); }}
+                                        className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-500 font-bold text-sm hover:bg-slate-50">
+                                        Batal
+                                    </button>
+                                    <button onClick={updatePage}
+                                        className="flex-1 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm shadow-md active:scale-95 transition-all">
+                                        Simpan ✓
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        );
+                    })()}
                 </div>
             );
         };
