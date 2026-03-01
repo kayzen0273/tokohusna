@@ -1043,6 +1043,12 @@
                                 updateData.qty = newStockInStore;
                             }
                             
+                            // Update harga jual toko jika berbeda dari harga sebelumnya
+                            if (item.price && item.price > 0 && item.price !== itemData.price) {
+                                updateData.price = item.price;
+                                console.log(`💰 ${item.name}: harga jual diupdate ${itemData.price} → ${item.price}`);
+                            }
+                            
                             // Update ke Firestore
                             await window.updateDoc(itemRef, updateData);
                             
