@@ -546,6 +546,7 @@
                 { id: 'kasir', label: 'Identitas Kasir', desc: 'Nama kasir default perangkat ini', icon: 'user-tie', color: 'sky' },
                 { id: 'pembayaran', label: 'Metode Pembayaran', desc: 'Setting QRIS dan rekening transfer', icon: 'credit-card', color: 'teal' },
                 { id: 'whatsapp', label: 'Format WhatsApp', desc: 'Info pengiriman gambar struk via WA', icon: 'whatsapp', color: 'green' },
+                { id: 'recycle_bin', label: 'Recycle Bin', desc: 'Pulihkan atau hapus permanen barang', icon: 'trash-can', color: 'red' },
             ];
 
             const colorMap = {
@@ -553,6 +554,7 @@
                 slate: { bg: 'bg-slate-50', border: 'border-slate-200', icon: 'bg-slate-700', text: 'text-slate-800', btn: 'bg-slate-800 hover:bg-slate-900' },
                 teal: { bg: 'bg-teal-50', border: 'border-teal-200', icon: 'bg-teal-600', text: 'text-teal-800', btn: 'bg-teal-600 hover:bg-teal-700' },
                 green: { bg: 'bg-green-50', border: 'border-green-200', icon: 'bg-green-600', text: 'text-green-800', btn: 'bg-green-600 hover:bg-green-700' },
+                red: { bg: 'bg-red-50', border: 'border-red-200', icon: 'bg-red-600', text: 'text-red-800', btn: 'bg-red-600 hover:bg-red-700' },
             };
 
             return (
@@ -751,6 +753,135 @@
                                 </div>
                             </div>
                         );
+
+                        if (activeMenu === 'recycle_bin') {
+                            const [recycleBin, setRecycleBin] = React.useState([]);
+                            const [loadingBin, setLoadingBin] = React.useState(true);
+                            const [selectedIds, setSelectedIds] = React.useState([]);
+                            const [processingBin, setProcessingBin] = React.useState(false);
+
+                            React.useEffect(() => {
+                                const q = window.query(
+                                    window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'recycle_bin'),
+                                    window.orderBy('deletedAt', 'desc')
+                                );
+                                const unsub = window.onSnapshot(q, snap => {
+                                    setRecycleBin(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                                    setLoadingBin(false);
+                                });
+                                return () => unsub();
+                            }, []);
+
+                            const toggleSelect = (id) => setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+                            const toggleAll = () => setSelectedIds(selectedIds.length === recycleBin.length ? [] : recycleBin.map(i => i.id));
+
+                            const handleRestore = async (ids) => {
+                                setProcessingBin(true);
+                                try {
+                                    const batch = window.writeBatch(window.db);
+                                    for (const id of ids) {
+                                        const item = recycleBin.find(i => i.id === id);
+                                        if (!item) continue;
+                                        const { id: _, deletedAt, ...itemData } = item;
+                                        const origRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.originalId || id);
+                                        batch.set(origRef, { ...itemData, restoredAt: window.serverTimestamp() });
+                                        const binRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'recycle_bin', id);
+                                        batch.delete(binRef);
+                                    }
+                                    await batch.commit();
+                                    setSelectedIds([]);
+                                    alert('✅ ' + ids.length + ' barang berhasil dipulihkan!');
+                                } catch(e) { alert('Gagal memulihkan: ' + e.message); }
+                                finally { setProcessingBin(false); }
+                            };
+
+                            const handlePermanentDelete = async (ids) => {
+                                if (!confirm('Hapus permanen ' + ids.length + ' barang? Tidak bisa dikembalikan!')) return;
+                                setProcessingBin(true);
+                                try {
+                                    const batch = window.writeBatch(window.db);
+                                    for (const id of ids) {
+                                        batch.delete(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'recycle_bin', id));
+                                    }
+                                    await batch.commit();
+                                    setSelectedIds([]);
+                                } catch(e) { alert('Gagal menghapus: ' + e.message); }
+                                finally { setProcessingBin(false); }
+                            };
+
+                            return (
+                                <div className={`bg-white/90 backdrop-blur-sm rounded-[30px] shadow-soft border ${c.border} overflow-hidden`}>
+                                    <SubHeader />
+                                    <div className="p-5 space-y-4">
+                                        {loadingBin ? (
+                                            <div className="text-center py-8 text-slate-400 text-sm">Memuat...</div>
+                                        ) : recycleBin.length === 0 ? (
+                                            <div className="flex flex-col items-center justify-center py-12 opacity-50">
+                                                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3">
+                                                    <Icon name="trash-can" className="text-2xl text-slate-400" />
+                                                </div>
+                                                <p className="font-semibold text-slate-500 text-sm">Recycle bin kosong</p>
+                                                <p className="text-xs text-slate-400 mt-1">Barang yang dihapus akan muncul di sini</p>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                {/* Toolbar */}
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <button onClick={toggleAll} className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-all ${selectedIds.length === recycleBin.length ? 'bg-red-600 text-white border-red-600' : 'bg-white text-slate-600 border-slate-200 hover:border-red-300'}`}>
+                                                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center ${selectedIds.length === recycleBin.length ? 'bg-white border-white' : 'border-slate-400'}`}>
+                                                            {selectedIds.length === recycleBin.length && <Icon name="check" className="text-red-600 text-[10px]" />}
+                                                        </div>
+                                                        {selectedIds.length === recycleBin.length ? 'Batal Pilih Semua' : 'Pilih Semua'}
+                                                    </button>
+                                                    {selectedIds.length > 0 && (
+                                                        <>
+                                                            <span className="text-xs text-slate-500 font-bold">{selectedIds.length} dipilih</span>
+                                                            <button onClick={() => handleRestore(selectedIds)} disabled={processingBin} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-green-500 text-white text-xs font-bold hover:bg-green-600 disabled:opacity-50 transition-all active:scale-95">
+                                                                <Icon name="rotate-left" /> Pulihkan
+                                                            </button>
+                                                            <button onClick={() => handlePermanentDelete(selectedIds)} disabled={processingBin} className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-red-600 text-white text-xs font-bold hover:bg-red-700 disabled:opacity-50 transition-all active:scale-95">
+                                                                <Icon name="trash-can" /> Hapus Permanen
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
+
+                                                {/* Item list */}
+                                                <div className="space-y-2">
+                                                    {recycleBin.map(item => {
+                                                        const isSelected = selectedIds.includes(item.id);
+                                                        const deletedDate = item.deletedAt ? (item.deletedAt.toDate ? item.deletedAt.toDate() : new Date(item.deletedAt)) : null;
+                                                        return (
+                                                            <div key={item.id} onClick={() => toggleSelect(item.id)} className={`flex items-center gap-3 p-3 rounded-2xl border cursor-pointer transition-all ${isSelected ? 'bg-red-50 border-red-300' : 'bg-slate-50 border-slate-200 hover:border-slate-300'}`}>
+                                                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${isSelected ? 'bg-red-600 border-red-600' : 'border-slate-300 bg-white'}`}>
+                                                                    {isSelected && <Icon name="check" className="text-white text-[10px]" />}
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-sm font-bold text-slate-800 truncate">{item.name}</p>
+                                                                    <p className="text-[10px] text-slate-400 mt-0.5">
+                                                                        {item.unit && <span className="mr-2">{item.unit}</span>}
+                                                                        {item.rack && <span className="mr-2">Rak: {item.rack}</span>}
+                                                                        {deletedDate && <span>Dihapus: {deletedDate.toLocaleDateString('id-ID', {day:'numeric', month:'short', year:'numeric'})}</span>}
+                                                                    </p>
+                                                                </div>
+                                                                <div className="flex gap-1.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                                                                    <button onClick={() => handleRestore([item.id])} disabled={processingBin} title="Pulihkan" className="w-7 h-7 rounded-lg bg-green-50 text-green-600 border border-green-200 hover:bg-green-100 flex items-center justify-center text-xs transition-all disabled:opacity-50">
+                                                                        <Icon name="rotate-left" />
+                                                                    </button>
+                                                                    <button onClick={() => handlePermanentDelete([item.id])} disabled={processingBin} title="Hapus Permanen" className="w-7 h-7 rounded-lg bg-red-50 text-red-500 border border-red-200 hover:bg-red-100 flex items-center justify-center text-xs transition-all disabled:opacity-50">
+                                                                        <Icon name="trash-can" />
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        }
 
                         return null;
                     })()}
@@ -4382,7 +4513,27 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             };
 
             const handleSaveSettings = async (newSettings) => { if(!user) return; setSubmitting(true); try { const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'settings', 'global'); await window.setDoc(docRef, newSettings); showToast("Pengaturan disimpan"); } catch(error) { console.error(error); showToast("Gagal simpan pengaturan", "error"); } finally { setSubmitting(false); } };
-            const handleDelete = async () => { if (!deleteModal.item || !user) return; try { const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', deleteModal.item.id); await window.deleteDoc(docRef); showToast("Barang dihapus (dari semua toko)"); } catch (error) { showToast("Gagal menghapus", "error"); } finally { setDeleteModal({ show: false, item: null }); } };
+            const handleDelete = async () => {
+                if (!deleteModal.item || !user) return;
+                try {
+                    const item = deleteModal.item;
+                    // Pindahkan ke recycle bin
+                    const binRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'recycle_bin');
+                    await window.addDoc(binRef, {
+                        ...item,
+                        originalId: item.id,
+                        deletedAt: window.serverTimestamp()
+                    });
+                    // Hapus dari inventory
+                    const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id);
+                    await window.deleteDoc(docRef);
+                    showToast("Barang dipindahkan ke Recycle Bin");
+                } catch (error) {
+                    showToast("Gagal menghapus", "error");
+                } finally {
+                    setDeleteModal({ show: false, item: null });
+                }
+            };
             const handleConfirmDeleteRack = async () => { if (!deleteRackModal.rackName || !user) return; const rackName = deleteRackModal.rackName; try { const batch = window.writeBatch(window.db); const itemsToUpdate = inventoryData.filter(item => item.rack && item.rack.includes(rackName)); if (itemsToUpdate.length === 0) { showToast("Tidak ada item di rak ini"); setDeleteRackModal({ show: false, rackName: null }); return; } itemsToUpdate.forEach(item => { const newRacks = item.rack.split(',').map(r => r.trim()).filter(r => r !== rackName); const newRackString = newRacks.length > 0 ? newRacks.join(', ') : '-'; const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id); batch.update(docRef, { rack: newRackString }); }); await batch.commit(); showToast(`Rak "${rackName}" berhasil dihapus`); setSelectedRacks([]); } catch (err) { console.error("Failed delete rack", err); showToast("Gagal menghapus rak", "error"); } finally { setDeleteRackModal({ show: false, rackName: null }); } };
             const handleNavClick = (tabId, event) => { setActiveTab(tabId); if (tabId !== 'list') setShowOnlyLowStock(false); setIsSidebarOpen(false); };
             
@@ -4502,7 +4653,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         {activeTab === 'import' && (<BulkImportView user={user} onImportComplete={(count) => { showToast(`${count} Barang berhasil diimport`); setActiveTab('list'); }} currentProfile={currentProfile} />)}
                         {activeTab === 'settings' && (<SettingsView settings={settingsData} onSave={handleSaveSettings} loading={submitting} />)}
                     </main>
-                    <ConfirmModal isOpen={deleteModal.show} title="Hapus Barang?" message={`Yakin ingin menghapus permanen "${deleteModal.item?.name}"? Barang ini akan hilang dari SEMUA toko.`} onConfirm={handleDelete} onCancel={() => setDeleteModal({ show: false, item: null })} />
+                    <ConfirmModal isOpen={deleteModal.show} title="Hapus ke Recycle Bin?" message={`Pindahkan "${deleteModal.item?.name}" ke Recycle Bin? Bisa dipulihkan di Pengaturan > Recycle Bin.`} onConfirm={handleDelete} onCancel={() => setDeleteModal({ show: false, item: null })} />
                     <ConfirmModal isOpen={deleteRackModal.show} title="Hapus Rak?" message={`Yakin ingin menghapus rak "${deleteRackModal.rackName}"? Semua barang di rak ini akan menjadi 'No Rack' (-).`} onConfirm={handleConfirmDeleteRack} onCancel={() => setDeleteRackModal({ show: false, rackName: null })} confirmText="Ya, Hapus Rak" />
                 </div>
             );
