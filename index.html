@@ -3568,12 +3568,17 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         }
                     });
 
-                    // Buat map sisa stok dari inventory
+                    // Buat map sisa stok dari inventory + costPrice dari input manual
                     const stockMap = {};
                     const expMap = {};
+                    const inventoryCostMap = {};
                     (items || []).forEach(inv => { 
                         stockMap[inv.id] = inv.qty || 0; 
                         if (inv.exp) expMap[inv.id] = typeof inv.exp === 'string' ? inv.exp : new Date(inv.exp).toLocaleDateString('id-ID');
+                        if (inv.costPrice > 0) {
+                            inventoryCostMap[inv.id] = inv.costPrice;
+                            inventoryCostMap[inv.name] = inv.costPrice;
+                        }
                     });
 
                     const ExcelJS = window.ExcelJS;
@@ -3600,7 +3605,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
 
                     const sortedItems = Object.values(itemMap).sort((a, b) => b.sold - a.sold);
                     sortedItems.forEach((item, index) => {
-                        const buyPriceVal = buyPriceMap[item.id] || buyPriceMap[item.name] || '';
+                        const buyPriceVal = buyPriceMap[item.id] || buyPriceMap[item.name] || inventoryCostMap[item.id] || inventoryCostMap[item.name] || '';
                         const sisaStok = stockMap[item.id] !== undefined ? stockMap[item.id] : '-';
                         const expVal = expMap[item.id] || '-';
                         const row = worksheet.addRow({
