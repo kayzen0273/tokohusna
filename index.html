@@ -962,6 +962,21 @@
                 const grandTotal = dpp + ppn + numMaterai + numPengiriman + numPembulatan;
                 
                 try {
+                    // Konversi attachment ke base64 jika ada
+                    let attachmentData = null;
+                    let attachmentType = null;
+                    let attachmentName = null;
+                    if (attachmentFile) {
+                        attachmentData = await new Promise((resolve, reject) => {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => resolve(ev.target.result);
+                            reader.onerror = () => reject(new Error('Gagal baca file'));
+                            reader.readAsDataURL(attachmentFile);
+                        });
+                        attachmentType = attachmentFile.type;
+                        attachmentName = attachmentFile.name;
+                    }
+
                     const invoicePayload = {
                         supplier: invoiceData.supplier, 
                         invoiceNumber: invoiceData.invoiceNumber || '',
@@ -981,7 +996,8 @@
                         isPaid: invoiceData.isPaid, 
                         isConsignment: invoiceData.isConsignment || false,
                         items: invoiceData.items.map(item => ({ id: item.id, name: item.name, qty: item.qty, price: item.price, buyPrice: item.buyPrice || 0 })),
-                        updatedAt: window.serverTimestamp()
+                        updatedAt: window.serverTimestamp(),
+                        ...(attachmentData ? { attachmentData, attachmentType, attachmentName } : {})
                     };
 
                     // 1. Simpan atau update faktur
@@ -1158,6 +1174,16 @@
                 setMaterai(purchase.materai ? fmt(purchase.materai) : '0');
                 setPengiriman(purchase.pengiriman ? fmt(purchase.pengiriman) : '0');
                 setPembulatan(purchase.pembulatan ? fmt(purchase.pembulatan) : '0');
+                // Load attachment yang sudah tersimpan jika ada
+                if (purchase.attachmentData) {
+                    if (purchase.attachmentType && purchase.attachmentType.startsWith('image/')) {
+                        setAttachmentPreview({ type: 'image', url: purchase.attachmentData, name: purchase.attachmentName || 'Faktur' });
+                    } else {
+                        setAttachmentPreview({ type: 'pdf', name: purchase.attachmentName || 'Faktur.pdf' });
+                    }
+                } else {
+                    setAttachmentFile(null); setAttachmentPreview(null);
+                }
                 setDetailModalOpen(false);
                 setInvoiceModalOpen(true);
             };
@@ -1634,6 +1660,50 @@
                                         </div>
                                     </div>
                                 </div>
+                                {/* Bukti Faktur Asli */}
+                                {selectedPurchase.attachmentData && (
+                                    <div>
+                                        <div className="text-xs font-bold text-slate-500 uppercase mb-2">📎 Bukti Faktur Asli</div>
+                                        {selectedPurchase.attachmentType && selectedPurchase.attachmentType.startsWith('image/') ? (
+                                            <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50">
+                                                <img
+                                                    src={selectedPurchase.attachmentData}
+                                                    alt="Bukti Faktur"
+                                                    className="w-full object-contain max-h-80"
+                                                    style={{cursor:'pointer'}}
+                                                    onClick={() => {
+                                                        const win = window.open();
+                                                        win.document.write(`<img src="${selectedPurchase.attachmentData}" style="max-width:100%;display:block;margin:auto;" />`);
+                                                    }}
+                                                />
+                                                <p className="text-center text-[10px] text-slate-400 py-2">Klik gambar untuk lihat penuh</p>
+                                            </div>
+                                        ) : (
+                                            <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center text-red-600"><Icon name="file-pdf" className="text-xl" /></div>
+                                                    <div>
+                                                        <p className="text-xs font-bold text-slate-700">{selectedPurchase.attachmentName || 'Faktur.pdf'}</p>
+                                                        <p className="text-[10px] text-slate-400">Dokumen PDF</p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const link = document.createElement('a');
+                                                        link.href = selectedPurchase.attachmentData;
+                                                        link.download = selectedPurchase.attachmentName || 'faktur.pdf';
+                                                        link.click();
+                                                    }}
+                                                    className="bg-red-50 border border-red-200 text-red-600 text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-red-100 active:scale-95 transition-all"
+                                                >
+                                                    <Icon name="download" /> Unduh PDF
+                                                </button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
                             </div>
 
                             {/* FOOTER */}
