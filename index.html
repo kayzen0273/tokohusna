@@ -4830,16 +4830,12 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                             <h1 className="text-xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
                                 <span>📌</span> Papan Catatan
                             </h1>
-                            <p className="text-xs text-slate-400 mt-0.5">{items.filter(i=>i.type==='note').length} catatan · {items.filter(i=>i.type==='photo').length} foto · {items.filter(i=>i.type==='page').length} halaman</p>
+                            <p className="text-xs text-slate-400 mt-0.5">{items.filter(i=>i.type==='note').length} catatan · {items.filter(i=>i.type==='photo').length} foto · {items.filter(i=>i.type==='page').length} kertas</p>
                         </div>
                         <div className="flex items-center gap-2">
                             <button onClick={() => photoInputRef.current?.click()}
                                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 shadow-sm active:scale-95 transition-all">
                                 <Icon name="image" className="text-sm text-rose-400" /> Foto
-                            </button>
-                            <button onClick={() => setPageModal(true)}
-                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 shadow-sm active:scale-95 transition-all">
-                                📄 Halaman
                             </button>
                             <button onClick={() => setAddModal(true)}
                                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-white font-bold text-xs shadow-md active:scale-95 transition-all">
