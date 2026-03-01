@@ -55,7 +55,7 @@
     
     <!-- Fonts & Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Amiri:wght@400;700&family=Courier+Prime:wght@400;700&family=Caveat:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Amiri:wght@400;700&family=Courier+Prime:wght@400;700&family=Caveat:wght@400;500;600;700&family=Dancing+Script:wght@400;600;700&family=Pacifico&family=Satisfy&family=Lobster&family=Quicksand:wght@400;600;700&family=Indie+Flower&family=Patrick+Hand&family=Kalam:wght@400;700&family=Gloria+Hallelujah&family=Special+Elite&family=Permanent+Marker&family=Shadows+Into+Light&family=Amatic+SC:wght@400;700&family=Righteous&family=Fredoka+One&family=Comfortaa:wght@400;600;700&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
 
     <!-- Fuse.js -->
     <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
@@ -4428,6 +4428,27 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 { bg: '#FEF3C7', border: '#FCD34D', label: 'Oranye' },
                 { bg: '#F1F5F9', border: '#CBD5E1', label: 'Abu' },
             ];
+            const NOTE_FONTS = [
+                { label: 'Caveat',        value: "'Caveat', cursive",           preview: 'Aa' },
+                { label: 'Tulis Tangan',  value: "'Kalam', cursive",            preview: 'Aa' },
+                { label: 'Bunga',         value: "'Dancing Script', cursive",   preview: 'Aa' },
+                { label: 'Bulat',         value: "'Quicksand', sans-serif",     preview: 'Aa' },
+                { label: 'Lucu',          value: "'Indie Flower', cursive",     preview: 'Aa' },
+                { label: 'Patrick',       value: "'Patrick Hand', cursive",     preview: 'Aa' },
+                { label: 'Pacifico',      value: "'Pacifico', cursive",         preview: 'Aa' },
+                { label: 'Marker',        value: "'Permanent Marker', cursive", preview: 'Aa' },
+                { label: 'Special',       value: "'Special Elite', cursive",    preview: 'Aa' },
+                { label: 'Bayangan',      value: "'Shadows Into Light', cursive", preview: 'Aa' },
+                { label: 'Amatic',        value: "'Amatic SC', cursive",        preview: 'Aa' },
+                { label: 'Gloria',        value: "'Gloria Hallelujah', cursive", preview: 'Aa' },
+                { label: 'Lobster',       value: "'Lobster', cursive",          preview: 'Aa' },
+                { label: 'Fredoka',       value: "'Fredoka One', cursive",      preview: 'Aa' },
+                { label: 'Comfortaa',     value: "'Comfortaa', sans-serif",     preview: 'Aa' },
+                { label: 'Nunito',        value: "'Nunito', sans-serif",        preview: 'Aa' },
+                { label: 'Mesin Tik',     value: "'Courier Prime', monospace",  preview: 'Aa' },
+                { label: 'Righteous',     value: "'Righteous', cursive",        preview: 'Aa' },
+            ];
+            const [noteFont, setNoteFont] = useState(NOTE_FONTS[0].value);
             const PLAIN_COLORS = [
                 { val: '#1e293b', label: 'Hitam' },
                 { val: '#b45309', label: 'Coklat' },
@@ -4462,6 +4483,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     type: 'note',
                     noteStyle,
                     text: noteText,
+                    fontFamily: noteFont,
                     color: noteStyle === 'sticky' ? noteColor : (noteColor.startsWith('#') && noteColor.length <= 7 && !NOTE_COLORS.find(c=>c.bg===noteColor) ? noteColor : '#1e293b'),
                     x, y, rotation: rot,
                     createdAt: window.serverTimestamp()
@@ -4530,17 +4552,28 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             };
 
             const onTouchStart = (e, item) => {
-                if (e.touches.length === 2 && item.type === 'photo') {
-                    // Pinch start
-                    e.stopPropagation();
-                    const dist = getPinchDist(e.touches);
-                    setPinching({ id: item.id, startDist: dist, origScale: item.photoScale ?? 1 });
-                    setDragging(null);
-                } else if (e.touches.length === 1) {
+                if (e.touches.length === 1) {
                     const t = e.touches[0];
                     setDragging({ id: item.id, startX: t.clientX, startY: t.clientY, origX: item.x, origY: item.y });
                 }
             };
+
+            // Global 2nd-finger listener: ketika 1 jari sudah di item (dragging), jari ke-2 dari manapun → pinch
+            useEffect(() => {
+                if (!dragging) return;
+                const onGlobalTouchStart2nd = (e) => {
+                    if (e.touches.length >= 2) {
+                        const item = items.find(i => i.id === dragging.id);
+                        if (item) {
+                            const dist = getPinchDist(e.touches);
+                            setPinching({ id: dragging.id, startDist: dist, origScale: item.photoScale ?? 1 });
+                            setDragging(null);
+                        }
+                    }
+                };
+                window.addEventListener('touchstart', onGlobalTouchStart2nd, { passive: true });
+                return () => window.removeEventListener('touchstart', onGlobalTouchStart2nd);
+            }, [dragging, items]);
 
             // Drag effect
             useEffect(() => {
@@ -4552,8 +4585,17 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     if (cx == null) return;
                     const dx = cx - dragging.startX;
                     const dy = cy - dragging.startY;
+                    const board = boardRef.current;
+                    let newX = dragging.origX + dx;
+                    let newY = dragging.origY + dy;
+                    if (board) {
+                        const bw = board.offsetWidth;
+                        const bh = board.offsetHeight;
+                        newX = Math.max(0, Math.min(newX, bw - 100));
+                        newY = Math.max(0, Math.min(newY, bh - 60));
+                    }
                     setItems(prev => prev.map(it =>
-                        it.id === dragging.id ? { ...it, x: dragging.origX + dx, y: dragging.origY + dy } : it
+                        it.id === dragging.id ? { ...it, x: newX, y: newY } : it
                     ));
                 };
                 const onUp = (e) => {
@@ -4562,7 +4604,16 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     if (cx != null) {
                         const dx = cx - dragging.startX;
                         const dy = cy - dragging.startY;
-                        savePosition(dragging.id, dragging.origX + dx, dragging.origY + dy);
+                        const board = boardRef.current;
+                        let newX = dragging.origX + dx;
+                        let newY = dragging.origY + dy;
+                        if (board) {
+                            const bw = board.offsetWidth;
+                            const bh = board.offsetHeight;
+                            newX = Math.max(0, Math.min(newX, bw - 100));
+                            newY = Math.max(0, Math.min(newY, bh - 60));
+                        }
+                        savePosition(dragging.id, newX, newY);
                     }
                     setDragging(null);
                 };
@@ -4578,7 +4629,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 };
             }, [dragging, pinching]);
 
-            // Pinch effect
+            // Pinch effect (berlaku untuk foto & catatan)
             useEffect(() => {
                 if (!pinching) return;
                 const onMove = (e) => {
@@ -4591,10 +4642,15 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     ));
                 };
                 const onEnd = (e) => {
-                    // Save final scale
                     const item = items.find(i => i.id === pinching.id);
                     if (item) saveScale(pinching.id, item.photoScale ?? 1);
                     setPinching(null);
+                    // Setelah pinch selesai, jika masih ada 1 jari, aktifkan drag lagi
+                    if (e.touches && e.touches.length === 1) {
+                        const t = e.touches[0];
+                        const it = items.find(i => i.id === pinching.id);
+                        if (it) setDragging({ id: it.id, startX: t.clientX, startY: t.clientY, origX: it.x, origY: it.y });
+                    }
                 };
                 window.addEventListener('touchmove', onMove, { passive: true });
                 window.addEventListener('touchend', onEnd);
@@ -4604,9 +4660,8 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 };
             }, [pinching, items]);
 
-            // Mouse wheel zoom for photo (desktop)
+            // Mouse wheel zoom untuk semua item (desktop)
             const onWheel = (e, item) => {
-                if (item.type !== 'photo') return;
                 e.preventDefault();
                 e.stopPropagation();
                 const delta = e.deltaY > 0 ? 0.9 : 1.1;
@@ -4677,7 +4732,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         {items.map(item => {
                             const isDraggingThis = dragging?.id === item.id;
                             const isPinchingThis = pinching?.id === item.id;
-                            const itemScale = item.type === 'photo' ? (item.photoScale ?? 1) : 1;
+                            const itemScale = item.photoScale ?? 1;
                             const baseStyle = {
                                 position: 'absolute',
                                 left: item.x ?? 50,
@@ -4700,14 +4755,15 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                             boxShadow: 'none',
                                         }}
                                             onMouseDown={e => onMouseDown(e, item)}
-                                            onTouchStart={e => onTouchStart(e, item)}>
+                                            onTouchStart={e => onTouchStart(e, item)}
+                                            onWheel={e => onWheel(e, item)}>
                                             <p style={{
                                                 fontSize: '16px',
                                                 lineHeight: '1.5',
                                                 color: item.color || '#1e293b',
                                                 wordBreak: 'break-word',
                                                 whiteSpace: 'pre-wrap',
-                                                fontFamily: "'Caveat', cursive, sans-serif",
+                                                fontFamily: item.fontFamily || "'Caveat', cursive, sans-serif",
                                                 fontWeight: 600,
                                                 textShadow: '0 1px 3px rgba(255,255,255,0.8)',
                                             }}>{item.text}</p>
@@ -4738,7 +4794,8 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                         boxShadow: isDraggingThis ? '0 20px 40px rgba(0,0,0,0.25)' : '2px 4px 12px rgba(0,0,0,0.13)',
                                     }}
                                         onMouseDown={e => onMouseDown(e, item)}
-                                        onTouchStart={e => onTouchStart(e, item)}>
+                                        onTouchStart={e => onTouchStart(e, item)}
+                                        onWheel={e => onWheel(e, item)}>
                                         <div style={{
                                             position:'absolute', top:-10, left:'50%', transform:'translateX(-50%)',
                                             width:16, height:16, borderRadius:'50%',
@@ -4749,7 +4806,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                         <p style={{
                                             fontSize:'13px', lineHeight:'1.5', color:'#374151',
                                             wordBreak:'break-word', whiteSpace:'pre-wrap',
-                                            fontFamily:"'Caveat', cursive, sans-serif",
+                                            fontFamily: item.fontFamily || "'Caveat', cursive, sans-serif",
                                             fontWeight: 500,
                                         }}>{item.text}</p>
                                         <button
@@ -4792,12 +4849,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                             background:'rgba(253,230,138,0.7)',
                                             border:'1px solid rgba(253,211,77,0.4)',
                                         }} />
-                                        {/* Pinch hint */}
-                                        <div style={{
-                                            position:'absolute', bottom:8, left:'50%', transform:'translateX(-50%)',
-                                            fontSize:9, color:'rgba(0,0,0,0.2)',
-                                            fontFamily:'sans-serif', whiteSpace:'nowrap', pointerEvents:'none',
-                                        }}>cubit/scroll utk resize</div>
+
                                         <button
                                             onMouseDown={e => e.stopPropagation()}
                                             onTouchStart={e => e.stopPropagation()}
@@ -4814,7 +4866,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                             return null;
                         })}
                     </div>
-                    <p className="text-center text-[10px] text-slate-300 mt-2 font-medium">Seret untuk pindah · Cubit/scroll foto untuk resize</p>
+                    <p className="text-center text-[10px] text-slate-300 mt-2 font-medium">Seret untuk pindah · 1 jari tahan item + jari lain geser untuk resize</p>
 
                     {/* Add Note Modal */}
                     {addModal && (
@@ -4840,7 +4892,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                     className="w-full h-28 p-4 rounded-2xl text-sm resize-none outline-none border-2 border-slate-100 focus:border-amber-300 transition-colors"
                                     style={{
                                         background: noteStyle === 'sticky' ? noteColor : 'transparent',
-                                        fontFamily:"'Caveat', cursive, sans-serif",
+                                        fontFamily: noteFont,
                                         fontSize: 15, lineHeight: 1.5,
                                         color: noteStyle === 'plain' ? (PLAIN_COLORS.find(c=>c.val===noteColor)?.val || '#1e293b') : '#374151',
                                     }}
@@ -4850,7 +4902,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                 />
 
                                 {/* Color picker */}
-                                <div className="flex gap-2 flex-wrap mt-3 mb-4">
+                                <div className="flex gap-2 flex-wrap mt-3 mb-3">
                                     {noteStyle === 'sticky' ? NOTE_COLORS.map(c => (
                                         <button key={c.bg} onClick={() => setNoteColor(c.bg)}
                                             style={{
@@ -4868,6 +4920,20 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                                 transition:'all 0.15s', cursor:'pointer',
                                             }} title={c.label} />
                                     ))}
+                                </div>
+
+                                {/* Font picker */}
+                                <div className="mb-4">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Pilih Font</p>
+                                    <div className="grid grid-cols-3 gap-1.5 max-h-40 overflow-y-auto pr-1">
+                                        {NOTE_FONTS.map(f => (
+                                            <button key={f.value} onClick={() => setNoteFont(f.value)}
+                                                style={{ fontFamily: f.value }}
+                                                className={`px-2 py-2 rounded-xl text-sm border-2 transition-all text-center truncate ${noteFont === f.value ? 'border-amber-400 bg-amber-50 text-amber-700 shadow-sm' : 'border-slate-100 bg-slate-50 text-slate-600 hover:border-slate-300'}`}>
+                                                {f.label}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                                 <div className="flex gap-2">
                                     <button onClick={() => setAddModal(false)}
