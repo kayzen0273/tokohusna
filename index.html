@@ -55,7 +55,7 @@
     
     <!-- Fonts & Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Amiri:wght@400;700&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Amiri:wght@400;700&family=Courier+Prime:wght@400;700&family=Caveat:wght@400;500;600;700&family=Kalam:wght@400;700&family=Dancing+Script:wght@400;600;700&family=Quicksand:wght@400;600;700&family=Indie+Flower&family=Patrick+Hand&family=Pacifico&family=Permanent+Marker&family=Special+Elite&family=Shadows+Into+Light&family=Amatic+SC:wght@400;700&family=Gloria+Hallelujah&family=Lobster&family=Fredoka+One&family=Comfortaa:wght@400;600;700&family=Nunito:wght@400;600;700;800&family=Righteous&display=swap" rel="stylesheet">
 
     <!-- Fuse.js -->
     <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
@@ -4405,6 +4405,606 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             );
         };
 
+        // ==================== PAPAN CATATAN ====================
+        const PapanCatatan = ({ user }) => {
+            const [items, setItems] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [addModal, setAddModal] = useState(false);
+            const [noteText, setNoteText] = useState('');
+            const [noteColor, setNoteColor] = useState('#FEF9C3');
+            const [noteStyle, setNoteStyle] = useState('sticky');
+            const [dragging, setDragging] = useState(null);
+            const [pinching, setPinching] = useState(null);
+            const [rotating, setRotating] = useState(null);
+            const [selectedId, setSelectedId] = useState(null);
+            const [confirmDelete, setConfirmDelete] = useState(null);
+            const boardRef = useRef(null);
+            const photoInputRef = useRef(null);
+
+            const NOTE_COLORS = [
+                { bg: '#FEF9C3', border: '#FDE047', label: 'Kuning' },
+                { bg: '#FCE7F3', border: '#F9A8D4', label: 'Pink' },
+                { bg: '#DBEAFE', border: '#93C5FD', label: 'Biru' },
+                { bg: '#D1FAE5', border: '#6EE7B7', label: 'Hijau' },
+                { bg: '#EDE9FE', border: '#C4B5FD', label: 'Ungu' },
+                { bg: '#FFE4E6', border: '#FCA5A5', label: 'Merah' },
+                { bg: '#FEF3C7', border: '#FCD34D', label: 'Oranye' },
+                { bg: '#F1F5F9', border: '#CBD5E1', label: 'Abu' },
+            ];
+            const PLAIN_COLORS = [
+                { val: '#1e293b', label: 'Hitam' },
+                { val: '#b45309', label: 'Coklat' },
+                { val: '#0369a1', label: 'Biru' },
+                { val: '#065f46', label: 'Hijau' },
+                { val: '#7c3aed', label: 'Ungu' },
+                { val: '#be123c', label: 'Merah' },
+                { val: '#78716c', label: 'Abu' },
+            ];
+            const NOTE_FONTS = [
+                { label: 'Caveat',        value: "'Caveat', cursive" },
+                { label: 'Tulis Tangan',  value: "'Kalam', cursive" },
+                { label: 'Bunga',         value: "'Dancing Script', cursive" },
+                { label: 'Bulat',         value: "'Quicksand', sans-serif" },
+                { label: 'Lucu',          value: "'Indie Flower', cursive" },
+                { label: 'Patrick',       value: "'Patrick Hand', cursive" },
+                { label: 'Pacifico',      value: "'Pacifico', cursive" },
+                { label: 'Marker',        value: "'Permanent Marker', cursive" },
+                { label: 'Special',       value: "'Special Elite', cursive" },
+                { label: 'Bayangan',      value: "'Shadows Into Light', cursive" },
+                { label: 'Amatic',        value: "'Amatic SC', cursive" },
+                { label: 'Gloria',        value: "'Gloria Hallelujah', cursive" },
+                { label: 'Lobster',       value: "'Lobster', cursive" },
+                { label: 'Fredoka',       value: "'Fredoka One', cursive" },
+                { label: 'Comfortaa',     value: "'Comfortaa', sans-serif" },
+                { label: 'Nunito',        value: "'Nunito', sans-serif" },
+                { label: 'Mesin Tik',     value: "'Courier Prime', monospace" },
+                { label: 'Righteous',     value: "'Righteous', cursive" },
+            ];
+            const [noteFont, setNoteFont] = useState(NOTE_FONTS[0].value);
+
+            const getCol = () => window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan');
+
+            useEffect(() => {
+                if (!user) return;
+                const q = window.query(getCol(), window.orderBy('createdAt', 'desc'));
+                const unsub = window.onSnapshot(q, snap => {
+                    setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                    setLoading(false);
+                });
+                return () => unsub();
+            }, [user]);
+
+            const addNote = async () => {
+                if (!noteText.trim()) return;
+                const board = boardRef.current;
+                const bw = board ? board.offsetWidth : 600;
+                const bh = board ? board.offsetHeight : 500;
+                const x = 40 + Math.random() * Math.max(0, bw - 220);
+                const y = 40 + Math.random() * Math.max(0, bh - 200);
+                const rot = (Math.random() - 0.5) * 8;
+                await window.addDoc(getCol(), {
+                    type: 'note', noteStyle, text: noteText, fontFamily: noteFont,
+                    color: noteStyle === 'sticky' ? noteColor : (NOTE_COLORS.find(c => c.bg === noteColor) ? '#1e293b' : noteColor),
+                    x, y, rotation: rot, createdAt: window.serverTimestamp()
+                });
+                setNoteText(''); setAddModal(false);
+            };
+
+            const addPhoto = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                if (file.size > 5 * 1024 * 1024) return;
+                const reader = new FileReader();
+                reader.onload = async (ev) => {
+                    const img = new Image();
+                    img.onload = async () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX = 800;
+                        const scale = Math.min(MAX / img.width, MAX / img.height, 1);
+                        canvas.width = img.width * scale;
+                        canvas.height = img.height * scale;
+                        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                        const compressed = canvas.toDataURL('image/jpeg', 0.75);
+                        const board = boardRef.current;
+                        const bw = board ? board.offsetWidth : 600;
+                        const bh = board ? board.offsetHeight : 500;
+                        const x = 40 + Math.random() * Math.max(0, bw - 180);
+                        const y = 40 + Math.random() * Math.max(0, bh - 220);
+                        const rot = (Math.random() - 0.5) * 12;
+                        await window.addDoc(getCol(), {
+                            type: 'photo', url: compressed, x, y, rotation: rot, photoScale: 1,
+                            createdAt: window.serverTimestamp()
+                        });
+                    };
+                    img.src = ev.target.result;
+                };
+                reader.readAsDataURL(file);
+                e.target.value = '';
+            };
+
+            const deleteItem = async (id) => {
+                await window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan', id));
+            };
+
+            const savePosition = async (id, x, y) =>
+                window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan', id), { x, y });
+
+            const saveScale = async (id, photoScale) =>
+                window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan', id), { photoScale });
+
+            const saveRotation = async (id, rotation) =>
+                window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan', id), { rotation });
+
+            const getPinchDist = (touches) => {
+                const dx = touches[0].clientX - touches[1].clientX;
+                const dy = touches[0].clientY - touches[1].clientY;
+                return Math.sqrt(dx * dx + dy * dy);
+            };
+
+            const getItemCenter = (item) => ({ cx: (item.x ?? 50) + 90, cy: (item.y ?? 50) + 70 });
+
+            const onRotateMouseDown = (e, item) => {
+                e.stopPropagation(); e.preventDefault();
+                const { cx, cy } = getItemCenter(item);
+                const angle = Math.atan2(e.clientY - cy, e.clientX - cx) * 180 / Math.PI;
+                setRotating({ id: item.id, cx, cy, startAngle: angle, origRotation: item.rotation ?? 0 });
+                setDragging(null);
+            };
+
+            const onRotateTouchStart = (e, item) => {
+                e.stopPropagation();
+                const t = e.touches[0];
+                const { cx, cy } = getItemCenter(item);
+                const angle = Math.atan2(t.clientY - cy, t.clientX - cx) * 180 / Math.PI;
+                setRotating({ id: item.id, cx, cy, startAngle: angle, origRotation: item.rotation ?? 0 });
+                setDragging(null);
+            };
+
+            useEffect(() => {
+                if (!rotating) return;
+                const onMove = (e) => {
+                    const cx = e.clientX ?? e.touches?.[0]?.clientX;
+                    const cy = e.clientY ?? e.touches?.[0]?.clientY;
+                    if (cx == null) return;
+                    const angle = Math.atan2(cy - rotating.cy, cx - rotating.cx) * 180 / Math.PI;
+                    const newRot = rotating.origRotation + (angle - rotating.startAngle);
+                    setItems(prev => prev.map(it => it.id === rotating.id ? { ...it, rotation: newRot } : it));
+                };
+                const onUp = () => {
+                    const item = items.find(i => i.id === rotating.id);
+                    if (item) saveRotation(rotating.id, item.rotation ?? 0);
+                    setRotating(null);
+                };
+                window.addEventListener('mousemove', onMove);
+                window.addEventListener('mouseup', onUp);
+                window.addEventListener('touchmove', onMove, { passive: true });
+                window.addEventListener('touchend', onUp);
+                return () => {
+                    window.removeEventListener('mousemove', onMove);
+                    window.removeEventListener('mouseup', onUp);
+                    window.removeEventListener('touchmove', onMove);
+                    window.removeEventListener('touchend', onUp);
+                };
+            }, [rotating, items]);
+
+            const onMouseDown = (e, item) => {
+                if (e.button !== 0) return;
+                e.preventDefault();
+                setSelectedId(item.id);
+                setDragging({ id: item.id, startX: e.clientX, startY: e.clientY, origX: item.x, origY: item.y });
+            };
+
+            const onTouchStart = (e, item) => {
+                setSelectedId(item.id);
+                if (e.touches.length === 1) {
+                    const t = e.touches[0];
+                    setDragging({ id: item.id, startX: t.clientX, startY: t.clientY, origX: item.x, origY: item.y });
+                }
+            };
+
+            useEffect(() => {
+                if (!dragging) return;
+                const onGlobal2nd = (e) => {
+                    if (e.touches.length >= 2) {
+                        const item = items.find(i => i.id === dragging.id);
+                        if (item) {
+                            setPinching({ id: dragging.id, startDist: getPinchDist(e.touches), origScale: item.photoScale ?? 1 });
+                            setDragging(null);
+                        }
+                    }
+                };
+                window.addEventListener('touchstart', onGlobal2nd, { passive: true });
+                return () => window.removeEventListener('touchstart', onGlobal2nd);
+            }, [dragging, items]);
+
+            useEffect(() => {
+                if (!dragging) return;
+                const clamp = (val, min, max) => Math.max(min, Math.min(val, max));
+                const getXY = (e) => ({ cx: e.clientX ?? e.touches?.[0]?.clientX, cy: e.clientY ?? e.touches?.[0]?.clientY });
+                const onMove = (e) => {
+                    if (pinching) return;
+                    const { cx, cy } = getXY(e);
+                    if (cx == null) return;
+                    const board = boardRef.current;
+                    const bw = board ? board.offsetWidth : 9999;
+                    const bh = board ? board.offsetHeight : 9999;
+                    const newX = clamp(dragging.origX + (cx - dragging.startX), 0, bw - 100);
+                    const newY = clamp(dragging.origY + (cy - dragging.startY), 0, bh - 60);
+                    setItems(prev => prev.map(it => it.id === dragging.id ? { ...it, x: newX, y: newY } : it));
+                };
+                const onUp = (e) => {
+                    const { cx, cy } = { cx: e.clientX ?? e.changedTouches?.[0]?.clientX, cy: e.clientY ?? e.changedTouches?.[0]?.clientY };
+                    if (cx != null) {
+                        const board = boardRef.current;
+                        const bw = board ? board.offsetWidth : 9999;
+                        const bh = board ? board.offsetHeight : 9999;
+                        const newX = clamp(dragging.origX + (cx - dragging.startX), 0, bw - 100);
+                        const newY = clamp(dragging.origY + (cy - dragging.startY), 0, bh - 60);
+                        savePosition(dragging.id, newX, newY);
+                    }
+                    setDragging(null);
+                };
+                window.addEventListener('mousemove', onMove);
+                window.addEventListener('mouseup', onUp);
+                window.addEventListener('touchmove', onMove, { passive: true });
+                window.addEventListener('touchend', onUp);
+                return () => {
+                    window.removeEventListener('mousemove', onMove);
+                    window.removeEventListener('mouseup', onUp);
+                    window.removeEventListener('touchmove', onMove);
+                    window.removeEventListener('touchend', onUp);
+                };
+            }, [dragging, pinching]);
+
+            useEffect(() => {
+                if (!pinching) return;
+                const onMove = (e) => {
+                    if (e.touches.length < 2) return;
+                    const ratio = getPinchDist(e.touches) / pinching.startDist;
+                    const newScale = Math.min(4, Math.max(0.3, pinching.origScale * ratio));
+                    setItems(prev => prev.map(it => it.id === pinching.id ? { ...it, photoScale: newScale } : it));
+                };
+                const onEnd = (e) => {
+                    const item = items.find(i => i.id === pinching.id);
+                    if (item) saveScale(pinching.id, item.photoScale ?? 1);
+                    setPinching(null);
+                    if (e.touches?.length === 1) {
+                        const it = items.find(i => i.id === pinching.id);
+                        const t = e.touches[0];
+                        if (it) setDragging({ id: it.id, startX: t.clientX, startY: t.clientY, origX: it.x, origY: it.y });
+                    }
+                };
+                window.addEventListener('touchmove', onMove, { passive: true });
+                window.addEventListener('touchend', onEnd);
+                return () => {
+                    window.removeEventListener('touchmove', onMove);
+                    window.removeEventListener('touchend', onEnd);
+                };
+            }, [pinching, items]);
+
+            const onWheel = (e, item) => {
+                e.preventDefault(); e.stopPropagation();
+                const newScale = Math.min(4, Math.max(0.3, (item.photoScale ?? 1) * (e.deltaY > 0 ? 0.9 : 1.1)));
+                setItems(prev => prev.map(it => it.id === item.id ? { ...it, photoScale: newScale } : it));
+                clearTimeout(window._scaleTimer);
+                window._scaleTimer = setTimeout(() => saveScale(item.id, newScale), 400);
+            };
+
+            const noteCount = items.filter(i => i.type === 'note').length;
+            const photoCount = items.filter(i => i.type === 'photo').length;
+
+            return (
+                <div className="flex flex-col" style={{ height: '100%', padding: '16px', overflow: 'hidden', boxSizing: 'border-box' }}>
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-4 flex-shrink-0">
+                        <div>
+                            <h1 className="text-xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
+                                <span>📌</span> Papan Catatan
+                            </h1>
+                            <p className="text-xs text-slate-400 mt-0.5">{noteCount} catatan · {photoCount} foto</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => photoInputRef.current?.click()}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 shadow-sm active:scale-95 transition-all">
+                                <Icon name="image" className="text-sm text-rose-400" /> Foto
+                            </button>
+                            <button onClick={() => setAddModal(true)}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-white font-bold text-xs shadow-md active:scale-95 transition-all">
+                                <Icon name="plus" /> Catatan
+                            </button>
+                        </div>
+                    </div>
+                    <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={addPhoto} />
+
+                    {/* Board */}
+                    <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', borderRadius: '1.5rem', border: '2px dashed #e2d9c8', minHeight: 0 }}>
+                    <div ref={boardRef}
+                        className="relative rounded-3xl"
+                        onClick={e => { if (e.target === boardRef.current) setSelectedId(null); }}
+                        style={{
+                            background: `
+                                radial-gradient(ellipse at 20% 20%, #fef9ee 0%, transparent 60%),
+                                radial-gradient(ellipse at 80% 80%, #fdf0fb 0%, transparent 60%),
+                                repeating-linear-gradient(0deg, transparent, transparent 27px, rgba(180,180,200,0.15) 27px, rgba(180,180,200,0.15) 28px),
+                                repeating-linear-gradient(90deg, transparent, transparent 27px, rgba(180,180,200,0.1) 27px, rgba(180,180,200,0.1) 28px),
+                                #fdfaf3`,
+                            cursor: dragging ? 'grabbing' : 'default',
+                            userSelect: 'none',
+                            height: 'max(100svh - 140px, 500px)',
+                            width: '100%',
+                            position: 'relative',
+                        }}>
+
+                        {loading && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="text-center text-slate-400">
+                                    <div className="text-4xl mb-2 animate-bounce">📝</div>
+                                    <p className="text-sm font-medium">Memuat catatan...</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {!loading && items.length === 0 && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300 pointer-events-none">
+                                <div className="text-6xl mb-3 opacity-40">📌</div>
+                                <p className="font-bold text-lg opacity-50">Papan kosong~</p>
+                                <p className="text-xs mt-1 opacity-40">Tambah catatan atau tempel foto</p>
+                            </div>
+                        )}
+
+                        {items.map(item => {
+                            const isDraggingThis = dragging?.id === item.id;
+                            const isPinchingThis = pinching?.id === item.id;
+                            const isRotatingThis = rotating?.id === item.id;
+                            const isSelected = selectedId === item.id;
+                            const itemScale = item.photoScale ?? 1;
+                            const counterScale = 1 / itemScale;
+                            const baseStyle = {
+                                position: 'absolute',
+                                left: item.x ?? 50,
+                                top: item.y ?? 50,
+                                transform: `rotate(${item.rotation ?? 0}deg) scale(${isDraggingThis ? itemScale * 1.04 : itemScale})`,
+                                cursor: isDraggingThis ? 'grabbing' : 'grab',
+                                transition: (isDraggingThis || isPinchingThis || isRotatingThis) ? 'none' : 'box-shadow 0.2s, transform 0.15s',
+                                zIndex: (isDraggingThis || isPinchingThis || isRotatingThis) ? 999 : 1,
+                                touchAction: 'none',
+                            };
+
+                            const rotateHandle = isSelected ? (
+                                <div
+                                    onMouseDown={e => onRotateMouseDown(e, item)}
+                                    onTouchStart={e => onRotateTouchStart(e, item)}
+                                    style={{
+                                        position: 'absolute', top: -20, left: '50%',
+                                        transform: `translateX(-50%) scale(${counterScale})`,
+                                        transformOrigin: 'center bottom',
+                                        width: 28, height: 28,
+                                        background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
+                                        borderRadius: '50%',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        cursor: 'grab', zIndex: 10,
+                                        boxShadow: '0 2px 8px rgba(99,102,241,0.5)',
+                                        userSelect: 'none', touchAction: 'none',
+                                    }}>
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M21.5 2v6h-6"/><path d="M21.34 15.57a10 10 0 1 1-.57-8.38"/>
+                                    </svg>
+                                </div>
+                            ) : null;
+
+                            const deleteBtn = (pos = 'br') => (
+                                <button
+                                    onMouseDown={e => e.stopPropagation()}
+                                    onTouchStart={e => e.stopPropagation()}
+                                    onClick={() => setConfirmDelete(item.id)}
+                                    style={{
+                                        position: 'absolute',
+                                        ...(pos === 'tr' ? { top: 4, right: 4 } : { bottom: 6, right: 6 }),
+                                        background: 'rgba(239,68,68,0.9)', border: 'none', cursor: 'pointer',
+                                        fontSize: 11, color: 'white', padding: '2px 7px',
+                                        borderRadius: 6, lineHeight: '1.6',
+                                        transform: `scale(${counterScale})`,
+                                        transformOrigin: pos === 'tr' ? 'top right' : 'bottom right',
+                                        opacity: isSelected ? 1 : 0,
+                                        pointerEvents: isSelected ? 'auto' : 'none',
+                                        transition: 'opacity 0.15s',
+                                        boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
+                                    }}>✕</button>
+                            );
+
+                            if (item.type === 'note') {
+                                const isPlain = item.noteStyle === 'plain';
+                                if (isPlain) {
+                                    return (
+                                        <div key={item.id} style={{ ...baseStyle, maxWidth: 220, padding: '4px 24px 4px 4px' }}
+                                            onMouseDown={e => onMouseDown(e, item)}
+                                            onTouchStart={e => onTouchStart(e, item)}
+                                            onWheel={e => onWheel(e, item)}>
+                                            {rotateHandle}
+                                            <p style={{
+                                                fontSize: 16, lineHeight: 1.5,
+                                                color: item.color || '#1e293b',
+                                                wordBreak: 'break-word', whiteSpace: 'pre-wrap',
+                                                fontFamily: item.fontFamily || "'Caveat', cursive",
+                                                fontWeight: 600,
+                                                textShadow: '0 1px 3px rgba(255,255,255,0.8)',
+                                            }}>{item.text}</p>
+                                            {deleteBtn('tr')}
+                                        </div>
+                                    );
+                                }
+                                const colorData = NOTE_COLORS.find(c => c.bg === item.color) || NOTE_COLORS[0];
+                                return (
+                                    <div key={item.id} style={{
+                                        ...baseStyle,
+                                        width: 200,
+                                        background: item.color || '#FEF9C3',
+                                        borderTop: `4px solid ${colorData.border}`,
+                                        borderRadius: '2px 10px 10px 10px',
+                                        padding: '12px 12px 30px',
+                                        minHeight: 100,
+                                        boxShadow: isDraggingThis ? '0 20px 40px rgba(0,0,0,0.25)' : '2px 4px 12px rgba(0,0,0,0.13)',
+                                    }}
+                                        onMouseDown={e => onMouseDown(e, item)}
+                                        onTouchStart={e => onTouchStart(e, item)}
+                                        onWheel={e => onWheel(e, item)}>
+                                        {rotateHandle}
+                                        <div style={{
+                                            position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)',
+                                            width: 16, height: 16, borderRadius: '50%',
+                                            background: 'linear-gradient(135deg,#ef4444,#b91c1c)',
+                                            boxShadow: '0 2px 4px rgba(0,0,0,0.3)', zIndex: 2,
+                                        }} />
+                                        <p style={{
+                                            fontSize: 13, lineHeight: 1.5, color: '#374151',
+                                            wordBreak: 'break-word', whiteSpace: 'pre-wrap',
+                                            fontFamily: item.fontFamily || "'Caveat', cursive",
+                                            fontWeight: 500,
+                                        }}>{item.text}</p>
+                                        {deleteBtn('br')}
+                                    </div>
+                                );
+                            }
+
+                            if (item.type === 'photo') {
+                                return (
+                                    <div key={item.id} style={{
+                                        ...baseStyle,
+                                        background: 'white', padding: '8px 8px 36px',
+                                        borderRadius: 4, width: 170,
+                                        boxShadow: isDraggingThis ? '0 20px 40px rgba(0,0,0,0.25)' : '2px 4px 16px rgba(0,0,0,0.18)',
+                                        transformOrigin: 'center center',
+                                    }}
+                                        onMouseDown={e => onMouseDown(e, item)}
+                                        onTouchStart={e => onTouchStart(e, item)}
+                                        onWheel={e => onWheel(e, item)}>
+                                        {rotateHandle}
+                                        <div style={{ overflow: 'hidden', borderRadius: 2 }}>
+                                            <img src={item.url} alt=""
+                                                style={{ width: '100%', display: 'block', objectFit: 'cover', pointerEvents: 'none', userSelect: 'none' }}
+                                                draggable={false} />
+                                        </div>
+                                        <div style={{
+                                            position: 'absolute', top: -10, left: '50%',
+                                            transform: 'translateX(-50%) rotate(-2deg)',
+                                            width: 48, height: 18, borderRadius: 3,
+                                            background: 'rgba(253,230,138,0.7)',
+                                            border: '1px solid rgba(253,211,77,0.4)',
+                                        }} />
+                                        {deleteBtn('tr')}
+                                    </div>
+                                );
+                            }
+                            return null;
+                        })}
+                    </div>
+                    </div>
+
+                    <p className="text-center text-[10px] text-slate-300 mt-2 font-medium flex-shrink-0">
+                        Seret untuk pindah · 1 jari tahan + jari lain geser untuk resize · 🟣 untuk putar
+                    </p>
+
+                    {/* Konfirmasi Hapus */}
+                    {confirmDelete && (
+                        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+                            onClick={() => setConfirmDelete(null)}>
+                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xs p-6 text-center"
+                                onClick={e => e.stopPropagation()}>
+                                <div className="w-14 h-14 rounded-2xl bg-red-100 flex items-center justify-center mx-auto mb-4">
+                                    <span className="text-2xl">🗑️</span>
+                                </div>
+                                <h3 className="font-bold text-slate-800 text-lg mb-1">Hapus item ini?</h3>
+                                <p className="text-slate-400 text-sm mb-6">Item yang dihapus tidak bisa dikembalikan.</p>
+                                <div className="flex gap-3">
+                                    <button onClick={() => setConfirmDelete(null)}
+                                        className="flex-1 py-3 rounded-xl border-2 border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 active:scale-95 transition-all">
+                                        Batal
+                                    </button>
+                                    <button onClick={() => { deleteItem(confirmDelete); setConfirmDelete(null); setSelectedId(null); }}
+                                        className="flex-1 py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-sm shadow-md active:scale-95 transition-all">
+                                        Ya, Hapus
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Modal Tambah Catatan */}
+                    {addModal && (
+                        <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/30 backdrop-blur-sm p-4"
+                            onClick={e => { if (e.target === e.currentTarget) setAddModal(false); }}>
+                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6" style={{ animation: 'slideUp 0.4s cubic-bezier(0.16,1,0.3,1)' }}>
+                                <h3 className="font-bold text-slate-800 text-lg mb-4 flex items-center gap-2">✏️ Tulis Catatan</h3>
+
+                                <div className="flex gap-2 mb-3">
+                                    <button onClick={() => setNoteStyle('sticky')}
+                                        className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all ${noteStyle === 'sticky' ? 'bg-amber-400 text-white border-amber-400 shadow-md' : 'bg-white text-slate-500 border-slate-200'}`}>
+                                        🗒️ Post-it
+                                    </button>
+                                    <button onClick={() => setNoteStyle('plain')}
+                                        className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all ${noteStyle === 'plain' ? 'bg-slate-800 text-white border-slate-800 shadow-md' : 'bg-white text-slate-500 border-slate-200'}`}>
+                                        ✍️ Teks Bebas
+                                    </button>
+                                </div>
+
+                                <textarea
+                                    autoFocus
+                                    className="w-full h-28 p-4 rounded-2xl text-sm resize-none outline-none border-2 border-slate-100 focus:border-amber-300 transition-colors"
+                                    style={{
+                                        background: noteStyle === 'sticky' ? noteColor : 'transparent',
+                                        fontFamily: noteFont, fontSize: 15, lineHeight: 1.5,
+                                        color: noteStyle === 'plain' ? (PLAIN_COLORS.find(c => c.val === noteColor)?.val || '#1e293b') : '#374151',
+                                    }}
+                                    placeholder="Tulis apa saja di sini..."
+                                    value={noteText}
+                                    onChange={e => setNoteText(e.target.value)}
+                                />
+
+                                <div className="flex gap-2 flex-wrap mt-3 mb-3">
+                                    {(noteStyle === 'sticky' ? NOTE_COLORS : PLAIN_COLORS).map(c => (
+                                        <button key={c.bg || c.val}
+                                            onClick={() => setNoteColor(c.bg || c.val)}
+                                            style={{
+                                                width: 22, height: 22, borderRadius: '50%',
+                                                background: c.bg || c.val,
+                                                border: noteColor === (c.bg || c.val) ? (noteStyle === 'sticky' ? `3px solid ${c.border}` : '3px solid white') : '2px solid transparent',
+                                                boxShadow: noteColor === (c.bg || c.val) ? `0 0 0 2px ${c.border || c.val}` : 'none',
+                                                transition: 'all 0.15s', cursor: 'pointer',
+                                            }} title={c.label} />
+                                    ))}
+                                </div>
+
+                                <div className="mb-4">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Pilih Font</p>
+                                    <div className="grid grid-cols-3 gap-1.5 max-h-40 overflow-y-auto pr-1">
+                                        {NOTE_FONTS.map(f => (
+                                            <button key={f.value} onClick={() => setNoteFont(f.value)}
+                                                style={{ fontFamily: f.value }}
+                                                className={`px-2 py-2 rounded-xl text-sm border-2 transition-all text-center truncate ${noteFont === f.value ? 'border-amber-400 bg-amber-50 text-amber-700 shadow-sm' : 'border-slate-100 bg-slate-50 text-slate-600'}`}>
+                                                {f.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-2">
+                                    <button onClick={() => setAddModal(false)}
+                                        className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-500 font-bold text-sm hover:bg-slate-50">
+                                        Batal
+                                    </button>
+                                    <button onClick={addNote} disabled={!noteText.trim()}
+                                        className="flex-1 py-3 rounded-xl bg-amber-400 hover:bg-amber-500 text-white font-bold text-sm shadow-md disabled:opacity-50 active:scale-95 transition-all">
+                                        Tempel! 📌
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+        // ==================== END PAPAN CATATAN ====================
+
         const App = () => {
             const [inventoryData, setInventoryData] = useState([]);
             const [rawInventory, setRawInventory] = useState([]); // Store original data from DB
@@ -4662,6 +5262,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 { id: 'home', label: 'Dashboard', icon: 'chart-pie', enabled: true }, 
                 { id: 'list', label: 'Stok Barang', icon: 'boxes-stacked', enabled: true }, 
                 { id: 'cashbook', label: 'Buku Kas', icon: 'book', enabled: true },
+                { id: 'catatan', label: 'Catatan', icon: 'thumbtack', enabled: true },
                 { id: 'add', label: 'Input Manual', icon: 'pen-to-square', enabled: true }, 
                 { id: 'import', label: 'Import Masal', icon: 'file-import', enabled: true }, 
                 { id: 'settings', label: 'Pengaturan', icon: 'gears', enabled: true } 
@@ -4770,6 +5371,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         {activeTab === 'add' && (<FormView formData={formData} setFormData={setFormData} onSubmit={handleSubmit} isEditing={!!editingItem} submitting={submitting} onCancel={() => { setEditingItem(null); setFormData({name:'', qty:'', unit:'Pcs', exp:'', rack:'', price:'', costPrice:'', minStock: ''}); setActiveTab('list'); }} currentProfile={currentProfile} />)}
                         {activeTab === 'import' && (<BulkImportView user={user} onImportComplete={(count) => { showToast(`${count} Barang berhasil diimport`); setActiveTab('list'); }} currentProfile={currentProfile} />)}
                         {activeTab === 'settings' && (<SettingsView settings={settingsData} onSave={handleSaveSettings} loading={submitting} />)}
+                        {activeTab === 'catatan' && (<PapanCatatan user={user} />)}
                     </main>
                     <ConfirmModal isOpen={deleteModal.show} title="Hapus Barang?" message={`Yakin ingin menghapus permanen "${deleteModal.item?.name}"? Barang ini akan hilang dari SEMUA toko.`} onConfirm={handleDelete} onCancel={() => setDeleteModal({ show: false, item: null })} />
                     <ConfirmModal isOpen={deleteRackModal.show} title="Hapus Rak?" message={`Yakin ingin menghapus rak "${deleteRackModal.rackName}"? Semua barang di rak ini akan menjadi 'No Rack' (-).`} onConfirm={handleConfirmDeleteRack} onCancel={() => setDeleteRackModal({ show: false, rackName: null })} confirmText="Ya, Hapus Rak" />
