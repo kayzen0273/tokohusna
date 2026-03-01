@@ -1065,6 +1065,12 @@
                                 console.log(`💰 ${item.name}: harga jual diupdate ${itemData.price} → ${item.price}`);
                             }
                             
+                            // 🔄 Sinkron: Update costPrice (harga beli) di inventory jika buyPrice diisi
+                            if (item.buyPrice && item.buyPrice > 0 && item.buyPrice !== itemData.costPrice) {
+                                updateData.costPrice = item.buyPrice;
+                                console.log(`🏷️ ${item.name}: harga beli diupdate ${itemData.costPrice} → ${item.buyPrice}`);
+                            }
+                            
                             // Update ke Firestore
                             await window.updateDoc(itemRef, updateData);
                             
@@ -4581,21 +4587,53 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     };
                     const stockUpdate = { [`stocks.${activeStoreId}`]: newQty };
 
+                    // Tentukan itemId untuk sinkronisasi ke faktur
+                    let savedItemId = null;
+
                     if (editingItem) {
                         const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', editingItem.id);
                         await window.updateDoc(docRef, { ...baseData, ...stockUpdate }); 
+                        savedItemId = editingItem.id;
                         showToast(`Stok untuk ${currentProfile.name} diperbarui`);
                     } else {
                         const existingItem = rawInventory.find(i => i.name.toLowerCase() === formData.name.toLowerCase());
                         if (existingItem) {
                              const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', existingItem.id);
                              await window.updateDoc(docRef, { ...baseData, ...stockUpdate });
+                             savedItemId = existingItem.id;
                              showToast(`Barang sudah ada. Stok ${currentProfile.name} diupdate.`);
                         } else {
-                            await window.addDoc(collectionRef, { ...baseData, stocks: { [activeStoreId]: newQty }, qty: newQty, createdAt: window.serverTimestamp() }); 
+                            const newDoc = await window.addDoc(collectionRef, { ...baseData, stocks: { [activeStoreId]: newQty }, qty: newQty, createdAt: window.serverTimestamp() }); 
+                            savedItemId = newDoc.id;
                             showToast("Barang baru ditambahkan");
                         }
                     }
+
+                    // 🔄 Sinkron: Jika costPrice diisi, update buyPrice di semua faktur pembelian yang mengandung item ini
+                    const newCostPrice = safeNumber(formData.costPrice);
+                    if (newCostPrice > 0 && savedItemId) {
+                        try {
+                            const purchasesRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'purchases');
+                            const purchasesSnap = await window.getDocs(purchasesRef);
+                            const batch = window.writeBatch(window.db);
+                            let updateCount = 0;
+                            purchasesSnap.docs.forEach(pDoc => {
+                                const pData = pDoc.data();
+                                if (!pData.items) return;
+                                const itemIndex = pData.items.findIndex(it => it.id === savedItemId || it.name.toLowerCase() === formData.name.toLowerCase());
+                                if (itemIndex !== -1 && pData.items[itemIndex].buyPrice !== newCostPrice) {
+                                    const updatedItems = [...pData.items];
+                                    updatedItems[itemIndex] = { ...updatedItems[itemIndex], buyPrice: newCostPrice };
+                                    batch.update(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'purchases', pDoc.id), { items: updatedItems });
+                                    updateCount++;
+                                }
+                            });
+                            if (updateCount > 0) await batch.commit();
+                        } catch (syncErr) {
+                            console.warn('Gagal sinkron harga beli ke faktur:', syncErr);
+                        }
+                    }
+
                     setEditingItem(null); setFormData({ name: '', qty: '', unit: 'Pcs', exp: '', rack: '', price: '', costPrice: '', minStock: '' }); setActiveTab('list');
                 } catch (error) { console.error("Error saving:", error); showToast("Gagal menyimpan ke database", "error"); } finally { setSubmitting(false); }
             };
