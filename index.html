@@ -3249,6 +3249,15 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             
             const [btDevice, setBtDevice] = useState(null);
             const [selectedDate, setSelectedDate] = useState(new Date());
+            const [filterMode, setFilterMode] = useState('today'); // 'today','this_week','7days','this_month','30days','specific'
+            const [showDateFilterMenu, setShowDateFilterMenu] = useState(false);
+            const [specificDateInput, setSpecificDateInput] = useState('');
+            const [specificDateEnd, setSpecificDateEnd] = useState('');
+            const dateFilterMenuRef = React.useRef(null);
+            const [weekOffset, setWeekOffset] = useState(0);   // 0 = minggu ini, -1 = minggu lalu, dst
+            const [daysOffset, setDaysOffset] = useState(0);   // 0 = 7 hari terakhir, -7 = 7 hari sebelumnya, dst
+            const [monthOffset, setMonthOffset] = useState(0); // 0 = bulan ini, -1 = bulan lalu, dst
+            const [daysOffset30, setDaysOffset30] = useState(0); // 0 = 30 hari terakhir
 
             const [historySearch, setHistorySearch] = useState('');
             const [filterStatus, setFilterStatus] = useState('all'); 
@@ -3326,10 +3335,108 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 return () => unsub();
             }, [user, currentProfile]);
 
-            const changeDate = (days) => { const newDate = new Date(selectedDate); newDate.setDate(selectedDate.getDate() + days); setSelectedDate(newDate); };
+            const changeDate = (direction) => {
+                const today = new Date(); today.setHours(23,59,59,999);
+                if (filterMode === 'today') {
+                    const d = new Date(); d.setDate(d.getDate() + direction);
+                    if (d > today) return;
+                    setSelectedDate(d); setFilterMode('specific');
+                } else if (filterMode === 'this_week') {
+                    setWeekOffset(prev => { const next = prev + direction; return next > 0 ? 0 : next; });
+                } else if (filterMode === '7days') {
+                    setDaysOffset(prev => { const next = prev + direction * 7; return next > 0 ? 0 : next; });
+                } else if (filterMode === 'this_month') {
+                    setMonthOffset(prev => { const next = prev + direction; return next > 0 ? 0 : next; });
+                } else if (filterMode === '30days') {
+                    setDaysOffset30(prev => { const next = prev + direction * 30; return next > 0 ? 0 : next; });
+                } else if (filterMode === 'specific') {
+                    // Shift the whole range
+                    const from = new Date(selectedDate);
+                    let to = from;
+                    if (specificDateEnd) { const [ey,em,ed] = specificDateEnd.split('-'); to = new Date(+ey, +em-1, +ed); }
+                    const rangeDays = Math.round((to - from) / 86400000);
+                    const shift = (rangeDays > 0 ? rangeDays + 1 : 1) * direction;
+                    const newFrom = new Date(from); newFrom.setDate(from.getDate() + shift);
+                    const newTo = new Date(to); newTo.setDate(to.getDate() + shift);
+                    if (newFrom > today) return;
+                    const clampedTo = newTo > today ? today : newTo;
+                    setSelectedDate(newFrom);
+                    if (rangeDays > 0) {
+                        const pad = n => String(n).padStart(2,'0');
+                        setSpecificDateEnd(`${clampedTo.getFullYear()}-${pad(clampedTo.getMonth()+1)}-${pad(clampedTo.getDate())}`);
+                    }
+                }
+            };
             const isSameDay = (d1, d2) => { return d1.getDate() === d2.getDate() && d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear(); };
-            
-            const dailyTransactions = useMemo(() => { return transactions.filter(tx => { const txDate = tx.date.seconds ? tx.date.toDate() : new Date(tx.date); return isSameDay(txDate, selectedDate); }); }, [transactions, selectedDate]);
+
+            // Close menu when clicking outside
+            useEffect(() => {
+                const handleClickOutside = (e) => { if (dateFilterMenuRef.current && !dateFilterMenuRef.current.contains(e.target)) setShowDateFilterMenu(false); };
+                document.addEventListener('mousedown', handleClickOutside);
+                return () => document.removeEventListener('mousedown', handleClickOutside);
+            }, []);
+
+            const getDateRanges = () => {
+                const now = new Date();
+                const fmt = (d, opts) => d.toLocaleDateString('id-ID', opts);
+                const short = { day: 'numeric', month: 'short' };
+                const full = { day: 'numeric', month: 'short', year: 'numeric' };
+                if (filterMode === 'today') {
+                    const d = new Date(); d.setDate(d.getDate()); // no offset for today - it's always "today"
+                    return { from: d, to: d, label: fmt(d, full) };
+                }
+                if (filterMode === 'this_week') {
+                    const base = new Date(now); base.setDate(now.getDate() + weekOffset * 7);
+                    const mon = new Date(base); mon.setDate(base.getDate() - (base.getDay() === 0 ? 6 : base.getDay() - 1)); mon.setHours(0,0,0,0);
+                    const sun = new Date(mon); sun.setDate(mon.getDate() + 6); sun.setHours(23,59,59,999);
+                    const toFilter = sun > now ? now : sun; // for filtering, capped at today
+                    return { from: mon, to: toFilter, labelTo: sun, label: fmt(mon, short) + ' – ' + fmt(sun, full) };
+                }
+                if (filterMode === '7days') {
+                    const to = new Date(now); to.setDate(to.getDate() + daysOffset); to.setHours(23,59,59,999);
+                    const from = new Date(to); from.setDate(to.getDate() - 6); from.setHours(0,0,0,0);
+                    return { from, to, label: fmt(from, short) + ' – ' + fmt(to, full) };
+                }
+                if (filterMode === 'this_month') {
+                    const base = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+                    const from = new Date(base.getFullYear(), base.getMonth(), 1); from.setHours(0,0,0,0);
+                    const lastDay = new Date(base.getFullYear(), base.getMonth() + 1, 0); lastDay.setHours(23,59,59,999);
+                    const toFilter = lastDay > now ? now : lastDay; // for filtering, capped at today
+                    return { from, to: toFilter, labelTo: lastDay, label: fmt(from, short) + ' – ' + fmt(lastDay, full) };
+                }
+                if (filterMode === '30days') {
+                    const to = new Date(now); to.setDate(to.getDate() + daysOffset30); to.setHours(23,59,59,999);
+                    const from = new Date(to); from.setDate(to.getDate() - 29); from.setHours(0,0,0,0);
+                    return { from, to, label: fmt(from, short) + ' – ' + fmt(to, full) };
+                }
+                if (filterMode === 'specific') {
+                    const from = selectedDate;
+                    let to = from;
+                    if (specificDateEnd) {
+                        const [ey,em,ed] = specificDateEnd.split('-');
+                        to = new Date(+ey, +em-1, +ed);
+                    }
+                    const toFinal = to < from ? from : to;
+                    const label = isSameDay(from, toFinal) ? fmt(from, full) : fmt(from, short) + ' – ' + fmt(toFinal, full);
+                    return { from, to: toFinal, label };
+                }
+                return { from: now, to: now, label: '' };
+            };
+            const getDateFilterLabel = () => getDateRanges().label;
+
+            const dailyTransactions = useMemo(() => {
+                const { from, to } = getDateRanges();
+                return transactions.filter(tx => {
+                    const txDate = tx.date.seconds ? tx.date.toDate() : new Date(tx.date);
+                    if (filterMode === 'today') return isSameDay(txDate, from);
+                    if (filterMode === 'specific') {
+                        const fromDay = new Date(from); fromDay.setHours(0,0,0,0);
+                        const toDay = new Date(to); toDay.setHours(23,59,59,999);
+                        return txDate >= fromDay && txDate <= toDay;
+                    }
+                    return txDate >= from && txDate <= to;
+                });
+            }, [transactions, selectedDate, specificDateEnd, filterMode, weekOffset, daysOffset, monthOffset, daysOffset30]);
             
             const processedTransactions = useMemo(() => {
                 let data = [...dailyTransactions];
@@ -3407,7 +3514,88 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 <div className="fade-in pb-20 md:pb-0 h-full flex flex-col relative z-10">
                     <header className="mb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
                         <div><h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Riwayat {currentProfile.name}</h2><p className="text-slate-500 text-xs mt-1">Laporan harian & retur {currentProfile.id === 'all_stores' ? '(Semua Toko)' : 'khusus toko ini'}</p></div>
-                        <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-sm self-start md:self-auto"><button onClick={() => changeDate(-1)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-50 text-slate-500 transition-colors"><Icon name="chevron-left" /></button><div className="w-px h-3 bg-slate-900 flex-shrink-0"></div><div className="flex items-center gap-1 px-1 text-slate-700 font-bold text-xs justify-center"><Icon name="calendar-days" className="text-sky-500" />{selectedDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</div><div className="w-px h-3 bg-slate-900 flex-shrink-0"></div><button onClick={() => changeDate(1)} disabled={isSameDay(selectedDate, new Date())} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-50 text-slate-500 transition-colors disabled:opacity-30"><Icon name="chevron-right" /></button></div>
+                        <div className="flex items-stretch gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-sm self-start md:self-auto relative" ref={dateFilterMenuRef}>
+                                <button onClick={() => changeDate(-1)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-50 text-slate-500 transition-colors"><Icon name="chevron-left" /></button><div className="w-px self-stretch bg-slate-200 flex-shrink-0"></div>
+                                <button onClick={() => setShowDateFilterMenu(v => !v)} className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-sky-50 transition-colors text-slate-700 font-bold text-xs">
+                                    <Icon name="calendar-days" className="text-sky-500" />
+                                    <span>{getDateFilterLabel()}</span>
+                                    <Icon name="chevron-down" className={`text-slate-400 text-[10px] transition-transform ${showDateFilterMenu ? 'rotate-180' : ''}`} />
+                                </button>
+                                <div className="w-px self-stretch bg-slate-200 flex-shrink-0"></div><button onClick={() => changeDate(1)} {...(() => {
+                                        const now = new Date();
+                                        if (filterMode === 'today') return {disabled: true};
+                                        if (filterMode === 'this_week') return {disabled: weekOffset >= 0};
+                                        if (filterMode === 'this_month') return {disabled: monthOffset >= 0};
+                                        if (filterMode === '7days') return {disabled: daysOffset >= 0};
+                                        if (filterMode === '30days') return {disabled: daysOffset30 >= 0};
+                                        if (filterMode === 'specific') { const r = getDateRanges(); return {disabled: isSameDay(r.to, now)}; }
+                                        return {disabled: false};
+                                    })()} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-50 text-slate-500 transition-colors disabled:opacity-30"><Icon name="chevron-right" /></button>
+                                {showDateFilterMenu && (
+                                    <div className="absolute top-full right-0 mt-2 w-56 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50 fade-in">
+                                        <div className="p-2 bg-slate-50 border-b border-slate-100"><span className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-2">Filter Tanggal</span></div>
+                                        {[
+                                            { key: 'today', label: 'Hari Ini', icon: 'sun' },
+                                            { key: 'this_week', label: 'Minggu Ini', icon: 'calendar-week' },
+                                            { key: '7days', label: '7 Hari Terakhir', icon: 'rotate-left' },
+                                            { key: 'this_month', label: 'Bulan Ini', icon: 'calendar' },
+                                            { key: '30days', label: '30 Hari Terakhir', icon: 'clock-rotate-left' },
+                                        ].map(opt => (
+                                            <button key={opt.key} onClick={() => { setFilterMode(opt.key); setWeekOffset(0); setDaysOffset(0); setMonthOffset(0); setDaysOffset30(0); setSpecificDateInput(''); setSpecificDateEnd(''); setShowDateFilterMenu(false); }} className={`w-full text-left px-4 py-3 text-sm font-bold flex items-center gap-3 transition-colors ${filterMode === opt.key ? 'bg-sky-50 text-sky-600' : 'text-slate-700 hover:bg-slate-50'}`}>
+                                                <Icon name={opt.icon} className={`w-4 text-center ${filterMode === opt.key ? 'text-sky-500' : 'text-slate-400'}`} />
+                                                {opt.label}
+                                                {filterMode === opt.key && <Icon name="check" className="ml-auto text-sky-500 text-xs" />}
+                                            </button>
+                                        ))}
+                                        <div className="border-t border-slate-100 p-3">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <Icon name="calendar-range" className="text-sky-500 text-xs" />
+                                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-wide">Rentang Tanggal</p>
+                                                {filterMode === 'specific' && <Icon name="check" className="ml-auto text-sky-500 text-xs" />}
+                                            </div>
+                                            <div className="flex flex-col gap-2">
+                                                <div>
+                                                    <p className="text-[9px] font-bold text-slate-400 mb-1 uppercase">Dari</p>
+                                                    <input
+                                                        type="date"
+                                                        max={specificDateEnd || new Date().toISOString().split('T')[0]}
+                                                        value={specificDateInput || (filterMode==='specific' ? selectedDate.toISOString().split('T')[0] : '')}
+                                                        onChange={(e) => {
+                                                            if (!e.target.value) return;
+                                                            setSpecificDateInput(e.target.value);
+                                                            const [y,m,d] = e.target.value.split('-');
+                                                            const newDate = new Date(+y, +m-1, +d);
+                                                            setSelectedDate(newDate);
+                                                            setFilterMode('specific');
+                                                        }}
+                                                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-sky-500 bg-slate-50"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <p className="text-[9px] font-bold text-slate-400 mb-1 uppercase">Sampai</p>
+                                                    <input
+                                                        type="date"
+                                                        min={specificDateInput || (filterMode==='specific' ? selectedDate.toISOString().split('T')[0] : '')}
+                                                        max={new Date().toISOString().split('T')[0]}
+                                                        value={specificDateEnd || (filterMode==='specific' ? selectedDate.toISOString().split('T')[0] : '')}
+                                                        onChange={(e) => {
+                                                            setSpecificDateEnd(e.target.value);
+                                                            setFilterMode('specific');
+                                                        }}
+                                                        className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-sky-500 bg-slate-50"
+                                                    />
+                                                </div>
+                                                <button
+                                                    onClick={() => { setFilterMode('specific'); setShowDateFilterMenu(false); }}
+                                                    className="w-full py-2 bg-sky-500 hover:bg-sky-600 text-white text-xs font-black rounded-xl transition-colors active:scale-95"
+                                                >
+                                                    Terapkan
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                     </header>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><div className="flex items-center gap-1 mb-1 border-b-2 border-dashed border-slate-200 w-fit pb-0.5"><h4 className="font-bold text-slate-800 text-sm">Total transaksi kasir</h4><Icon name="circle-question" className="text-[10px] text-sky-500 mb-2" /></div><div className="text-2xl font-black text-slate-800 mt-2">{formatRupiah(stats.netSales)}</div><p className="text-xs text-slate-400 mt-1">Net setelah retur</p></div>
