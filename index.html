@@ -4461,6 +4461,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 { label: 'Righteous',     value: "'Righteous', cursive" },
             ];
             const [noteFont, setNoteFont] = useState(NOTE_FONTS[0].value);
+            const [noteAlign, setNoteAlign] = useState('left');
 
             const getCol = () => window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan');
 
@@ -4483,7 +4484,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 const y = 40 + Math.random() * Math.max(0, bh - 200);
                 const rot = (Math.random() - 0.5) * 8;
                 await window.addDoc(getCol(), {
-                    type: 'note', noteStyle, text: noteText, fontFamily: noteFont,
+                    type: 'note', noteStyle, text: noteText, fontFamily: noteFont, textAlign: noteAlign,
                     color: noteStyle === 'sticky' ? noteColor : (NOTE_COLORS.find(c => c.bg === noteColor) ? '#1e293b' : noteColor),
                     x, y, rotation: rot, createdAt: window.serverTimestamp()
                 });
@@ -4827,6 +4828,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                                 wordBreak: 'break-word', whiteSpace: 'pre-wrap',
                                                 fontFamily: item.fontFamily || "'Caveat', cursive",
                                                 fontWeight: 600,
+                                                textAlign: item.textAlign || 'left',
                                                 textShadow: '0 1px 3px rgba(255,255,255,0.8)',
                                             }}>{item.text}</p>
                                             {deleteBtn('tr')}
@@ -4860,6 +4862,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                             wordBreak: 'break-word', whiteSpace: 'pre-wrap',
                                             fontFamily: item.fontFamily || "'Caveat', cursive",
                                             fontWeight: 500,
+                                            textAlign: item.textAlign || 'left',
                                         }}>{item.text}</p>
                                         {deleteBtn('br')}
                                     </div>
@@ -4982,6 +4985,24 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                                 style={{ fontFamily: f.value }}
                                                 className={`px-2 py-2 rounded-xl text-sm border-2 transition-all text-center truncate ${noteFont === f.value ? 'border-amber-400 bg-amber-50 text-amber-700 shadow-sm' : 'border-slate-100 bg-slate-50 text-slate-600'}`}>
                                                 {f.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="mb-4">
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Perataan Teks</p>
+                                    <div className="flex gap-2">
+                                        {[
+                                            { val: 'left',    icon: 'align-left',    label: 'Kiri' },
+                                            { val: 'center',  icon: 'align-center',  label: 'Tengah' },
+                                            { val: 'right',   icon: 'align-right',   label: 'Kanan' },
+                                            { val: 'justify', icon: 'align-justify', label: 'Penuh' },
+                                        ].map(a => (
+                                            <button key={a.val} onClick={() => setNoteAlign(a.val)}
+                                                title={a.label}
+                                                className={`flex-1 py-2.5 rounded-xl border-2 flex items-center justify-center transition-all ${noteAlign === a.val ? 'border-amber-400 bg-amber-50 text-amber-600 shadow-sm' : 'border-slate-100 bg-slate-50 text-slate-400 hover:border-slate-300'}`}>
+                                                <i className={`fa-solid fa-${a.icon} text-sm`}></i>
                                             </button>
                                         ))}
                                     </div>
