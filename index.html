@@ -4412,8 +4412,10 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             const [addModal, setAddModal] = useState(false);
             const [noteText, setNoteText] = useState('');
             const [noteColor, setNoteColor] = useState('#FEF9C3');
-            const [dragging, setDragging] = useState(null); // { id, startX, startY, origX, origY }
-            const [boardRef] = useState(() => React.createRef());
+            const [noteStyle, setNoteStyle] = useState('sticky'); // 'sticky' | 'plain'
+            const [dragging, setDragging] = useState(null);
+            const [pinching, setPinching] = useState(null); // { id, startDist, origScale }
+            const boardRef = useRef(null);
             const photoInputRef = useRef(null);
 
             const NOTE_COLORS = [
@@ -4425,6 +4427,15 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 { bg: '#FFE4E6', border: '#FCA5A5', label: 'Merah' },
                 { bg: '#FEF3C7', border: '#FCD34D', label: 'Oranye' },
                 { bg: '#F1F5F9', border: '#CBD5E1', label: 'Abu' },
+            ];
+            const PLAIN_COLORS = [
+                { val: '#1e293b', label: 'Hitam' },
+                { val: '#b45309', label: 'Coklat' },
+                { val: '#0369a1', label: 'Biru' },
+                { val: '#065f46', label: 'Hijau' },
+                { val: '#7c3aed', label: 'Ungu' },
+                { val: '#be123c', label: 'Merah' },
+                { val: '#78716c', label: 'Abu' },
             ];
 
             const getCollection = () => window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan');
@@ -4448,7 +4459,11 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 const y = 40 + Math.random() * Math.max(0, bh - 200);
                 const rot = (Math.random() - 0.5) * 8;
                 await window.addDoc(getCollection(), {
-                    type: 'note', text: noteText, color: noteColor, x, y, rotation: rot,
+                    type: 'note',
+                    noteStyle,
+                    text: noteText,
+                    color: noteStyle === 'sticky' ? noteColor : (noteColor.startsWith('#') && noteColor.length <= 7 && !NOTE_COLORS.find(c=>c.bg===noteColor) ? noteColor : '#1e293b'),
+                    x, y, rotation: rot,
                     createdAt: window.serverTimestamp()
                 });
                 setNoteText(''); setAddModal(false);
@@ -4461,7 +4476,6 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 if (file.size > 5 * 1024 * 1024) { showToast('Foto terlalu besar! Maks 5MB', 'error'); return; }
                 const reader = new FileReader();
                 reader.onload = async (ev) => {
-                    // Compress image
                     const img = new Image();
                     img.onload = async () => {
                         const canvas = document.createElement('canvas');
@@ -4478,7 +4492,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         const y = 40 + Math.random() * Math.max(0, bh - 220);
                         const rot = (Math.random() - 0.5) * 12;
                         await window.addDoc(getCollection(), {
-                            type: 'photo', url: compressed, x, y, rotation: rot, scale: 1,
+                            type: 'photo', url: compressed, x, y, rotation: rot, photoScale: 1,
                             createdAt: window.serverTimestamp()
                         });
                         showToast('Foto ditempel!');
@@ -4498,20 +4512,41 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 await window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan', id), { x, y });
             };
 
-            // Drag handlers
+            const saveScale = async (id, photoScale) => {
+                await window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan', id), { photoScale });
+            };
+
+            const getPinchDist = (touches) => {
+                const dx = touches[0].clientX - touches[1].clientX;
+                const dy = touches[0].clientY - touches[1].clientY;
+                return Math.sqrt(dx*dx + dy*dy);
+            };
+
+            // ── Drag handlers ──
             const onMouseDown = (e, item) => {
                 if (e.button !== 0) return;
                 e.preventDefault();
                 setDragging({ id: item.id, startX: e.clientX, startY: e.clientY, origX: item.x, origY: item.y });
             };
+
             const onTouchStart = (e, item) => {
-                const t = e.touches[0];
-                setDragging({ id: item.id, startX: t.clientX, startY: t.clientY, origX: item.x, origY: item.y });
+                if (e.touches.length === 2 && item.type === 'photo') {
+                    // Pinch start
+                    e.stopPropagation();
+                    const dist = getPinchDist(e.touches);
+                    setPinching({ id: item.id, startDist: dist, origScale: item.photoScale ?? 1 });
+                    setDragging(null);
+                } else if (e.touches.length === 1) {
+                    const t = e.touches[0];
+                    setDragging({ id: item.id, startX: t.clientX, startY: t.clientY, origX: item.x, origY: item.y });
+                }
             };
 
+            // Drag effect
             useEffect(() => {
                 if (!dragging) return;
                 const onMove = (e) => {
+                    if (pinching) return;
                     const cx = e.clientX ?? e.touches?.[0]?.clientX;
                     const cy = e.clientY ?? e.touches?.[0]?.clientY;
                     if (cx == null) return;
@@ -4541,7 +4576,45 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     window.removeEventListener('touchmove', onMove);
                     window.removeEventListener('touchend', onUp);
                 };
-            }, [dragging]);
+            }, [dragging, pinching]);
+
+            // Pinch effect
+            useEffect(() => {
+                if (!pinching) return;
+                const onMove = (e) => {
+                    if (e.touches.length < 2) return;
+                    const dist = getPinchDist(e.touches);
+                    const ratio = dist / pinching.startDist;
+                    const newScale = Math.min(4, Math.max(0.3, pinching.origScale * ratio));
+                    setItems(prev => prev.map(it =>
+                        it.id === pinching.id ? { ...it, photoScale: newScale } : it
+                    ));
+                };
+                const onEnd = (e) => {
+                    // Save final scale
+                    const item = items.find(i => i.id === pinching.id);
+                    if (item) saveScale(pinching.id, item.photoScale ?? 1);
+                    setPinching(null);
+                };
+                window.addEventListener('touchmove', onMove, { passive: true });
+                window.addEventListener('touchend', onEnd);
+                return () => {
+                    window.removeEventListener('touchmove', onMove);
+                    window.removeEventListener('touchend', onEnd);
+                };
+            }, [pinching, items]);
+
+            // Mouse wheel zoom for photo (desktop)
+            const onWheel = (e, item) => {
+                if (item.type !== 'photo') return;
+                e.preventDefault();
+                e.stopPropagation();
+                const delta = e.deltaY > 0 ? 0.9 : 1.1;
+                const newScale = Math.min(4, Math.max(0.3, (item.photoScale ?? 1) * delta));
+                setItems(prev => prev.map(it => it.id === item.id ? { ...it, photoScale: newScale } : it));
+                clearTimeout(window._scaleTimer);
+                window._scaleTimer = setTimeout(() => saveScale(item.id, newScale), 400);
+            };
 
             const noteCount = items.filter(i => i.type === 'note').length;
             const photoCount = items.filter(i => i.type === 'photo').length;
@@ -4603,21 +4676,55 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
 
                         {items.map(item => {
                             const isDraggingThis = dragging?.id === item.id;
+                            const isPinchingThis = pinching?.id === item.id;
+                            const itemScale = item.type === 'photo' ? (item.photoScale ?? 1) : 1;
                             const baseStyle = {
                                 position: 'absolute',
                                 left: item.x ?? 50,
                                 top: item.y ?? 50,
-                                transform: `rotate(${item.rotation ?? 0}deg) ${isDraggingThis ? 'scale(1.05)' : 'scale(1)'}`,
+                                transform: `rotate(${item.rotation ?? 0}deg) scale(${isDraggingThis ? itemScale * 1.04 : itemScale})`,
                                 cursor: isDraggingThis ? 'grabbing' : 'grab',
-                                transition: isDraggingThis ? 'none' : 'box-shadow 0.2s, transform 0.15s',
-                                zIndex: isDraggingThis ? 999 : 1,
-                                boxShadow: isDraggingThis
-                                    ? '0 20px 40px rgba(0,0,0,0.25)'
-                                    : '2px 4px 12px rgba(0,0,0,0.13)',
+                                transition: (isDraggingThis || isPinchingThis) ? 'none' : 'box-shadow 0.2s, transform 0.15s',
+                                zIndex: (isDraggingThis || isPinchingThis) ? 999 : 1,
                                 touchAction: 'none',
                             };
 
                             if (item.type === 'note') {
+                                const isPlain = item.noteStyle === 'plain';
+                                if (isPlain) {
+                                    return (
+                                        <div key={item.id} style={{
+                                            ...baseStyle,
+                                            maxWidth: 220,
+                                            padding: '4px 24px 4px 4px',
+                                            boxShadow: 'none',
+                                        }}
+                                            onMouseDown={e => onMouseDown(e, item)}
+                                            onTouchStart={e => onTouchStart(e, item)}>
+                                            <p style={{
+                                                fontSize: '16px',
+                                                lineHeight: '1.5',
+                                                color: item.color || '#1e293b',
+                                                wordBreak: 'break-word',
+                                                whiteSpace: 'pre-wrap',
+                                                fontFamily: "'Caveat', cursive, sans-serif",
+                                                fontWeight: 600,
+                                                textShadow: '0 1px 3px rgba(255,255,255,0.8)',
+                                            }}>{item.text}</p>
+                                            <button
+                                                onMouseDown={e => e.stopPropagation()}
+                                                onTouchStart={e => e.stopPropagation()}
+                                                onClick={() => deleteItem(item.id)}
+                                                style={{
+                                                    position:'absolute', top:0, right:0,
+                                                    background:'transparent', border:'none', cursor:'pointer',
+                                                    fontSize:11, color:'rgba(0,0,0,0.3)', padding:'2px 4px',
+                                                    borderRadius:4,
+                                                }}>✕</button>
+                                        </div>
+                                    );
+                                }
+                                // sticky
                                 const colorData = NOTE_COLORS.find(c => c.bg === item.color) || NOTE_COLORS[0];
                                 return (
                                     <div key={item.id} style={{
@@ -4628,10 +4735,10 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                         borderRadius: '2px 10px 10px 10px',
                                         padding: '12px 12px 30px',
                                         minHeight: 100,
+                                        boxShadow: isDraggingThis ? '0 20px 40px rgba(0,0,0,0.25)' : '2px 4px 12px rgba(0,0,0,0.13)',
                                     }}
                                         onMouseDown={e => onMouseDown(e, item)}
                                         onTouchStart={e => onTouchStart(e, item)}>
-                                        {/* Pin decoration */}
                                         <div style={{
                                             position:'absolute', top:-10, left:'50%', transform:'translateX(-50%)',
                                             width:16, height:16, borderRadius:'50%',
@@ -4642,10 +4749,9 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                         <p style={{
                                             fontSize:'13px', lineHeight:'1.5', color:'#374151',
                                             wordBreak:'break-word', whiteSpace:'pre-wrap',
-                                            fontFamily:"'Caveat', 'Patrick Hand', cursive, sans-serif",
+                                            fontFamily:"'Caveat', cursive, sans-serif",
                                             fontWeight: 500,
                                         }}>{item.text}</p>
-                                        {/* Delete btn */}
                                         <button
                                             onMouseDown={e => e.stopPropagation()}
                                             onTouchStart={e => e.stopPropagation()}
@@ -4668,31 +4774,39 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                         padding: '8px 8px 36px',
                                         borderRadius: 4,
                                         width: 170,
+                                        boxShadow: isDraggingThis ? '0 20px 40px rgba(0,0,0,0.25)' : '2px 4px 16px rgba(0,0,0,0.18)',
+                                        transformOrigin: 'center center',
                                     }}
                                         onMouseDown={e => onMouseDown(e, item)}
-                                        onTouchStart={e => onTouchStart(e, item)}>
+                                        onTouchStart={e => onTouchStart(e, item)}
+                                        onWheel={e => onWheel(e, item)}>
                                         <div style={{ overflow:'hidden', borderRadius:2 }}>
                                             <img src={item.url} alt=""
                                                 style={{ width:'100%', display:'block', objectFit:'cover', pointerEvents:'none', userSelect:'none' }}
                                                 draggable={false} />
                                         </div>
-                                        {/* Tape effect */}
+                                        {/* Tape */}
                                         <div style={{
                                             position:'absolute', top:-10, left:'50%', transform:'translateX(-50%) rotate(-2deg)',
                                             width:48, height:18, borderRadius:3,
                                             background:'rgba(253,230,138,0.7)',
                                             border:'1px solid rgba(253,211,77,0.4)',
                                         }} />
-                                        {/* Delete btn */}
+                                        {/* Pinch hint */}
+                                        <div style={{
+                                            position:'absolute', bottom:8, left:'50%', transform:'translateX(-50%)',
+                                            fontSize:9, color:'rgba(0,0,0,0.2)',
+                                            fontFamily:'sans-serif', whiteSpace:'nowrap', pointerEvents:'none',
+                                        }}>cubit/scroll utk resize</div>
                                         <button
                                             onMouseDown={e => e.stopPropagation()}
                                             onTouchStart={e => e.stopPropagation()}
                                             onClick={() => deleteItem(item.id)}
                                             style={{
-                                                position:'absolute', bottom:8, right:6,
-                                                background:'transparent', border:'none', cursor:'pointer',
-                                                fontSize:11, color:'rgba(0,0,0,0.3)', padding:'2px 4px',
-                                                borderRadius:4
+                                                position:'absolute', top:4, right:4,
+                                                background:'rgba(0,0,0,0.12)', border:'none', cursor:'pointer',
+                                                fontSize:10, color:'white', padding:'1px 5px',
+                                                borderRadius:10, lineHeight:'1.6'
                                             }}>✕</button>
                                     </div>
                                 );
@@ -4700,7 +4814,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                             return null;
                         })}
                     </div>
-                    <p className="text-center text-[10px] text-slate-300 mt-2 font-medium">Seret catatan & foto untuk memindahkannya</p>
+                    <p className="text-center text-[10px] text-slate-300 mt-2 font-medium">Seret untuk pindah · Cubit/scroll foto untuk resize</p>
 
                     {/* Add Note Modal */}
                     {addModal && (
@@ -4708,28 +4822,50 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                             onClick={e => { if (e.target === e.currentTarget) setAddModal(false); }}>
                             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 slide-up">
                                 <h3 className="font-bold text-slate-800 text-lg mb-4 flex items-center gap-2">✏️ Tulis Catatan</h3>
+
+                                {/* Style toggle */}
+                                <div className="flex gap-2 mb-3">
+                                    <button onClick={() => setNoteStyle('sticky')}
+                                        className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all ${noteStyle==='sticky' ? 'bg-amber-400 text-white border-amber-400 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
+                                        🗒️ Post-it
+                                    </button>
+                                    <button onClick={() => setNoteStyle('plain')}
+                                        className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all ${noteStyle==='plain' ? 'bg-slate-800 text-white border-slate-800 shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
+                                        ✍️ Teks Bebas
+                                    </button>
+                                </div>
+
                                 <textarea
                                     autoFocus
-                                    className="w-full h-32 p-4 rounded-2xl text-sm resize-none outline-none border-2 border-slate-100 focus:border-amber-300 transition-colors"
+                                    className="w-full h-28 p-4 rounded-2xl text-sm resize-none outline-none border-2 border-slate-100 focus:border-amber-300 transition-colors"
                                     style={{
-                                        background: noteColor,
+                                        background: noteStyle === 'sticky' ? noteColor : 'transparent',
                                         fontFamily:"'Caveat', cursive, sans-serif",
-                                        fontSize: 15, lineHeight: 1.5
+                                        fontSize: 15, lineHeight: 1.5,
+                                        color: noteStyle === 'plain' ? (PLAIN_COLORS.find(c=>c.val===noteColor)?.val || '#1e293b') : '#374151',
                                     }}
                                     placeholder="Tulis apa saja di sini..."
                                     value={noteText}
                                     onChange={e => setNoteText(e.target.value)}
                                 />
+
                                 {/* Color picker */}
                                 <div className="flex gap-2 flex-wrap mt-3 mb-4">
-                                    {NOTE_COLORS.map(c => (
+                                    {noteStyle === 'sticky' ? NOTE_COLORS.map(c => (
                                         <button key={c.bg} onClick={() => setNoteColor(c.bg)}
                                             style={{
-                                                width:24, height:24, borderRadius:'50%',
-                                                background:c.bg, border: noteColor === c.bg ? `3px solid ${c.border}` : '2px solid transparent',
+                                                width:22, height:22, borderRadius:'50%', background:c.bg,
+                                                border: noteColor === c.bg ? `3px solid ${c.border}` : '2px solid transparent',
                                                 boxShadow: noteColor === c.bg ? `0 0 0 2px ${c.border}` : 'none',
-                                                transition:'all 0.15s',
-                                                cursor:'pointer',
+                                                transition:'all 0.15s', cursor:'pointer',
+                                            }} title={c.label} />
+                                    )) : PLAIN_COLORS.map(c => (
+                                        <button key={c.val} onClick={() => setNoteColor(c.val)}
+                                            style={{
+                                                width:22, height:22, borderRadius:'50%', background:c.val,
+                                                border: noteColor === c.val ? '3px solid white' : '2px solid transparent',
+                                                boxShadow: noteColor === c.val ? `0 0 0 2px ${c.val}` : 'none',
+                                                transition:'all 0.15s', cursor:'pointer',
                                             }} title={c.label} />
                                     ))}
                                 </div>
@@ -4749,7 +4885,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 </div>
             );
         };
-        // ==================== END CATATAN VIEW ====================
+                // ==================== END CATATAN VIEW ====================
 
         const App = () => {
             const [inventoryData, setInventoryData] = useState([]);
