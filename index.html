@@ -55,7 +55,7 @@
     
     <!-- Fonts & Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Amiri:wght@400;700&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Amiri:wght@400;700&family=Courier+Prime:wght@400;700&family=Caveat:wght@400;500;600;700&display=swap" rel="stylesheet">
 
     <!-- Fuse.js -->
     <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
@@ -4405,6 +4405,352 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             );
         };
 
+        // ==================== CATATAN VIEW ====================
+        const CatatanView = ({ user, showToast }) => {
+            const [items, setItems] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [addModal, setAddModal] = useState(false);
+            const [noteText, setNoteText] = useState('');
+            const [noteColor, setNoteColor] = useState('#FEF9C3');
+            const [dragging, setDragging] = useState(null); // { id, startX, startY, origX, origY }
+            const [boardRef] = useState(() => React.createRef());
+            const photoInputRef = useRef(null);
+
+            const NOTE_COLORS = [
+                { bg: '#FEF9C3', border: '#FDE047', label: 'Kuning' },
+                { bg: '#FCE7F3', border: '#F9A8D4', label: 'Pink' },
+                { bg: '#DBEAFE', border: '#93C5FD', label: 'Biru' },
+                { bg: '#D1FAE5', border: '#6EE7B7', label: 'Hijau' },
+                { bg: '#EDE9FE', border: '#C4B5FD', label: 'Ungu' },
+                { bg: '#FFE4E6', border: '#FCA5A5', label: 'Merah' },
+                { bg: '#FEF3C7', border: '#FCD34D', label: 'Oranye' },
+                { bg: '#F1F5F9', border: '#CBD5E1', label: 'Abu' },
+            ];
+
+            const getCollection = () => window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan');
+
+            useEffect(() => {
+                if (!user) return;
+                const q = window.query(getCollection(), window.orderBy('createdAt', 'desc'));
+                const unsub = window.onSnapshot(q, snap => {
+                    setItems(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                    setLoading(false);
+                });
+                return () => unsub();
+            }, [user]);
+
+            const addNote = async () => {
+                if (!noteText.trim()) return;
+                const board = boardRef.current;
+                const bw = board ? board.offsetWidth : 600;
+                const bh = board ? board.offsetHeight : 500;
+                const x = 40 + Math.random() * Math.max(0, bw - 220);
+                const y = 40 + Math.random() * Math.max(0, bh - 200);
+                const rot = (Math.random() - 0.5) * 8;
+                await window.addDoc(getCollection(), {
+                    type: 'note', text: noteText, color: noteColor, x, y, rotation: rot,
+                    createdAt: window.serverTimestamp()
+                });
+                setNoteText(''); setAddModal(false);
+                showToast('Catatan ditambahkan!');
+            };
+
+            const addPhoto = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                if (file.size > 5 * 1024 * 1024) { showToast('Foto terlalu besar! Maks 5MB', 'error'); return; }
+                const reader = new FileReader();
+                reader.onload = async (ev) => {
+                    // Compress image
+                    const img = new Image();
+                    img.onload = async () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX = 800;
+                        const scale = Math.min(MAX / img.width, MAX / img.height, 1);
+                        canvas.width = img.width * scale;
+                        canvas.height = img.height * scale;
+                        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                        const compressed = canvas.toDataURL('image/jpeg', 0.75);
+                        const board = boardRef.current;
+                        const bw = board ? board.offsetWidth : 600;
+                        const bh = board ? board.offsetHeight : 500;
+                        const x = 40 + Math.random() * Math.max(0, bw - 180);
+                        const y = 40 + Math.random() * Math.max(0, bh - 220);
+                        const rot = (Math.random() - 0.5) * 12;
+                        await window.addDoc(getCollection(), {
+                            type: 'photo', url: compressed, x, y, rotation: rot, scale: 1,
+                            createdAt: window.serverTimestamp()
+                        });
+                        showToast('Foto ditempel!');
+                    };
+                    img.src = ev.target.result;
+                };
+                reader.readAsDataURL(file);
+                e.target.value = '';
+            };
+
+            const deleteItem = async (id) => {
+                await window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan', id));
+                showToast('Dihapus');
+            };
+
+            const savePosition = async (id, x, y) => {
+                await window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'catatan', id), { x, y });
+            };
+
+            // Drag handlers
+            const onMouseDown = (e, item) => {
+                if (e.button !== 0) return;
+                e.preventDefault();
+                setDragging({ id: item.id, startX: e.clientX, startY: e.clientY, origX: item.x, origY: item.y });
+            };
+            const onTouchStart = (e, item) => {
+                const t = e.touches[0];
+                setDragging({ id: item.id, startX: t.clientX, startY: t.clientY, origX: item.x, origY: item.y });
+            };
+
+            useEffect(() => {
+                if (!dragging) return;
+                const onMove = (e) => {
+                    const cx = e.clientX ?? e.touches?.[0]?.clientX;
+                    const cy = e.clientY ?? e.touches?.[0]?.clientY;
+                    if (cx == null) return;
+                    const dx = cx - dragging.startX;
+                    const dy = cy - dragging.startY;
+                    setItems(prev => prev.map(it =>
+                        it.id === dragging.id ? { ...it, x: dragging.origX + dx, y: dragging.origY + dy } : it
+                    ));
+                };
+                const onUp = (e) => {
+                    const cx = e.clientX ?? e.changedTouches?.[0]?.clientX;
+                    const cy = e.clientY ?? e.changedTouches?.[0]?.clientY;
+                    if (cx != null) {
+                        const dx = cx - dragging.startX;
+                        const dy = cy - dragging.startY;
+                        savePosition(dragging.id, dragging.origX + dx, dragging.origY + dy);
+                    }
+                    setDragging(null);
+                };
+                window.addEventListener('mousemove', onMove);
+                window.addEventListener('mouseup', onUp);
+                window.addEventListener('touchmove', onMove, { passive: true });
+                window.addEventListener('touchend', onUp);
+                return () => {
+                    window.removeEventListener('mousemove', onMove);
+                    window.removeEventListener('mouseup', onUp);
+                    window.removeEventListener('touchmove', onMove);
+                    window.removeEventListener('touchend', onUp);
+                };
+            }, [dragging]);
+
+            const noteCount = items.filter(i => i.type === 'note').length;
+            const photoCount = items.filter(i => i.type === 'photo').length;
+
+            return (
+                <div className="fade-in flex flex-col h-full" style={{minHeight:'calc(100vh - 60px)'}}>
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-4 flex-shrink-0">
+                        <div>
+                            <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
+                                <span>📌</span> Papan Catatan
+                            </h2>
+                            <p className="text-xs text-slate-400 mt-0.5">{noteCount} catatan · {photoCount} foto</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => { photoInputRef.current && photoInputRef.current.click(); }}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 shadow-sm active:scale-95 transition-all">
+                                <Icon name="image" className="text-sm text-rose-400" /> Tempel Foto
+                            </button>
+                            <button onClick={() => setAddModal(true)}
+                                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-white font-bold text-xs shadow-md active:scale-95 transition-all">
+                                <Icon name="plus" /> Tambah Catatan
+                            </button>
+                        </div>
+                    </div>
+                    <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={addPhoto} />
+
+                    {/* Board */}
+                    <div ref={boardRef} className="flex-1 relative rounded-3xl overflow-hidden"
+                        style={{
+                            minHeight: '500px',
+                            background: `
+                                radial-gradient(ellipse at 20% 20%, #fef9ee 0%, transparent 60%),
+                                radial-gradient(ellipse at 80% 80%, #fdf0fb 0%, transparent 60%),
+                                repeating-linear-gradient(0deg, transparent, transparent 27px, rgba(180,180,200,0.15) 27px, rgba(180,180,200,0.15) 28px),
+                                repeating-linear-gradient(90deg, transparent, transparent 27px, rgba(180,180,200,0.1) 27px, rgba(180,180,200,0.1) 28px),
+                                #fdfaf3`,
+                            border: '2px dashed #e2d9c8',
+                            cursor: dragging ? 'grabbing' : 'default',
+                            userSelect: 'none',
+                        }}>
+
+                        {loading && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="text-center text-slate-400">
+                                    <div className="text-4xl mb-2 animate-bounce">📝</div>
+                                    <p className="text-sm font-medium">Memuat catatan...</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {!loading && items.length === 0 && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300 pointer-events-none">
+                                <div className="text-6xl mb-3 opacity-40">📌</div>
+                                <p className="font-bold text-lg opacity-50">Papan kosong~</p>
+                                <p className="text-xs mt-1 opacity-40">Tambah catatan atau tempel foto di sini</p>
+                            </div>
+                        )}
+
+                        {items.map(item => {
+                            const isDraggingThis = dragging?.id === item.id;
+                            const baseStyle = {
+                                position: 'absolute',
+                                left: item.x ?? 50,
+                                top: item.y ?? 50,
+                                transform: `rotate(${item.rotation ?? 0}deg) ${isDraggingThis ? 'scale(1.05)' : 'scale(1)'}`,
+                                cursor: isDraggingThis ? 'grabbing' : 'grab',
+                                transition: isDraggingThis ? 'none' : 'box-shadow 0.2s, transform 0.15s',
+                                zIndex: isDraggingThis ? 999 : 1,
+                                boxShadow: isDraggingThis
+                                    ? '0 20px 40px rgba(0,0,0,0.25)'
+                                    : '2px 4px 12px rgba(0,0,0,0.13)',
+                                touchAction: 'none',
+                            };
+
+                            if (item.type === 'note') {
+                                const colorData = NOTE_COLORS.find(c => c.bg === item.color) || NOTE_COLORS[0];
+                                return (
+                                    <div key={item.id} style={{
+                                        ...baseStyle,
+                                        width: 200,
+                                        background: item.color || '#FEF9C3',
+                                        borderTop: `4px solid ${colorData.border}`,
+                                        borderRadius: '2px 10px 10px 10px',
+                                        padding: '12px 12px 30px',
+                                        minHeight: 100,
+                                    }}
+                                        onMouseDown={e => onMouseDown(e, item)}
+                                        onTouchStart={e => onTouchStart(e, item)}>
+                                        {/* Pin decoration */}
+                                        <div style={{
+                                            position:'absolute', top:-10, left:'50%', transform:'translateX(-50%)',
+                                            width:16, height:16, borderRadius:'50%',
+                                            background:'linear-gradient(135deg,#ef4444,#b91c1c)',
+                                            boxShadow:'0 2px 4px rgba(0,0,0,0.3)',
+                                            zIndex:2,
+                                        }} />
+                                        <p style={{
+                                            fontSize:'13px', lineHeight:'1.5', color:'#374151',
+                                            wordBreak:'break-word', whiteSpace:'pre-wrap',
+                                            fontFamily:"'Caveat', 'Patrick Hand', cursive, sans-serif",
+                                            fontWeight: 500,
+                                        }}>{item.text}</p>
+                                        {/* Delete btn */}
+                                        <button
+                                            onMouseDown={e => e.stopPropagation()}
+                                            onTouchStart={e => e.stopPropagation()}
+                                            onClick={() => deleteItem(item.id)}
+                                            style={{
+                                                position:'absolute', bottom:6, right:6,
+                                                background:'transparent', border:'none', cursor:'pointer',
+                                                fontSize:11, color:'rgba(0,0,0,0.25)', padding:'2px 4px',
+                                                borderRadius:4
+                                            }}>✕</button>
+                                    </div>
+                                );
+                            }
+
+                            if (item.type === 'photo') {
+                                return (
+                                    <div key={item.id} style={{
+                                        ...baseStyle,
+                                        background: 'white',
+                                        padding: '8px 8px 36px',
+                                        borderRadius: 4,
+                                        width: 170,
+                                    }}
+                                        onMouseDown={e => onMouseDown(e, item)}
+                                        onTouchStart={e => onTouchStart(e, item)}>
+                                        <div style={{ overflow:'hidden', borderRadius:2 }}>
+                                            <img src={item.url} alt=""
+                                                style={{ width:'100%', display:'block', objectFit:'cover', pointerEvents:'none', userSelect:'none' }}
+                                                draggable={false} />
+                                        </div>
+                                        {/* Tape effect */}
+                                        <div style={{
+                                            position:'absolute', top:-10, left:'50%', transform:'translateX(-50%) rotate(-2deg)',
+                                            width:48, height:18, borderRadius:3,
+                                            background:'rgba(253,230,138,0.7)',
+                                            border:'1px solid rgba(253,211,77,0.4)',
+                                        }} />
+                                        {/* Delete btn */}
+                                        <button
+                                            onMouseDown={e => e.stopPropagation()}
+                                            onTouchStart={e => e.stopPropagation()}
+                                            onClick={() => deleteItem(item.id)}
+                                            style={{
+                                                position:'absolute', bottom:8, right:6,
+                                                background:'transparent', border:'none', cursor:'pointer',
+                                                fontSize:11, color:'rgba(0,0,0,0.3)', padding:'2px 4px',
+                                                borderRadius:4
+                                            }}>✕</button>
+                                    </div>
+                                );
+                            }
+                            return null;
+                        })}
+                    </div>
+                    <p className="text-center text-[10px] text-slate-300 mt-2 font-medium">Seret catatan & foto untuk memindahkannya</p>
+
+                    {/* Add Note Modal */}
+                    {addModal && (
+                        <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/30 backdrop-blur-sm fade-in p-4"
+                            onClick={e => { if (e.target === e.currentTarget) setAddModal(false); }}>
+                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 slide-up">
+                                <h3 className="font-bold text-slate-800 text-lg mb-4 flex items-center gap-2">✏️ Tulis Catatan</h3>
+                                <textarea
+                                    autoFocus
+                                    className="w-full h-32 p-4 rounded-2xl text-sm resize-none outline-none border-2 border-slate-100 focus:border-amber-300 transition-colors"
+                                    style={{
+                                        background: noteColor,
+                                        fontFamily:"'Caveat', cursive, sans-serif",
+                                        fontSize: 15, lineHeight: 1.5
+                                    }}
+                                    placeholder="Tulis apa saja di sini..."
+                                    value={noteText}
+                                    onChange={e => setNoteText(e.target.value)}
+                                />
+                                {/* Color picker */}
+                                <div className="flex gap-2 flex-wrap mt-3 mb-4">
+                                    {NOTE_COLORS.map(c => (
+                                        <button key={c.bg} onClick={() => setNoteColor(c.bg)}
+                                            style={{
+                                                width:24, height:24, borderRadius:'50%',
+                                                background:c.bg, border: noteColor === c.bg ? `3px solid ${c.border}` : '2px solid transparent',
+                                                boxShadow: noteColor === c.bg ? `0 0 0 2px ${c.border}` : 'none',
+                                                transition:'all 0.15s',
+                                                cursor:'pointer',
+                                            }} title={c.label} />
+                                    ))}
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={() => setAddModal(false)}
+                                        className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-500 font-bold text-sm hover:bg-slate-50">
+                                        Batal
+                                    </button>
+                                    <button onClick={addNote} disabled={!noteText.trim()}
+                                        className="flex-1 py-3 rounded-xl bg-amber-400 hover:bg-amber-500 text-white font-bold text-sm shadow-md disabled:opacity-50 active:scale-95 transition-all">
+                                        Tempel! 📌
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+        // ==================== END CATATAN VIEW ====================
+
         const App = () => {
             const [inventoryData, setInventoryData] = useState([]);
             const [rawInventory, setRawInventory] = useState([]); // Store original data from DB
@@ -4664,6 +5010,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 { id: 'cashbook', label: 'Buku Kas', icon: 'book', enabled: true },
                 { id: 'add', label: 'Input Manual', icon: 'pen-to-square', enabled: true }, 
                 { id: 'import', label: 'Import Masal', icon: 'file-import', enabled: true }, 
+                { id: 'notes', label: 'Catatan', icon: 'note-sticky', enabled: true },
                 { id: 'settings', label: 'Pengaturan', icon: 'gears', enabled: true } 
             ];
             const visibleMenuItems = menuItems.filter(m => m.enabled);
@@ -4769,7 +5116,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         {activeTab === 'list' && (<ListView items={inventoryData} loading={loading} settings={settingsData} searchQuery={searchQuery} setSearchQuery={setSearchQuery} showOnlyLowStock={showOnlyLowStock} setShowOnlyLowStock={setShowOnlyLowStock} selectedRacks={selectedRacks} setSelectedRacks={setSelectedRacks} uniqueRacksData={uniqueRacksData} onCopySuccess={showToast} onEdit={(item) => { setFormData({...item}); setEditingItem(item); setActiveTab('add'); }} onDelete={(item) => setDeleteModal({ show: true, item: item })} onDeleteRack={(rackName) => setDeleteRackModal({ show: true, rackName })} currentProfile={currentProfile} />)}
                         {activeTab === 'add' && (<FormView formData={formData} setFormData={setFormData} onSubmit={handleSubmit} isEditing={!!editingItem} submitting={submitting} onCancel={() => { setEditingItem(null); setFormData({name:'', qty:'', unit:'Pcs', exp:'', rack:'', price:'', costPrice:'', minStock: ''}); setActiveTab('list'); }} currentProfile={currentProfile} />)}
                         {activeTab === 'import' && (<BulkImportView user={user} onImportComplete={(count) => { showToast(`${count} Barang berhasil diimport`); setActiveTab('list'); }} currentProfile={currentProfile} />)}
-                        {activeTab === 'settings' && (<SettingsView settings={settingsData} onSave={handleSaveSettings} loading={submitting} />)}
+                        {activeTab === 'notes' && (<CatatanView user={user} showToast={showToast} />)}
                     </main>
                     <ConfirmModal isOpen={deleteModal.show} title="Hapus Barang?" message={`Yakin ingin menghapus permanen "${deleteModal.item?.name}"? Barang ini akan hilang dari SEMUA toko.`} onConfirm={handleDelete} onCancel={() => setDeleteModal({ show: false, item: null })} />
                     <ConfirmModal isOpen={deleteRackModal.show} title="Hapus Rak?" message={`Yakin ingin menghapus rak "${deleteRackModal.rackName}"? Semua barang di rak ini akan menjadi 'No Rack' (-).`} onConfirm={handleConfirmDeleteRack} onCancel={() => setDeleteRackModal({ show: false, rackName: null })} confirmText="Ya, Hapus Rak" />
