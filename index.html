@@ -4415,6 +4415,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             const [noteStyle, setNoteStyle] = useState('sticky'); // 'sticky' | 'plain'
             const [dragging, setDragging] = useState(null);
             const [pinching, setPinching] = useState(null); // { id, startDist, origScale }
+            const [selectedId, setSelectedId] = useState(null); // item yang sedang dipilih (tampilkan ✕)
             const boardRef = useRef(null);
             const photoInputRef = useRef(null);
 
@@ -4548,10 +4549,12 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             const onMouseDown = (e, item) => {
                 if (e.button !== 0) return;
                 e.preventDefault();
+                setSelectedId(item.id);
                 setDragging({ id: item.id, startX: e.clientX, startY: e.clientY, origX: item.x, origY: item.y });
             };
 
             const onTouchStart = (e, item) => {
+                setSelectedId(item.id);
                 if (e.touches.length === 1) {
                     const t = e.touches[0];
                     setDragging({ id: item.id, startX: t.clientX, startY: t.clientY, origX: item.x, origY: item.y });
@@ -4699,6 +4702,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
 
                     {/* Board */}
                     <div ref={boardRef} className="flex-1 relative rounded-3xl overflow-hidden"
+                        onClick={e => { if (e.target === boardRef.current) setSelectedId(null); }}
                         style={{
                             minHeight: '500px',
                             background: `
@@ -4732,7 +4736,9 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         {items.map(item => {
                             const isDraggingThis = dragging?.id === item.id;
                             const isPinchingThis = pinching?.id === item.id;
+                            const isSelected = selectedId === item.id;
                             const itemScale = item.photoScale ?? 1;
+                            const counterScale = 1 / itemScale; // agar tombol ✕ tidak ikut membesar
                             const baseStyle = {
                                 position: 'absolute',
                                 left: item.x ?? 50,
@@ -4770,12 +4776,18 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                             <button
                                                 onMouseDown={e => e.stopPropagation()}
                                                 onTouchStart={e => e.stopPropagation()}
-                                                onClick={() => deleteItem(item.id)}
+                                                onClick={() => { deleteItem(item.id); setSelectedId(null); }}
                                                 style={{
                                                     position:'absolute', top:0, right:0,
-                                                    background:'transparent', border:'none', cursor:'pointer',
-                                                    fontSize:11, color:'rgba(0,0,0,0.3)', padding:'2px 4px',
-                                                    borderRadius:4,
+                                                    background:'rgba(239,68,68,0.85)', border:'none', cursor:'pointer',
+                                                    fontSize:11, color:'white', padding:'2px 6px',
+                                                    borderRadius:6, lineHeight:'1.6',
+                                                    transform: `scale(${counterScale})`,
+                                                    transformOrigin: 'top right',
+                                                    opacity: isSelected ? 1 : 0,
+                                                    pointerEvents: isSelected ? 'auto' : 'none',
+                                                    transition: 'opacity 0.15s',
+                                                    boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
                                                 }}>✕</button>
                                         </div>
                                     );
@@ -4812,12 +4824,18 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                         <button
                                             onMouseDown={e => e.stopPropagation()}
                                             onTouchStart={e => e.stopPropagation()}
-                                            onClick={() => deleteItem(item.id)}
+                                            onClick={() => { deleteItem(item.id); setSelectedId(null); }}
                                             style={{
                                                 position:'absolute', bottom:6, right:6,
-                                                background:'transparent', border:'none', cursor:'pointer',
-                                                fontSize:11, color:'rgba(0,0,0,0.25)', padding:'2px 4px',
-                                                borderRadius:4
+                                                background:'rgba(239,68,68,0.85)', border:'none', cursor:'pointer',
+                                                fontSize:11, color:'white', padding:'2px 6px',
+                                                borderRadius:6, lineHeight:'1.6',
+                                                transform: `scale(${counterScale})`,
+                                                transformOrigin: 'bottom right',
+                                                opacity: isSelected ? 1 : 0,
+                                                pointerEvents: isSelected ? 'auto' : 'none',
+                                                transition: 'opacity 0.15s',
+                                                boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
                                             }}>✕</button>
                                     </div>
                                 );
@@ -4853,12 +4871,18 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                         <button
                                             onMouseDown={e => e.stopPropagation()}
                                             onTouchStart={e => e.stopPropagation()}
-                                            onClick={() => deleteItem(item.id)}
+                                            onClick={() => { deleteItem(item.id); setSelectedId(null); }}
                                             style={{
                                                 position:'absolute', top:4, right:4,
-                                                background:'rgba(0,0,0,0.12)', border:'none', cursor:'pointer',
-                                                fontSize:10, color:'white', padding:'1px 5px',
-                                                borderRadius:10, lineHeight:'1.6'
+                                                background:'rgba(239,68,68,0.85)', border:'none', cursor:'pointer',
+                                                fontSize:11, color:'white', padding:'2px 6px',
+                                                borderRadius:6, lineHeight:'1.6',
+                                                transform: `scale(${counterScale})`,
+                                                transformOrigin: 'top right',
+                                                opacity: isSelected ? 1 : 0,
+                                                pointerEvents: isSelected ? 'auto' : 'none',
+                                                transition: 'opacity 0.15s',
+                                                boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
                                             }}>✕</button>
                                     </div>
                                 );
