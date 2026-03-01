@@ -839,7 +839,7 @@
 
             // Auto calculate total dari items
             useEffect(() => {
-                const subtotal = invoiceData.items.reduce((sum, item) => sum + (item.qty * item.price), 0);
+                const subtotal = invoiceData.items.reduce((sum, item) => sum + (item.qty * (item.buyPrice || 0)), 0);
                 setInvoiceData(prev => ({ ...prev, total: subtotal.toString() }));
             }, [invoiceData.items]);
 
@@ -1443,9 +1443,9 @@
                                                             <h5 className="text-xs font-bold text-slate-800">{item.name}</h5>
                                                             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                                                 <span className="text-[11px] text-slate-500">Qty: <b>{item.qty}</b></span>
-                                                                {item.buyPrice > 0 && <span className="text-[11px] text-orange-500">Beli: {formatRupiah(item.buyPrice)}</span>}
+                                                                {item.buyPrice > 0 && <span className="text-[11px] text-orange-500 font-bold">Beli: {formatRupiah(item.buyPrice)}</span>}
                                                                 <span className="text-[11px] text-slate-500">Jual: {formatRupiah(item.price)}</span>
-                                                                <span className="text-[11px] text-teal-600 font-bold">= {formatRupiah(item.qty * item.price)}</span>
+                                                                <span className="text-[11px] text-teal-600 font-bold">= {formatRupiah(item.qty * (item.buyPrice || 0))}</span>
                                                             </div>
                                                         </div>
                                                         <button type="button" onClick={() => removeItemFromInvoice(index)} className="ml-3 text-red-400 hover:text-red-600 p-1"><Icon name="trash" /></button>
@@ -1465,7 +1465,7 @@
                                 {/* SECTION: Summary */}
                                 <div className="space-y-2">
                                     {(() => {
-                                        const subtotal = invoiceData.items.reduce((s, it) => s + it.qty * it.price, 0);
+                                        const subtotal = invoiceData.items.reduce((s, it) => s + it.qty * (it.buyPrice || 0), 0);
                                         const numDiskon = parseInt((diskon || '0').replace(/\D/g,'')) || 0;
                                         const diskonNom = diskonType === 'percent' ? Math.floor(subtotal * numDiskon / 100) : numDiskon;
                                         const dpp = subtotal - diskonNom;
@@ -1584,10 +1584,10 @@
                                                     <div key={idx} className="px-4 py-3 flex justify-between items-center">
                                                         <div>
                                                             <p className="text-xs font-bold text-slate-800">{item.name}</p>
-                                                            <p className="text-[10px] text-slate-500 mt-0.5">{item.qty} × Jual {formatRupiah(item.price)}</p>
-                                                            {item.buyPrice > 0 && <p className="text-[10px] text-orange-500 font-bold mt-0.5">Harga Beli: {formatRupiah(item.buyPrice)}</p>}
+                                                            <p className="text-[10px] text-orange-500 font-bold mt-0.5">{item.qty} × Beli {formatRupiah(item.buyPrice || 0)}</p>
+                                                            <p className="text-[10px] text-slate-400 mt-0.5">Harga Jual Toko: {formatRupiah(item.price)}</p>
                                                         </div>
-                                                        <span className="text-xs font-bold text-teal-700">{formatRupiah(item.qty * item.price)}</span>
+                                                        <span className="text-xs font-bold text-teal-700">{formatRupiah(item.qty * (item.buyPrice || 0))}</span>
                                                     </div>
                                                 ))}
                                             </div>
