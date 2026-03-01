@@ -4199,38 +4199,47 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         { header: 'Nama Barang', key: 'nama', width: 40 },
                         { header: 'Stok', key: 'stok', width: 12 },
                         { header: 'Rak', key: 'rak', width: 18 },
-                        { header: 'Harga', key: 'harga', width: 20 },
+                        { header: 'Harga Beli', key: 'hargaBeli', width: 20 },
+                        { header: 'Harga Jual', key: 'hargaJual', width: 20 },
+                        { header: 'Margin %', key: 'margin', width: 14 },
                         { header: 'Expired', key: 'expired', width: 18 }
                     ];
                     
                     // Style untuk header row
-                    worksheet.getRow(1).font = { bold: true, size: 11 };
+                    worksheet.getRow(1).font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
                     worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
                     worksheet.getRow(1).fill = {
                         type: 'pattern',
                         pattern: 'solid',
-                        fgColor: { argb: 'FFE5E7EB' }
+                        fgColor: { argb: 'FF0EA5E9' }
                     };
-                    worksheet.getRow(1).height = 25;
+                    worksheet.getRow(1).height = 28;
                     
                     // Add data rows
                     filteredItems.forEach((item, index) => {
                         const expDate = item.exp ? (typeof item.exp === 'string' ? item.exp : new Date(item.exp).toLocaleDateString('id-ID')) : '-';
+                        const costPrice = safeNumber(item.costPrice);
+                        const sellPrice = safeNumber(item.price);
+                        const marginPct = (costPrice > 0 && sellPrice > 0)
+                            ? (((sellPrice - costPrice) / sellPrice) * 100).toFixed(1) + '%'
+                            : '-';
                         
                         const row = worksheet.addRow({
                             no: index + 1,
                             nama: item.name || '-',
                             stok: item.qty || 0,
                             rak: item.rack || '-',
-                            harga: formatRupiah(item.price || 0),
+                            hargaBeli: costPrice > 0 ? formatRupiah(costPrice) : '-',
+                            hargaJual: formatRupiah(sellPrice),
+                            margin: marginPct,
                             expired: expDate
                         });
-                        
+
                         // Apply center alignment untuk semua kolom kecuali Nama Barang
                         row.eachCell((cell, colNumber) => {
                             cell.alignment = { 
                                 vertical: 'middle', 
-                                horizontal: colNumber === 2 ? 'left' : 'center'  // Kolom 2 = Nama Barang (left), lainnya center
+                                horizontal: colNumber === 2 ? 'left' : 'center'
                             };
                             cell.border = {
                                 top: { style: 'thin', color: { argb: 'FFE5E7EB' } },
@@ -4238,6 +4247,9 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                 bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } },
                                 right: { style: 'thin', color: { argb: 'FFE5E7EB' } }
                             };
+                            if (index % 2 === 1) {
+                                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8FAFC' } };
+                            }
                         });
                     });
                     
