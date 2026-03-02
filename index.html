@@ -4876,7 +4876,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                 const isPlain = item.noteStyle === 'plain';
                                 if (isPlain) {
                                     return (
-                                        <div key={item.id} style={{ ...baseStyle, maxWidth: 220, padding: '4px 24px 4px 4px' }}
+                                        <div key={item.id} style={{ ...baseStyle, width: 220, padding: '4px 24px 4px 4px' }}
                                             onMouseDown={e => onMouseDown(e, item)}
                                             onTouchStart={e => onTouchStart(e, item)}>
                                             {rotateHandle}
