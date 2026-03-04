@@ -5114,6 +5114,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             const [showHistory, setShowHistory] = useState(false);
             const [showFinishModal, setShowFinishModal] = useState(false);
             const [historyDetail, setHistoryDetail] = useState(null);
+            const [showClearConfirm, setShowClearConfirm] = useState(false);
 
             const profileId = currentProfile?.id || 'default';
             const getCol = () => window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'stock_opname');
@@ -5222,6 +5223,21 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 setSaving(false);
             };
 
+            const clearHistory = async () => {
+                setSaving(true);
+                try {
+                    const closed = sessions.filter(s => s.status === 'closed' && s.profileId === profileId);
+                    const batch = window.writeBatch(window.db);
+                    closed.forEach(s => {
+                        batch.delete(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'stock_opname', s.id));
+                    });
+                    await batch.commit();
+                    showToast(`${closed.length} riwayat berhasil dihapus`);
+                    setShowClearConfirm(false);
+                } catch (e) { showToast('Gagal menghapus riwayat', 'error'); }
+                setSaving(false);
+            };
+
             const formatDate = (ts) => {
                 if (!ts) return '-';
                 const d = ts.toDate ? ts.toDate() : new Date(ts);
@@ -5233,8 +5249,21 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 return (
                     <div className="fade-in space-y-6">
                         <div className="flex items-center gap-3">
-                            <button onClick={() => { setShowHistory(false); setHistoryDetail(null); }} className="p-2 bg-white rounded-xl shadow-sm border border-slate-100 hover:bg-slate-50 text-slate-600"><Icon name="arrow-left" /></button>
-                            <div><h2 className="text-xl font-black text-slate-800">Riwayat Stock Opname</h2><p className="text-xs text-slate-400">{currentProfile?.name}</p></div>
+                            <button onClick={() => { setShowHistory(false); setHistoryDetail(null); setShowClearConfirm(false); }} className="p-2 bg-white rounded-xl shadow-sm border border-slate-100 hover:bg-slate-50 text-slate-600"><Icon name="arrow-left" /></button>
+                            <div className="flex-1"><h2 className="text-xl font-black text-slate-800">Riwayat Stock Opname</h2><p className="text-xs text-slate-400">{currentProfile?.name}</p></div>
+                            {!historyDetail && closed.length > 0 && (
+                                showClearConfirm ? (
+                                    <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                                        <p className="text-xs font-bold text-red-600">Hapus semua {closed.length} riwayat?</p>
+                                        <button onClick={clearHistory} disabled={saving} className="text-xs bg-red-500 hover:bg-red-600 text-white font-bold px-3 py-1.5 rounded-lg transition-all">{saving ? '...' : 'Ya, Hapus'}</button>
+                                        <button onClick={() => setShowClearConfirm(false)} className="text-xs bg-white border border-slate-200 text-slate-600 font-bold px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-all">Batal</button>
+                                    </div>
+                                ) : (
+                                    <button onClick={() => setShowClearConfirm(true)} className="flex items-center gap-2 px-3 py-2 bg-white border border-red-200 text-red-500 hover:bg-red-50 font-bold text-xs rounded-xl shadow-sm transition-all">
+                                        <Icon name="trash" /> Bersihkan
+                                    </button>
+                                )
+                            )}
                         </div>
                         {historyDetail ? (
                             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
