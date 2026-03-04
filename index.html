@@ -2404,9 +2404,17 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     );
                 } catch (e) { showToast("Gagal update qty", "error"); }
             };
-            // Hooks HARUS dipanggil sebelum early return (Rules of Hooks)
+            // PENTING: useMemo HARUS dipanggil sebelum conditional return (React Rules of Hooks)
             const fuse = useMemo(() => new Fuse(items, { keys: ['name', 'rack'], threshold: 0.3 }), [items]);
-            const filteredItems = useMemo(() => { if (!search || currentProfile.id === 'all_stores') return []; return fuse.search(search).map(r => r.item).slice(0, 30); }, [items, search, fuse, currentProfile.id]);
+            const filteredItems = useMemo(() => { if (!search) return []; return fuse.search(search).map(r => r.item).slice(0, 30); }, [items, search, fuse]);
+            const grandTotal = cart.reduce((acc, item) => acc + (safeNumber(item.price) * item.cartQty), 0);
+            const change = safeNumber(paymentAmount) - grandTotal;
+            const getPaymentSuggestions = useMemo(() => {
+                const suggestions = new Set(); suggestions.add(grandTotal); 
+                [1000, 2000, 5000, 10000, 20000, 50000, 100000].forEach(denom => { const nextVal = Math.ceil(grandTotal / denom) * denom; if (nextVal > grandTotal) suggestions.add(nextVal); });
+                [2000, 5000, 10000, 20000, 50000, 100000].forEach(bill => { if (bill > grandTotal) suggestions.add(bill); });
+                return Array.from(suggestions).sort((a,b) => a-b).slice(0, 6);
+            }, [grandTotal]);
 
             if (currentProfile.id === 'all_stores') {
                 return (
@@ -2555,15 +2563,6 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     return c;
                 }));
             };
-            const grandTotal = cart.reduce((acc, item) => acc + (safeNumber(item.price) * item.cartQty), 0);
-            const change = safeNumber(paymentAmount) - grandTotal;
-            const getPaymentSuggestions = useMemo(() => {
-                const suggestions = new Set(); suggestions.add(grandTotal); 
-                [1000, 2000, 5000, 10000, 20000, 50000, 100000].forEach(denom => { const nextVal = Math.ceil(grandTotal / denom) * denom; if (nextVal > grandTotal) suggestions.add(nextVal); });
-                [2000, 5000, 10000, 20000, 50000, 100000].forEach(bill => { if (bill > grandTotal) suggestions.add(bill); });
-                return Array.from(suggestions).sort((a,b) => a-b).slice(0, 6);
-            }, [grandTotal]);
-
             const handleBack = async () => { 
                 if (cart.length > 0) { 
                     try {
@@ -5475,6 +5474,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             useEffect(() => { const globalClickHandler = (e) => { triggerFireworks(e.clientX, e.clientY); }; window.addEventListener('click', globalClickHandler); return () => window.removeEventListener('click', globalClickHandler); }, []);
 
             // 1. Fetch Global Settings
+            const hasSetInitialTab = useRef(false);
             useEffect(() => {
                 if(!user) return;
                 const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'settings', 'global');
@@ -5483,24 +5483,23 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         const fetched = docSnap.data();
                         setSettingsData({ ...DEFAULT_SETTINGS, ...fetched }); 
                         
-                        // LOGIC FOR DEFAULT VIEW BASED ON SETTINGS
-                        const isCashierEnabled = fetched.enableCashier !== false; // Default true
-                        
-                        if (isCashierEnabled) {
-                             setActiveTab(prev => 'cashier');
-                        } else {
-                            setActiveTab('home');
+                        // Hanya set tab saat pertama kali load, bukan saat ganti toko
+                        if (!hasSetInitialTab.current) {
+                            hasSetInitialTab.current = true;
+                            const isCashierEnabled = fetched.enableCashier !== false;
+                            setActiveTab(isCashierEnabled ? 'cashier' : 'home');
                         }
 
                         const profiles = fetched.storeProfiles || [{ id: 'default' }];
-                        if(activeStoreId !== 'all_stores' && !profiles.find(p => p.id === activeStoreId)) { 
+                        const savedStoreId = localStorage.getItem('activeStoreId') || 'default';
+                        if(savedStoreId !== 'all_stores' && !profiles.find(p => p.id === savedStoreId)) { 
                             setActiveStoreId(profiles[0].id); 
                             localStorage.setItem('activeStoreId', profiles[0].id); 
                         }
                     } 
                 });
                 return () => unsub();
-            }, [user, activeStoreId]);
+            }, [user]);
 
             // 2. Fetch Raw Inventory
             useEffect(() => {
