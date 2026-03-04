@@ -5211,7 +5211,9 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     const batch = window.writeBatch(window.db);
                     entries.forEach(e => {
                         const itemRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', e.itemId);
-                        batch.update(itemRef, { qty: e.physicalQty });
+                        const updateData = { [`stocks.${profileId}`]: e.physicalQty };
+                        if (profileId === 'default') updateData.qty = e.physicalQty;
+                        batch.update(itemRef, updateData);
                     });
                     await batch.commit();
                     showToast('Stock Opname selesai! Stok barang telah diperbarui.');
