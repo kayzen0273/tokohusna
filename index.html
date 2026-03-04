@@ -5102,6 +5102,293 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
         };
         // ==================== END PAPAN CATATAN ====================
 
+        // ==================== KALENDER KEGIATAN ====================
+        const KalenderKegiatan = ({ user }) => {
+            const [currentDate, setCurrentDate] = useState(new Date());
+            const [events, setEvents] = useState({});
+            const [selectedDate, setSelectedDate] = useState(null);
+            const [showModal, setShowModal] = useState(false);
+            const [modalInput, setModalInput] = useState({ title: '', color: '#0ea5e9', type: 'event' });
+            const [editingEvent, setEditingEvent] = useState(null);
+            const [loading, setLoading] = useState(true);
+
+            const EVENT_COLORS = [
+                { label: 'Biru', value: '#0ea5e9' },
+                { label: 'Hijau', value: '#22c55e' },
+                { label: 'Merah', value: '#ef4444' },
+                { label: 'Kuning', value: '#eab308' },
+                { label: 'Ungu', value: '#a855f7' },
+                { label: 'Oranye', value: '#f97316' },
+            ];
+            const EVENT_TYPES = [
+                { label: '📅 Kegiatan', value: 'event' },
+                { label: '🛒 Belanja', value: 'belanja' },
+                { label: '💼 Rapat', value: 'rapat' },
+                { label: '🎉 Acara', value: 'acara' },
+                { label: '⚠️ Penting', value: 'penting' },
+                { label: '🔔 Pengingat', value: 'pengingat' },
+            ];
+            const TYPE_ICONS = { event: '📅', belanja: '🛒', rapat: '💼', acara: '🎉', penting: '⚠️', pengingat: '🔔' };
+
+            const getDocRef = () => window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'kalender', 'events');
+
+            useEffect(() => {
+                if (!user) return;
+                const unsub = window.onSnapshot(getDocRef(), (snap) => {
+                    if (snap.exists()) setEvents(snap.data().events || {});
+                    else setEvents({});
+                    setLoading(false);
+                }, () => setLoading(false));
+                return () => unsub();
+            }, [user]);
+
+            const saveEvents = async (newEvents) => {
+                try {
+                    await window.setDoc(getDocRef(), { events: newEvents, updatedAt: window.serverTimestamp() });
+                } catch (e) { console.error(e); }
+            };
+
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            const today = new Date();
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const monthKey = `${year}-${String(month+1).padStart(2,'0')}`;
+            const MONTH_NAMES = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+            const DAY_NAMES = ['Min','Sen','Sel','Rab','Kam','Jum','Sab'];
+
+            const getDayKey = (d) => `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+            const getDayEvents = (d) => events[getDayKey(d)] || [];
+
+            const handleDayClick = (d) => {
+                setSelectedDate(getDayKey(d));
+                setEditingEvent(null);
+                setModalInput({ title: '', color: '#0ea5e9', type: 'event' });
+                setShowModal(true);
+            };
+
+            const handleAddEvent = async () => {
+                if (!modalInput.title.trim()) return;
+                const key = selectedDate;
+                const newEvents = { ...events };
+                if (!newEvents[key]) newEvents[key] = [];
+                if (editingEvent !== null) {
+                    newEvents[key][editingEvent] = { ...modalInput, id: newEvents[key][editingEvent]?.id || Date.now() };
+                } else {
+                    newEvents[key].push({ ...modalInput, id: Date.now() });
+                }
+                await saveEvents(newEvents);
+                setEvents(newEvents);
+                setModalInput({ title: '', color: '#0ea5e9', type: 'event' });
+                setEditingEvent(null);
+                setShowModal(false);
+            };
+
+            const handleDeleteEvent = async (dateKey, idx) => {
+                const newEvents = { ...events };
+                newEvents[dateKey] = (newEvents[dateKey] || []).filter((_, i) => i !== idx);
+                if (newEvents[dateKey].length === 0) delete newEvents[dateKey];
+                await saveEvents(newEvents);
+                setEvents(newEvents);
+            };
+
+            const handleEditEvent = (dateKey, idx) => {
+                const ev = events[dateKey][idx];
+                setSelectedDate(dateKey);
+                setEditingEvent(idx);
+                setModalInput({ title: ev.title, color: ev.color || '#0ea5e9', type: ev.type || 'event' });
+                setShowModal(true);
+            };
+
+            // Collect all events this month for side list
+            const monthEvents = [];
+            for (let d = 1; d <= daysInMonth; d++) {
+                const k = getDayKey(d);
+                (events[k] || []).forEach((ev, i) => monthEvents.push({ ...ev, dateKey: k, day: d, idx: i }));
+            }
+            monthEvents.sort((a,b) => a.day - b.day);
+
+            const isToday = (d) => today.getDate() === d && today.getMonth() === month && today.getFullYear() === year;
+            const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
+            const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+            const goToday = () => setCurrentDate(new Date());
+
+            // Parse dateKey to readable
+            const formatDateKey = (k) => {
+                const [y, m, d] = k.split('-');
+                return `${parseInt(d)} ${MONTH_NAMES[parseInt(m)-1]} ${y}`;
+            };
+
+            return (
+                <div className="fade-in max-w-5xl mx-auto">
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className="w-10 h-10 rounded-xl bg-sky-600 flex items-center justify-center text-white shadow-lg"><Icon name="calendar-days" /></div>
+                        <div><h2 className="text-xl font-black text-slate-800">Kalender Kegiatan</h2><p className="text-xs text-slate-500">Tandai & kelola jadwal kegiatan</p></div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* Kalender */}
+                        <div className="lg:col-span-2 bg-white rounded-2xl shadow-soft border border-slate-100 p-5">
+                            {/* Navigation */}
+                            <div className="flex items-center justify-between mb-5">
+                                <button onClick={prevMonth} className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-600 flex items-center justify-center transition-all active:scale-95"><Icon name="chevron-left" /></button>
+                                <div className="text-center">
+                                    <h3 className="font-black text-lg text-slate-800">{MONTH_NAMES[month]} {year}</h3>
+                                    <button onClick={goToday} className="text-xs text-sky-500 font-bold hover:underline">Hari ini</button>
+                                </div>
+                                <button onClick={nextMonth} className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-sky-100 text-slate-600 hover:text-sky-600 flex items-center justify-center transition-all active:scale-95"><Icon name="chevron-right" /></button>
+                            </div>
+
+                            {/* Day Headers */}
+                            <div className="grid grid-cols-7 mb-2">
+                                {DAY_NAMES.map((d, i) => (
+                                    <div key={d} className={`text-center text-[11px] font-black uppercase pb-2 ${i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : 'text-slate-400'}`}>{d}</div>
+                                ))}
+                            </div>
+
+                            {/* Days Grid */}
+                            {loading ? (
+                                <div className="flex items-center justify-center h-48 text-slate-400 text-sm">Memuat kalender...</div>
+                            ) : (
+                                <div className="grid grid-cols-7 gap-1">
+                                    {/* Empty cells */}
+                                    {[...Array(firstDay)].map((_, i) => <div key={`e-${i}`} />)}
+                                    {/* Days */}
+                                    {[...Array(daysInMonth)].map((_, i) => {
+                                        const d = i + 1;
+                                        const dayEvs = getDayEvents(d);
+                                        const hasEvents = dayEvs.length > 0;
+                                        const isTodayDay = isToday(d);
+                                        const isSunday = (firstDay + i) % 7 === 0;
+                                        const isSaturday = (firstDay + i) % 7 === 6;
+                                        return (
+                                            <button
+                                                key={d}
+                                                onClick={() => handleDayClick(d)}
+                                                className={`relative min-h-[52px] p-1 rounded-xl text-left transition-all duration-200 group hover:scale-105 active:scale-95 border
+                                                    ${isTodayDay ? 'bg-sky-600 border-sky-400 shadow-lg' : hasEvents ? 'bg-sky-50 border-sky-200 hover:bg-sky-100' : 'border-transparent hover:bg-slate-50 hover:border-slate-200'}
+                                                `}
+                                            >
+                                                <span className={`block text-center text-xs font-black leading-none mb-1 
+                                                    ${isTodayDay ? 'text-white' : isSunday ? 'text-red-400' : isSaturday ? 'text-blue-400' : 'text-slate-700'}`}>
+                                                    {d}
+                                                </span>
+                                                <div className="flex flex-wrap gap-[2px] justify-center">
+                                                    {dayEvs.slice(0, 3).map((ev, ei) => (
+                                                        <span key={ei} className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: ev.color || '#0ea5e9' }}></span>
+                                                    ))}
+                                                    {dayEvs.length > 3 && <span className="text-[8px] font-black text-slate-400">+{dayEvs.length - 3}</span>}
+                                                </div>
+                                                {hasEvents && (
+                                                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-sky-500 text-white text-[8px] font-black rounded-full flex items-center justify-center shadow">
+                                                        {dayEvs.length}
+                                                    </div>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Event List */}
+                        <div className="bg-white rounded-2xl shadow-soft border border-slate-100 p-5 flex flex-col">
+                            <div className="flex items-center justify-between mb-4">
+                                <h4 className="font-black text-slate-700 text-sm">Kegiatan Bulan Ini</h4>
+                                <span className="text-xs font-bold bg-sky-100 text-sky-600 px-2 py-0.5 rounded-full">{monthEvents.length} item</span>
+                            </div>
+                            {monthEvents.length === 0 ? (
+                                <div className="flex-1 flex flex-col items-center justify-center text-center py-8">
+                                    <div className="text-5xl mb-3">🗓️</div>
+                                    <p className="text-slate-400 text-sm font-bold">Belum ada kegiatan</p>
+                                    <p className="text-slate-300 text-xs mt-1">Klik tanggal di kalender untuk menambah</p>
+                                </div>
+                            ) : (
+                                <div className="flex-1 overflow-y-auto space-y-2 max-h-[420px]">
+                                    {monthEvents.map((ev, i) => (
+                                        <div key={i} className="flex items-start gap-2 p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 group transition-colors border border-transparent hover:border-slate-200">
+                                            <div className="w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0" style={{ backgroundColor: ev.color || '#0ea5e9' }}></div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-[10px]">{TYPE_ICONS[ev.type] || '📅'}</span>
+                                                    <span className="text-xs font-black text-slate-700 truncate">{ev.title}</span>
+                                                </div>
+                                                <span className="text-[10px] text-slate-400 font-semibold">{formatDateKey(ev.dateKey)}</span>
+                                            </div>
+                                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button onClick={() => handleEditEvent(ev.dateKey, ev.idx)} className="w-6 h-6 bg-sky-100 text-sky-600 rounded-lg text-[10px] flex items-center justify-center hover:bg-sky-200 transition-colors"><Icon name="pen" /></button>
+                                                <button onClick={() => handleDeleteEvent(ev.dateKey, ev.idx)} className="w-6 h-6 bg-red-100 text-red-500 rounded-lg text-[10px] flex items-center justify-center hover:bg-red-200 transition-colors"><Icon name="trash" /></button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Modal Tambah/Edit Event */}
+                    {showModal && (
+                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 fade-in" onClick={(e) => e.target === e.currentTarget && setShowModal(false)}>
+                            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 slide-up">
+                                <div className="flex items-center gap-3 mb-5">
+                                    <div className="w-9 h-9 rounded-xl bg-sky-100 flex items-center justify-center text-sky-600"><Icon name="calendar-plus" /></div>
+                                    <div>
+                                        <h3 className="font-black text-slate-800 text-base">{editingEvent !== null ? 'Edit Kegiatan' : 'Tambah Kegiatan'}</h3>
+                                        <p className="text-xs text-slate-400">{selectedDate ? formatDateKey(selectedDate) : ''}</p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-600 mb-1">Nama Kegiatan *</label>
+                                        <input
+                                            type="text" autoFocus
+                                            value={modalInput.title}
+                                            onChange={e => setModalInput(p => ({ ...p, title: e.target.value }))}
+                                            onKeyDown={e => e.key === 'Enter' && handleAddEvent()}
+                                            placeholder="Contoh: Rapat bulanan..."
+                                            className="w-full border-2 border-slate-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-800 focus:outline-none focus:border-sky-400 transition-colors"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-600 mb-1">Jenis Kegiatan</label>
+                                        <div className="grid grid-cols-3 gap-1.5">
+                                            {EVENT_TYPES.map(t => (
+                                                <button key={t.value} onClick={() => setModalInput(p => ({ ...p, type: t.value }))}
+                                                    className={`text-xs py-1.5 px-2 rounded-lg font-bold transition-all border ${modalInput.type === t.value ? 'bg-sky-600 text-white border-sky-600' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-sky-300'}`}>
+                                                    {t.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-600 mb-2">Warna Label</label>
+                                        <div className="flex gap-2 flex-wrap">
+                                            {EVENT_COLORS.map(c => (
+                                                <button key={c.value} onClick={() => setModalInput(p => ({ ...p, color: c.value }))}
+                                                    className={`w-7 h-7 rounded-full transition-all active:scale-90 ${modalInput.color === c.value ? 'ring-2 ring-offset-2 ring-slate-400 scale-110' : 'hover:scale-110'}`}
+                                                    style={{ backgroundColor: c.value }} title={c.label}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-2 mt-6">
+                                    <button onClick={() => { setShowModal(false); setEditingEvent(null); }} className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200 transition-colors">Batal</button>
+                                    <button onClick={handleAddEvent} disabled={!modalInput.title.trim()}
+                                        className="flex-1 py-2.5 rounded-xl bg-sky-600 text-white font-bold text-sm hover:bg-sky-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-95">
+                                        {editingEvent !== null ? 'Simpan' : '+ Tambah'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+        // ==================== END KALENDER KEGIATAN ====================
+
 
         const App = () => {
             const [inventoryData, setInventoryData] = useState([]);
@@ -5360,6 +5647,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 { id: 'home', label: 'Dashboard', icon: 'chart-pie', enabled: true }, 
                 { id: 'list', label: 'Stok Barang', icon: 'boxes-stacked', enabled: true }, 
                 { id: 'cashbook', label: 'Buku Kas', icon: 'book', enabled: true },
+                { id: 'kalender', label: 'Kalender Kegiatan', icon: 'calendar-days', enabled: true },
                 { id: 'catatan', label: 'Catatan', icon: 'thumbtack', enabled: true },
                 { id: 'add', label: 'Input Manual', icon: 'pen-to-square', enabled: true }, 
                 { id: 'import', label: 'Import Masal', icon: 'file-import', enabled: true }, 
@@ -5470,6 +5758,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         {activeTab === 'import' && (<BulkImportView user={user} onImportComplete={(count) => { showToast(`${count} Barang berhasil diimport`); setActiveTab('list'); }} currentProfile={currentProfile} />)}
                         {activeTab === 'settings' && (<SettingsView settings={settingsData} onSave={handleSaveSettings} loading={submitting} />)}
                         {activeTab === 'catatan' && (<PapanCatatan user={user} />)}
+                        {activeTab === 'kalender' && (<KalenderKegiatan user={user} />)}
                     </main>
                     <ConfirmModal isOpen={deleteModal.show} title="Hapus Barang?" message={`Yakin ingin menghapus permanen "${deleteModal.item?.name}"? Barang ini akan hilang dari SEMUA toko.`} onConfirm={handleDelete} onCancel={() => setDeleteModal({ show: false, item: null })} />
                     <ConfirmModal isOpen={deleteRackModal.show} title="Hapus Rak?" message={`Yakin ingin menghapus rak "${deleteRackModal.rackName}"? Semua barang di rak ini akan menjadi 'No Rack' (-).`} onConfirm={handleConfirmDeleteRack} onCancel={() => setDeleteRackModal({ show: false, rackName: null })} confirmText="Ya, Hapus Rak" />
