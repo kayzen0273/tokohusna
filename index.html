@@ -5183,7 +5183,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     .filter(([, v]) => v !== undefined)
                     .map(([itemId, physicalQty]) => {
                         const item = items.find(i => i.id === itemId);
-                        return { itemId, name: item?.name || '?', systemQty: Number(item?.qty || 0), physicalQty: Number(physicalQty), selisih: Number(physicalQty) - Number(item?.qty || 0) };
+                        return { itemId, name: item?.name || '?', systemQty: Number(item?.qty || 0), physicalQty: Number(physicalQty), selisih: Number(physicalQty) - Number(item?.qty || 0), price: Number(item?.price || 0) };
                     });
                 try {
                     await window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'stock_opname', sessionId), { entries, updatedAt: window.serverTimestamp() });
@@ -5199,14 +5199,22 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     .filter(([, v]) => v !== undefined)
                     .map(([itemId, physicalQty]) => {
                         const item = items.find(i => i.id === itemId);
-                        return { itemId, name: item?.name || '?', systemQty: Number(item?.qty || 0), physicalQty: Number(physicalQty), selisih: Number(physicalQty) - Number(item?.qty || 0) };
+                        return { itemId, name: item?.name || '?', systemQty: Number(item?.qty || 0), physicalQty: Number(physicalQty), selisih: Number(physicalQty) - Number(item?.qty || 0), price: Number(item?.price || 0) };
                     });
                 try {
+                    // Update stock opname session to closed
                     await window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'stock_opname', sessionId), {
                         entries, status: 'closed', finishedAt: window.serverTimestamp(),
                         summary: { total: stats.total, counted: stats.counted, selisih: stats.selisih }
                     });
-                    showToast('Stock Opname selesai dan tersimpan!');
+                    // Update inventory qty sesuai hasil stock opname (batch)
+                    const batch = window.writeBatch(window.db);
+                    entries.forEach(e => {
+                        const itemRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', e.itemId);
+                        batch.update(itemRef, { qty: e.physicalQty });
+                    });
+                    await batch.commit();
+                    showToast('Stock Opname selesai! Stok barang telah diperbarui.');
                     setShowFinishModal(false);
                 } catch (e) { showToast('Gagal menyelesaikan sesi', 'error'); }
                 setSaving(false);
@@ -5234,7 +5242,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                 </div>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-sm">
-                                        <thead className="bg-slate-50"><tr className="text-left text-xs font-bold text-slate-500 uppercase"><th className="px-4 py-3">Nama Barang</th><th className="px-4 py-3 text-center">Stok Sistem</th><th className="px-4 py-3 text-center">Stok Fisik</th><th className="px-4 py-3 text-center">Selisih</th></tr></thead>
+                                        <thead className="bg-slate-50"><tr className="text-left text-xs font-bold text-slate-500 uppercase"><th className="px-4 py-3">Nama Barang</th><th className="px-4 py-3 text-center">Stok Sistem</th><th className="px-4 py-3 text-center">Stok Fisik</th><th className="px-4 py-3 text-center">Selisih</th><th className="px-4 py-3 text-center">Harga Jual</th><th className="px-4 py-3 text-center">Nilai Selisih</th></tr></thead>
                                         <tbody className="divide-y divide-slate-50">
                                             {(historyDetail.entries || []).map((e, i) => (
                                                 <tr key={i} className="hover:bg-slate-50/50">
@@ -5242,12 +5250,26 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                                     <td className="px-4 py-3 text-center text-slate-500">{e.systemQty}</td>
                                                     <td className="px-4 py-3 text-center font-bold">{e.physicalQty}</td>
                                                     <td className={`px-4 py-3 text-center font-black ${e.selisih > 0 ? 'text-emerald-600' : e.selisih < 0 ? 'text-red-500' : 'text-slate-400'}`}>{e.selisih > 0 ? '+' : ''}{e.selisih}</td>
+                                                    <td className="px-4 py-3 text-center text-slate-500 text-xs">{e.price ? formatRupiah(e.price) : '-'}</td>
+                                                    <td className={`px-4 py-3 text-center font-black text-xs ${e.selisih < 0 ? 'text-red-500' : e.selisih > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                                        {e.price && e.selisih !== 0 ? `${e.selisih > 0 ? '+' : ''}${formatRupiah(e.selisih * e.price)}` : '-'}
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>
                                     </table>
                                     {(!historyDetail.entries || historyDetail.entries.length === 0) && <p className="text-center text-slate-400 py-8 text-sm">Tidak ada data</p>}
                                 </div>
+                                {historyDetail.entries && historyDetail.entries.length > 0 && (() => {
+                                    const totalMinus = historyDetail.entries.filter(e => e.selisih < 0).reduce((sum, e) => sum + (e.selisih * (e.price || 0)), 0);
+                                    const totalPlus = historyDetail.entries.filter(e => e.selisih > 0).reduce((sum, e) => sum + (e.selisih * (e.price || 0)), 0);
+                                    return (
+                                        <div className="p-4 border-t border-slate-100 bg-slate-50 flex flex-wrap gap-4 justify-end">
+                                            {totalPlus > 0 && <div className="text-right"><p className="text-xs text-slate-400 font-medium">Total Nilai Lebih (+)</p><p className="text-base font-black text-emerald-600">+{formatRupiah(totalPlus)}</p></div>}
+                                            {totalMinus < 0 && <div className="text-right"><p className="text-xs text-slate-400 font-medium">Total Nilai Minus (−)</p><p className="text-base font-black text-red-500">{formatRupiah(totalMinus)}</p></div>}
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         ) : (
                             <div className="space-y-3">
@@ -5757,7 +5779,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                 <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600 p-2"><Icon name="xmark" className="text-xl" /></button>
                             </div>
                             <nav className="space-y-2 flex-1">{visibleMenuItems.map(menu => (<button key={menu.id} onClick={(e) => handleNavClick(menu.id, e)} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold transition-all duration-300 relative overflow-hidden group ${activeTab === menu.id ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}><div className="relative w-5 flex-shrink-0"><Icon name={menu.icon} className={`text-base ${activeTab === menu.id ? 'text-white' : 'text-slate-400'}`} />{menu.badge > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center leading-none shadow-sm animate-pulse">{menu.badge > 9 ? '9+' : menu.badge}</span>}</div><span className="flex-1 text-left">{menu.label}</span>{menu.badge > 0 && activeTab !== menu.id && <span className="text-[9px] bg-red-100 text-red-600 font-black px-1.5 py-0.5 rounded-full border border-red-200">{menu.badge} baru</span>}</button>))}</nav>
-                            <div className="mt-auto pt-6 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400">Versi 43 • Metode Pembayaran</p></div>
+                            <div className="mt-auto pt-6 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400">Versi 44 • Stock Opname Update Stok</p></div>
                         </div>
                     </aside>
                     <main className="flex-1 md:ml-0 p-4 md:p-8 max-w-7xl mx-auto w-full mb-0">
