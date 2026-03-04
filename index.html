@@ -5114,7 +5114,6 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             const [showHistory, setShowHistory] = useState(false);
             const [showFinishModal, setShowFinishModal] = useState(false);
             const [historyDetail, setHistoryDetail] = useState(null);
-            const [showClearConfirm, setShowClearConfirm] = useState(false);
 
             const profileId = currentProfile?.id || 'default';
             const getCol = () => window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'stock_opname');
@@ -5223,47 +5222,32 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 setSaving(false);
             };
 
-            const clearHistory = async () => {
-                setSaving(true);
-                try {
-                    const closed = sessions.filter(s => s.status === 'closed' && s.profileId === profileId);
-                    const batch = window.writeBatch(window.db);
-                    closed.forEach(s => {
-                        batch.delete(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'stock_opname', s.id));
-                    });
-                    await batch.commit();
-                    showToast(`${closed.length} riwayat berhasil dihapus`);
-                    setShowClearConfirm(false);
-                } catch (e) { showToast('Gagal menghapus riwayat', 'error'); }
-                setSaving(false);
-            };
-
             const formatDate = (ts) => {
                 if (!ts) return '-';
                 const d = ts.toDate ? ts.toDate() : new Date(ts);
                 return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
             };
 
+            if (currentProfile?.id === 'all_stores') {
+                return (
+                    <div className="fade-in h-full flex flex-col items-center justify-center text-center p-6 relative z-10">
+                        <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 text-3xl mb-4 shadow-sm"><Icon name="clipboard-list" /></div>
+                        <h2 className="text-xl font-bold text-slate-800 mb-2">Mode Gabungan (View Only)</h2>
+                        <p className="text-slate-500 max-w-xs mx-auto mb-6 text-sm">Anda sedang melihat stok gabungan semua toko. Untuk melakukan Stock Opname, silakan pilih salah satu toko spesifik dari menu di kiri atas.</p>
+                        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-xs text-yellow-700 font-medium">
+                            <Icon name="triangle-exclamation" className="mr-1" /> Stock Opname tidak dapat dilakukan dari mode gabungan.
+                        </div>
+                    </div>
+                );
+            }
+
             if (showHistory) {
                 const closed = sessions.filter(s => s.status === 'closed' && s.profileId === profileId);
                 return (
                     <div className="fade-in space-y-6">
                         <div className="flex items-center gap-3">
-                            <button onClick={() => { setShowHistory(false); setHistoryDetail(null); setShowClearConfirm(false); }} className="p-2 bg-white rounded-xl shadow-sm border border-slate-100 hover:bg-slate-50 text-slate-600"><Icon name="arrow-left" /></button>
-                            <div className="flex-1"><h2 className="text-xl font-black text-slate-800">Riwayat Stock Opname</h2><p className="text-xs text-slate-400">{currentProfile?.name}</p></div>
-                            {!historyDetail && closed.length > 0 && (
-                                showClearConfirm ? (
-                                    <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
-                                        <p className="text-xs font-bold text-red-600">Hapus semua {closed.length} riwayat?</p>
-                                        <button onClick={clearHistory} disabled={saving} className="text-xs bg-red-500 hover:bg-red-600 text-white font-bold px-3 py-1.5 rounded-lg transition-all">{saving ? '...' : 'Ya, Hapus'}</button>
-                                        <button onClick={() => setShowClearConfirm(false)} className="text-xs bg-white border border-slate-200 text-slate-600 font-bold px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-all">Batal</button>
-                                    </div>
-                                ) : (
-                                    <button onClick={() => setShowClearConfirm(true)} className="flex items-center gap-2 px-3 py-2 bg-white border border-red-200 text-red-500 hover:bg-red-50 font-bold text-xs rounded-xl shadow-sm transition-all">
-                                        <Icon name="trash" /> Bersihkan
-                                    </button>
-                                )
-                            )}
+                            <button onClick={() => { setShowHistory(false); setHistoryDetail(null); }} className="p-2 bg-white rounded-xl shadow-sm border border-slate-100 hover:bg-slate-50 text-slate-600"><Icon name="arrow-left" /></button>
+                            <div><h2 className="text-xl font-black text-slate-800">Riwayat Stock Opname</h2><p className="text-xs text-slate-400">{currentProfile?.name}</p></div>
                         </div>
                         {historyDetail ? (
                             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
