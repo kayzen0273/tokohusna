@@ -2404,6 +2404,10 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     );
                 } catch (e) { showToast("Gagal update qty", "error"); }
             };
+            // Hooks HARUS dipanggil sebelum early return (Rules of Hooks)
+            const fuse = useMemo(() => new Fuse(items, { keys: ['name', 'rack'], threshold: 0.3 }), [items]);
+            const filteredItems = useMemo(() => { if (!search || currentProfile.id === 'all_stores') return []; return fuse.search(search).map(r => r.item).slice(0, 30); }, [items, search, fuse, currentProfile.id]);
+
             if (currentProfile.id === 'all_stores') {
                 return (
                     <div className="fade-in h-full flex flex-col items-center justify-center text-center p-6 relative z-10">
@@ -2416,9 +2420,6 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     </div>
                 );
             }
-
-            const fuse = useMemo(() => new Fuse(items, { keys: ['name', 'rack'], threshold: 0.3 }), [items]);
-            const filteredItems = useMemo(() => { if (!search) return []; return fuse.search(search).map(r => r.item).slice(0, 30); }, [items, search, fuse]);
 
             const addToCart = (item) => {
                 if (safeNumber(item.qty) <= 0) { showToast("Stok Habis di Toko Ini!", "error"); return; }
@@ -5227,6 +5228,19 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 const d = ts.toDate ? ts.toDate() : new Date(ts);
                 return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
             };
+
+            if (currentProfile?.id === 'all_stores') {
+                return (
+                    <div className="fade-in h-full flex flex-col items-center justify-center text-center p-6 relative z-10">
+                        <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 text-3xl mb-4 shadow-sm"><Icon name="clipboard-list" /></div>
+                        <h2 className="text-xl font-bold text-slate-800 mb-2">Mode Gabungan (View Only)</h2>
+                        <p className="text-slate-500 max-w-xs mx-auto mb-6 text-sm">Anda sedang melihat stok gabungan semua toko. Untuk melakukan Stock Opname, silakan pilih salah satu toko spesifik dari menu di kiri atas.</p>
+                        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-xs text-yellow-700 font-medium">
+                            <Icon name="triangle-exclamation" className="mr-1" /> Stock Opname tidak dapat dilakukan dari mode gabungan.
+                        </div>
+                    </div>
+                );
+            }
 
             if (showHistory) {
                 const closed = sessions.filter(s => s.status === 'closed' && s.profileId === profileId);
