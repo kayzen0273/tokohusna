@@ -164,6 +164,76 @@
         /* Toggle Switch */
         .toggle-checkbox:checked { right: 0; border-color: #0ea5e9; }
         .toggle-checkbox:checked + .toggle-label { background-color: #0ea5e9; }
+
+        /* AUTH SCREEN STYLES */
+        .auth-bg {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 40%, #0c4a6e 70%, #075985 100%);
+            position: relative;
+            overflow: hidden;
+        }
+        .auth-bg::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%230ea5e9' fill-opacity='0.06'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        }
+        .auth-card {
+            background: rgba(255,255,255,0.97);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            box-shadow: 0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1);
+        }
+        .auth-input {
+            width: 100%;
+            padding: 12px 16px 12px 44px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            background: #f8fafc;
+            color: #1e293b;
+            outline: none;
+            font-family: 'Inter', sans-serif;
+        }
+        .auth-input:focus { border-color: #0ea5e9; background: #fff; box-shadow: 0 0 0 4px rgba(14,165,233,0.1); }
+        .auth-input::placeholder { color: #94a3b8; font-weight: 400; }
+        .auth-btn-primary {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #0ea5e9, #0284c7);
+            color: white;
+            font-weight: 700;
+            font-size: 15px;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+            letter-spacing: 0.3px;
+        }
+        .auth-btn-primary:hover { background: linear-gradient(135deg, #0284c7, #0369a1); transform: translateY(-1px); box-shadow: 0 8px 24px rgba(14,165,233,0.35); }
+        .auth-btn-primary:active { transform: translateY(0); }
+        .auth-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; }
+        .auth-orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            pointer-events: none;
+        }
+        @keyframes authFadeIn { from { opacity: 0; transform: translateY(24px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        .auth-fade-in { animation: authFadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes pulse-ring { 0% { transform: scale(0.95); opacity: 0.7; } 70% { transform: scale(1.15); opacity: 0; } 100% { transform: scale(1.15); opacity: 0; } }
+        .pulse-ring::before { content: ''; position: absolute; inset: -6px; border-radius: 50%; border: 3px solid rgba(14,165,233,0.4); animation: pulse-ring 2s ease-out infinite; }
+        .auth-tab { padding: 8px 20px; border-radius: 10px; font-weight: 700; font-size: 13px; cursor: pointer; transition: all 0.2s; border: none; background: transparent; }
+        .auth-tab.active { background: #0ea5e9; color: white; box-shadow: 0 4px 12px rgba(14,165,233,0.3); }
+        .auth-tab:not(.active) { color: #64748b; }
+        .auth-tab:not(.active):hover { background: #f1f5f9; color: #334155; }
+        .otp-input { width: 48px; height: 56px; text-align: center; font-size: 22px; font-weight: 800; border: 2px solid #e2e8f0; border-radius: 12px; background: #f8fafc; color: #1e293b; transition: all 0.2s; outline: none; font-family: 'Inter', sans-serif; }
+        .otp-input:focus { border-color: #0ea5e9; box-shadow: 0 0 0 4px rgba(14,165,233,0.1); background: white; }
+        .auth-floating-star { position: absolute; pointer-events: none; animation: authStar 4s ease-in-out infinite; }
+        @keyframes authStar { 0%,100% { opacity:0.3; transform: scale(0.8) rotate(0deg); } 50% { opacity:0.8; transform: scale(1.2) rotate(15deg); } }
     </style>
 </head>
 <body class="islamic-pattern relative">
@@ -186,7 +256,14 @@
             ],
             enableCashier: true,
             enableHistory: true,
-            enablePurchases: true
+            enablePurchases: true,
+            enableDashboard: true,
+            enableStock: true,
+            enableStockOpname: true,
+            enableCashbook: true,
+            enableCatatan: true,
+            enableInputManual: true,
+            enableImport: true,
         };
 
         // --- BLUETOOTH PRINTER HELPERS ---
@@ -246,6 +323,17 @@
         };
 
         const Icon = React.memo(({ name, type = "solid", className = "" }) => <i className={`fa-${type} fa-${name} ${className}`}></i>);
+
+        const ReadOnlyBanner = () => (
+            <div className="flex items-center gap-2.5 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-2xl mb-3 fade-in flex-shrink-0">
+                <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0"><Icon name="eye" className="text-amber-600 text-xs" /></div>
+                <div className="flex-1 min-w-0">
+                    <p className="text-xs font-black text-amber-800 leading-tight">Mode Lihat Saja</p>
+                    <p className="text-[10px] text-amber-600 leading-tight">Kamu tidak punya akses edit. Hubungi owner untuk mengaktifkan akses.</p>
+                </div>
+                <Icon name="lock" className="text-amber-400 text-sm flex-shrink-0" />
+            </div>
+        );
 
         // --- DEKORASI RAMADHAN ---
         const RamadhanDecor = () => (
@@ -434,7 +522,543 @@
         };
 
         // --- SETTINGS COMPONENT ---
-        const SettingsView = ({ settings, onSave, loading }) => {
+        // ==================== AKSES MENU TAB COMPONENT ====================
+        const AksesMenuTab = ({ users, loadingUsers, localSettings, handleChange, onSaveGlobal, savingSettings, menuAccessList, showToast }) => {
+            const [mode, setMode] = useState('global'); // 'global' | 'per_karyawan'
+            const [selectedUser, setSelectedUser] = useState(null);
+            const [userAccess, setUserAccess] = useState({});
+            const [loadingAccess, setLoadingAccess] = useState(false);
+            const [savingAccess, setSavingAccess] = useState(false);
+            const [searchKaryawan, setSearchKaryawan] = useState('');
+
+            const activeUsers = users.filter(u => u.isActive !== false);
+            const filteredUsers = activeUsers.filter(u =>
+                searchKaryawan === '' ||
+                u.namaLengkap?.toLowerCase().includes(searchKaryawan.toLowerCase()) ||
+                u.username?.toLowerCase().includes(searchKaryawan.toLowerCase())
+            );
+
+            // Load selected user's menuAccess from Firestore
+            const handleSelectUser = async (usr) => {
+                setSelectedUser(usr);
+                setLoadingAccess(true);
+                try {
+                    const ref = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'users', usr.id);
+                    const snap = await window.getDoc(ref);
+                    const data = snap.exists() ? snap.data() : {};
+                    // If user has custom menuAccess, use it; otherwise pre-fill with global defaults
+                    const saved = data.menuAccess || null;
+                    if (saved) {
+                        setUserAccess(saved);
+                    } else {
+                        // Pre-fill from global settings
+                        const defaults = {};
+                        menuAccessList.forEach(item => { defaults[item.key] = localSettings[item.key] !== false; });
+                        setUserAccess(defaults);
+                    }
+                } catch (e) {
+                    const defaults = {};
+                    menuAccessList.forEach(item => { defaults[item.key] = localSettings[item.key] !== false; });
+                    setUserAccess(defaults);
+                }
+                setLoadingAccess(false);
+            };
+
+            const handleSaveUserAccess = async () => {
+                if (!selectedUser) return;
+                setSavingAccess(true);
+                try {
+                    const ref = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'users', selectedUser.id);
+                    await window.updateDoc(ref, { menuAccess: userAccess });
+                    showToast(`Akses menu "${selectedUser.namaLengkap}" berhasil disimpan`);
+                } catch (e) { showToast('Gagal menyimpan akses menu'); }
+                setSavingAccess(false);
+            };
+
+            const handleResetUserAccess = async () => {
+                if (!selectedUser) return;
+                setSavingAccess(true);
+                try {
+                    const ref = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'users', selectedUser.id);
+                    await window.updateDoc(ref, { menuAccess: null });
+                    showToast(`Akses "${selectedUser.namaLengkap}" direset ke pengaturan global`);
+                    // Refill from global
+                    const defaults = {};
+                    menuAccessList.forEach(item => { defaults[item.key] = localSettings[item.key] !== false; });
+                    setUserAccess(defaults);
+                } catch (e) { showToast('Gagal mereset akses'); }
+                setSavingAccess(false);
+            };
+
+            const MenuToggleRow = ({ item, checked, onChange }) => (
+                <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200 hover:border-amber-200 transition-all">
+                    <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center flex-shrink-0">
+                            <Icon name={item.icon} className="text-slate-500 text-xs" />
+                        </div>
+                        <div>
+                            <p className="font-bold text-slate-800 text-xs">{item.label}</p>
+                            <p className="text-[10px] text-slate-400 leading-tight">{item.desc}</p>
+                        </div>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer flex-shrink-0 ml-2">
+                        <input type="checkbox" className="sr-only peer" checked={checked} onChange={e => onChange(e.target.checked)} />
+                        <div className="w-10 h-[22px] bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[18px] after:w-[18px] after:transition-all peer-checked:bg-amber-500"></div>
+                    </label>
+                </div>
+            );
+
+            return (
+                <div className="p-4 space-y-3">
+                    {/* Mode switcher */}
+                    <div className="flex gap-1 p-1 bg-slate-100 rounded-xl">
+                        <button onClick={() => { setMode('global'); setSelectedUser(null); }}
+                            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${mode === 'global' ? 'bg-white text-amber-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                            <Icon name="globe" /> Global (Semua)
+                        </button>
+                        <button onClick={() => setMode('per_karyawan')}
+                            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${mode === 'per_karyawan' ? 'bg-white text-amber-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                            <Icon name="user-gear" /> Per Karyawan
+                        </button>
+                    </div>
+
+                    {/* ── GLOBAL MODE ── */}
+                    {mode === 'global' && (
+                        <div className="space-y-2">
+                            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                                <p className="text-xs text-amber-800 font-semibold"><Icon name="circle-info" className="mr-1" />Berlaku untuk semua karyawan yang tidak punya pengaturan khusus.</p>
+                            </div>
+                            {menuAccessList.map(item => (
+                                <MenuToggleRow key={item.key} item={item}
+                                    checked={localSettings[item.key] !== false}
+                                    onChange={val => handleChange(item.key, val)}
+                                />
+                            ))}
+                            <button onClick={onSaveGlobal} disabled={savingSettings} className="w-full mt-2 py-3.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
+                                {savingSettings ? <><span className="typing-dot bg-white"></span><span className="typing-dot bg-white"></span><span className="typing-dot bg-white"></span></> : <><Icon name="floppy-disk" /> Simpan Pengaturan Global</>}
+                            </button>
+                        </div>
+                    )}
+
+                    {/* ── PER KARYAWAN MODE ── */}
+                    {mode === 'per_karyawan' && !selectedUser && (
+                        <div className="space-y-2">
+                            <div className="p-3 bg-sky-50 border border-sky-200 rounded-xl">
+                                <p className="text-xs text-sky-800 font-semibold"><Icon name="circle-info" className="mr-1" />Pilih karyawan untuk mengatur akses menu khusus. Jika belum diatur, karyawan mengikuti pengaturan Global.</p>
+                            </div>
+                            {/* Search */}
+                            <div className="relative">
+                                <Icon name="magnifying-glass" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
+                                <input className="w-full pl-8 pr-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-amber-400 bg-slate-50" placeholder="Cari karyawan..." value={searchKaryawan} onChange={e => setSearchKaryawan(e.target.value)} />
+                            </div>
+                            {loadingUsers && <div className="text-center py-6 text-slate-400 text-sm">Memuat karyawan...</div>}
+                            {!loadingUsers && filteredUsers.length === 0 && (
+                                <div className="text-center py-8">
+                                    <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-2 text-slate-400 text-xl"><Icon name="users" /></div>
+                                    <p className="text-slate-500 text-sm font-semibold">{searchKaryawan ? 'Tidak ditemukan' : 'Belum ada karyawan aktif'}</p>
+                                </div>
+                            )}
+                            {filteredUsers.map(usr => (
+                                <button key={usr.id} onClick={() => handleSelectUser(usr)}
+                                    className="w-full flex items-center gap-3 p-3.5 bg-white rounded-2xl border border-slate-200 hover:border-amber-300 hover:bg-amber-50 transition-all active:scale-[0.99] text-left shadow-sm group">
+                                    <div className="w-10 h-10 rounded-xl bg-sky-500 flex items-center justify-center text-white font-black text-sm flex-shrink-0">
+                                        {(usr.namaLengkap || 'U').charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="font-bold text-slate-800 text-sm truncate">{usr.namaLengkap}</p>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            <span className="text-[10px] text-slate-400">@{usr.username}</span>
+                                            {usr.menuAccess
+                                                ? <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[9px] font-black rounded-full border border-amber-200">Akses Khusus</span>
+                                                : <span className="px-1.5 py-0.5 bg-slate-100 text-slate-500 text-[9px] font-bold rounded-full">Ikut Global</span>
+                                            }
+                                        </div>
+                                    </div>
+                                    <Icon name="chevron-right" className="text-slate-300 group-hover:text-amber-400 transition-colors flex-shrink-0" />
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* ── PER KARYAWAN: DETAIL USER ── */}
+                    {mode === 'per_karyawan' && selectedUser && (
+                        <div className="space-y-3">
+                            {/* Back + user header */}
+                            <div className="flex items-center gap-3 pb-1">
+                                <button onClick={() => setSelectedUser(null)} className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 flex-shrink-0">
+                                    <Icon name="arrow-left" className="text-sm" />
+                                </button>
+                                <div className="w-10 h-10 rounded-xl bg-sky-500 flex items-center justify-center text-white font-black text-sm flex-shrink-0">
+                                    {(selectedUser.namaLengkap || 'U').charAt(0).toUpperCase()}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-black text-slate-800 text-sm truncate">{selectedUser.namaLengkap}</p>
+                                    <p className="text-[10px] text-slate-400">@{selectedUser.username}</p>
+                                </div>
+                            </div>
+
+                            {loadingAccess ? (
+                                <div className="text-center py-8 text-slate-400 text-sm flex flex-col items-center gap-2">
+                                    <div className="flex gap-1"><span className="typing-dot"></span><span className="typing-dot"></span><span className="typing-dot"></span></div>
+                                    Memuat pengaturan...
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Shortcut: Aktifkan/matikan semua */}
+                                    <div className="flex gap-2">
+                                        <button onClick={() => { const all = {}; menuAccessList.forEach(i => { all[i.key] = true; }); setUserAccess(all); }}
+                                            className="flex-1 py-1.5 rounded-lg bg-green-50 border border-green-200 text-green-700 text-[10px] font-bold hover:bg-green-100 transition-all active:scale-95">
+                                            <Icon name="check-double" className="mr-1" /> Aktifkan Semua
+                                        </button>
+                                        <button onClick={() => { const none = {}; menuAccessList.forEach(i => { none[i.key] = false; }); setUserAccess(none); }}
+                                            className="flex-1 py-1.5 rounded-lg bg-red-50 border border-red-200 text-red-600 text-[10px] font-bold hover:bg-red-100 transition-all active:scale-95">
+                                            <Icon name="ban" className="mr-1" /> Matikan Semua
+                                        </button>
+                                    </div>
+
+                                    {/* Menu toggles */}
+                                    <div className="space-y-1.5">
+                                        {menuAccessList.map(item => (
+                                            <MenuToggleRow key={item.key} item={item}
+                                                checked={userAccess[item.key] !== false}
+                                                onChange={val => setUserAccess(prev => ({ ...prev, [item.key]: val }))}
+                                            />
+                                        ))}
+                                    </div>
+
+                                    {/* Save + Reset */}
+                                    <div className="flex gap-2 pt-1">
+                                        <button onClick={handleResetUserAccess} disabled={savingAccess}
+                                            className="px-4 py-3 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1.5">
+                                            <Icon name="rotate-left" /> Reset ke Global
+                                        </button>
+                                        <button onClick={handleSaveUserAccess} disabled={savingAccess}
+                                            className="flex-1 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-md transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5">
+                                            {savingAccess
+                                                ? <><span className="typing-dot bg-white"></span><span className="typing-dot bg-white"></span><span className="typing-dot bg-white"></span></>
+                                                : <><Icon name="floppy-disk" /> Simpan Akses Khusus</>
+                                            }
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+        // ==================== END AKSES MENU TAB ====================
+
+        // ==================== OWNER PANEL ====================
+        const OwnerPanel = ({ onBack, localSettings, handleChange, onSave, savingSettings, ownerSettings, onSaveSettings, ownerAuthSession }) => {
+            const [users, setUsers] = useState([]);
+            const [loadingUsers, setLoadingUsers] = useState(true);
+            const [activeTab, setActiveTab] = useState('karyawan'); // 'karyawan' | 'akses_menu' | 'kode'
+            const [confirmModal, setConfirmModal] = useState({ show: false, type: '', user: null });
+            const [actionLoading, setActionLoading] = useState(false);
+            const [toast, setToast] = useState('');
+            const [searchUser, setSearchUser] = useState('');
+
+            // Kode settings
+            const [kodeUndangan, setKodeUndangan] = useState('');
+            const [kodeOTP, setKodeOTP] = useState('');
+            const [savingKode, setSavingKode] = useState(false);
+            const [kodeLoaded, setKodeLoaded] = useState(false);
+
+            const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
+
+            useEffect(() => {
+                const usersRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'users');
+                const unsub = window.onSnapshot(usersRef, (snap) => {
+                    const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    data.sort((a, b) => a.namaLengkap?.localeCompare(b.namaLengkap));
+                    setUsers(data);
+                    setLoadingUsers(false);
+                });
+                return () => unsub();
+            }, []);
+
+            // Load kode settings from Firestore
+            useEffect(() => {
+                const loadKode = async () => {
+                    try {
+                        const ref = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'system_codes', 'codes');
+                        const snap = await window.getDoc(ref);
+                        if (snap.exists()) {
+                            const data = snap.data();
+                            setKodeUndangan(data.invitationCode || INVITATION_CODE);
+                            setKodeOTP(data.otpCode || '654321');
+                        } else {
+                            setKodeUndangan(INVITATION_CODE);
+                            setKodeOTP('654321');
+                        }
+                    } catch (e) { setKodeUndangan(INVITATION_CODE); setKodeOTP('654321'); }
+                    setKodeLoaded(true);
+                };
+                loadKode();
+            }, []);
+
+            const handleSaveKode = async () => {
+                if (!kodeUndangan.trim()) { showToast('Kode undangan tidak boleh kosong'); return; }
+                if (!kodeOTP.trim() || kodeOTP.length !== 6 || !/^\d+$/.test(kodeOTP)) { showToast('Kode OTP harus 6 digit angka'); return; }
+                setSavingKode(true);
+                try {
+                    const ref = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'system_codes', 'codes');
+                    await window.setDoc(ref, { invitationCode: kodeUndangan.trim(), otpCode: kodeOTP.trim(), updatedAt: window.serverTimestamp() });
+                    showToast('Kode berhasil diperbarui!');
+                } catch (e) { showToast('Gagal menyimpan kode'); }
+                setSavingKode(false);
+            };
+
+            const handleToggleActive = async (usr) => {
+                setActionLoading(true);
+                try {
+                    const ref = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'users', usr.id);
+                    await window.updateDoc(ref, { isActive: usr.isActive === false ? true : false });
+                    showToast(usr.isActive === false ? `Akun "${usr.namaLengkap}" diaktifkan kembali` : `Akun "${usr.namaLengkap}" dinonaktifkan`);
+                } catch (e) { showToast('Gagal mengubah status'); }
+                setActionLoading(false);
+                setConfirmModal({ show: false, type: '', user: null });
+            };
+
+            const handleDeleteUser = async (usr) => {
+                setActionLoading(true);
+                try {
+                    await window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'users', usr.id));
+                    // Also clean up OTP if any
+                    try { await window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'otp_reset', usr.id)); } catch {}
+                    showToast(`Akun "${usr.namaLengkap}" dihapus permanen`);
+                } catch (e) { showToast('Gagal menghapus akun'); }
+                setActionLoading(false);
+                setConfirmModal({ show: false, type: '', user: null });
+            };
+
+            const menuAccessList = [
+                { key: 'enableCashier', label: 'Menu Kasir', icon: 'cash-register', desc: 'Transaksi penjualan' },
+                { key: 'enableHistory', label: 'Menu Riwayat', icon: 'clock-rotate-left', desc: 'Riwayat penjualan' },
+                { key: 'enablePurchases', label: 'Faktur Pembelian', icon: 'file-invoice-dollar', desc: 'Pembelian & faktur' },
+                { key: 'enableDashboard', label: 'Dashboard', icon: 'chart-pie', desc: 'Laporan & statistik' },
+                { key: 'enableStock', label: 'Stok Barang', icon: 'boxes-stacked', desc: 'Manajemen stok' },
+                { key: 'enableStockOpname', label: 'Stock Opname', icon: 'clipboard-check', desc: 'Penghitungan fisik stok' },
+                { key: 'enableCashbook', label: 'Buku Kas', icon: 'book', desc: 'Catatan keuangan' },
+                { key: 'enableCatatan', label: 'Catatan', icon: 'thumbtack', desc: 'Papan catatan' },
+                { key: 'enableInputManual', label: 'Input Manual', icon: 'pen-to-square', desc: 'Tambah/edit barang' },
+                { key: 'enableImport', label: 'Import Masal', icon: 'file-import', desc: 'Import data Excel' },
+            ];
+
+            const filteredUsers = users.filter(u =>
+                !isOwnerEmail(u.email) &&
+                (searchUser === '' || u.namaLengkap?.toLowerCase().includes(searchUser.toLowerCase()) || u.username?.toLowerCase().includes(searchUser.toLowerCase()) || u.email?.toLowerCase().includes(searchUser.toLowerCase()))
+            );
+
+            return (
+                <div className="bg-white/90 backdrop-blur-sm rounded-[30px] shadow-soft border border-amber-200 overflow-hidden fade-in">
+                    {/* Header */}
+                    <div className="p-5 border-b border-amber-100 flex items-center gap-3 bg-gradient-to-r from-amber-50 to-orange-50">
+                        <button onClick={onBack} className="w-9 h-9 rounded-xl bg-white border border-amber-200 flex items-center justify-center text-amber-600 hover:text-amber-800 shadow-sm active:scale-95 transition-all flex-shrink-0"><Icon name="arrow-left" /></button>
+                        <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center flex-shrink-0"><Icon name="crown" /></div>
+                        <div><p className="font-bold text-sm text-amber-900">Panel Owner</p><p className="text-[10px] text-amber-600">Kelola karyawan & akses sistem</p></div>
+                    </div>
+
+                    {/* Toast */}
+                    {toast && <div className="mx-5 mt-4 px-4 py-2.5 bg-green-50 border border-green-200 rounded-xl text-green-700 text-sm font-semibold fade-in flex items-center gap-2"><Icon name="circle-check" />{toast}</div>}
+
+                    {/* Tabs */}
+                    <div className="flex gap-1 p-4 pb-0 flex-wrap">
+                        <button onClick={() => setActiveTab('karyawan')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab==='karyawan' ? 'bg-amber-500 text-white shadow-md' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}><Icon name="users" className="mr-1.5" />Karyawan ({filteredUsers.length})</button>
+                        <button onClick={() => setActiveTab('akses_menu')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab==='akses_menu' ? 'bg-amber-500 text-white shadow-md' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}><Icon name="sliders" className="mr-1.5" />Akses Menu</button>
+                        <button onClick={() => setActiveTab('kode')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab==='kode' ? 'bg-amber-500 text-white shadow-md' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}><Icon name="key" className="mr-1.5" />Ubah Kode</button>
+                        <button onClick={() => setActiveTab('pengaturan')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab==='pengaturan' ? 'bg-amber-500 text-white shadow-md' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}><Icon name="gears" className="mr-1.5" />Pengaturan</button>
+                    </div>
+
+                    {/* ---- TAB: KARYAWAN ---- */}
+                    {activeTab === 'karyawan' && (
+                        <div className="p-4 space-y-3">
+                            {/* Search */}
+                            <div className="relative">
+                                <Icon name="magnifying-glass" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
+                                <input className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-amber-400 bg-slate-50" placeholder="Cari nama, username, email..." value={searchUser} onChange={e => setSearchUser(e.target.value)} />
+                            </div>
+
+                            {loadingUsers && <div className="text-center py-8 text-slate-400 text-sm">Memuat data karyawan...</div>}
+
+                            {!loadingUsers && filteredUsers.length === 0 && (
+                                <div className="text-center py-10">
+                                    <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-2 text-slate-400 text-2xl"><Icon name="users" /></div>
+                                    <p className="text-slate-500 text-sm font-semibold">Belum ada karyawan terdaftar</p>
+                                    <p className="text-slate-400 text-xs mt-1">Karyawan yang mendaftar dengan kode undangan akan muncul di sini</p>
+                                </div>
+                            )}
+
+                            {filteredUsers.map(usr => (
+                                <div key={usr.id} className={`p-4 rounded-2xl border transition-all ${usr.isActive === false ? 'bg-red-50 border-red-200 opacity-80' : 'bg-white border-slate-200 shadow-sm'}`}>
+                                    <div className="flex items-start gap-3">
+                                        {/* Avatar */}
+                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-black text-sm flex-shrink-0 ${usr.isActive === false ? 'bg-slate-400' : 'bg-sky-500'}`}>
+                                            {(usr.namaLengkap || 'U').charAt(0).toUpperCase()}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <p className="font-bold text-slate-800 text-sm truncate">{usr.namaLengkap}</p>
+                                                {usr.isActive === false && <span className="px-2 py-0.5 bg-red-100 text-red-600 text-[10px] font-black rounded-full border border-red-200">NONAKTIF</span>}
+                                            </div>
+                                            <p className="text-xs text-slate-500 mt-0.5">@{usr.username}</p>
+                                            <div className="mt-1.5 space-y-0.5">
+                                                <p className="text-[11px] text-slate-500 flex items-center gap-1.5"><Icon name="envelope" className="text-slate-400 w-3" />{usr.email}</p>
+                                                {usr.whatsapp && <p className="text-[11px] text-slate-500 flex items-center gap-1.5"><Icon name="whatsapp" type="brands" className="text-green-500 w-3" />{usr.whatsapp}</p>}
+                                                {usr.createdAt && <p className="text-[10px] text-slate-400 flex items-center gap-1.5"><Icon name="calendar" className="text-slate-300 w-3" />Daftar: {usr.createdAt?.toDate ? usr.createdAt.toDate().toLocaleDateString('id-ID') : 'Baru'}</p>}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Action buttons */}
+                                    <div className="flex gap-2 mt-3 pt-3 border-t border-slate-100">
+                                        <button
+                                            onClick={() => setConfirmModal({ show: true, type: usr.isActive === false ? 'activate' : 'deactivate', user: usr })}
+                                            disabled={actionLoading}
+                                            className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 ${usr.isActive === false ? 'bg-green-100 text-green-700 hover:bg-green-200 border border-green-200' : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200 border border-yellow-200'}`}
+                                        >
+                                            <Icon name={usr.isActive === false ? 'circle-check' : 'circle-pause'} />
+                                            {usr.isActive === false ? 'Aktifkan' : 'Nonaktifkan'}
+                                        </button>
+                                        <button
+                                            onClick={() => setConfirmModal({ show: true, type: 'delete', user: usr })}
+                                            disabled={actionLoading}
+                                            className="flex-1 py-2 rounded-xl text-xs font-bold bg-red-100 text-red-600 hover:bg-red-200 border border-red-200 flex items-center justify-center gap-1.5 transition-all active:scale-95"
+                                        >
+                                            <Icon name="trash" /> Hapus Permanen
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* ---- TAB: AKSES MENU ---- */}
+                    {activeTab === 'akses_menu' && (
+                        <AksesMenuTab
+                            users={users.filter(u => !isOwnerEmail(u.email))}
+                            loadingUsers={loadingUsers}
+                            localSettings={localSettings}
+                            handleChange={handleChange}
+                            onSaveGlobal={onSave}
+                            savingSettings={savingSettings}
+                            menuAccessList={menuAccessList}
+                            showToast={showToast}
+                        />
+                    )}
+
+                    {/* ---- TAB: UBAH KODE ---- */}
+                    {activeTab === 'kode' && (
+                        <div className="p-4 space-y-4">
+                            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                                <p className="text-xs text-amber-800 font-semibold"><Icon name="circle-info" className="mr-1" />Kode yang diubah di sini akan langsung berlaku untuk pendaftar dan reset password baru.</p>
+                            </div>
+
+                            {/* Kode Undangan */}
+                            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                                <div className="px-4 pt-4 pb-3 border-b border-slate-100 flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-lg bg-sky-100 flex items-center justify-center"><Icon name="ticket" className="text-sky-600 text-sm" /></div>
+                                    <div>
+                                        <p className="font-bold text-slate-800 text-sm">Kode Undangan</p>
+                                        <p className="text-[10px] text-slate-400">Diperlukan saat mendaftar akun baru</p>
+                                    </div>
+                                </div>
+                                <div className="p-4">
+                                    <input
+                                        type="text"
+                                        value={kodeUndangan}
+                                        onChange={e => setKodeUndangan(e.target.value)}
+                                        maxLength={20}
+                                        placeholder="Kode undangan baru..."
+                                        className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-400 bg-slate-50 tracking-widest"
+                                    />
+                                    <p className="text-[10px] text-slate-400 mt-1.5">Kode aktif saat ini akan diganti dengan kode baru ini.</p>
+                                </div>
+                            </div>
+
+                            {/* Kode OTP */}
+                            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                                <div className="px-4 pt-4 pb-3 border-b border-slate-100 flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center"><Icon name="shield-halved" className="text-purple-600 text-sm" /></div>
+                                    <div>
+                                        <p className="font-bold text-slate-800 text-sm">Kode OTP Reset Password</p>
+                                        <p className="text-[10px] text-slate-400">Kode 6 digit untuk verifikasi lupa password</p>
+                                    </div>
+                                </div>
+                                <div className="p-4">
+                                    <input
+                                        type="text"
+                                        value={kodeOTP}
+                                        onChange={e => { if (/^\d{0,6}$/.test(e.target.value)) setKodeOTP(e.target.value); }}
+                                        maxLength={6}
+                                        placeholder="6 digit angka..."
+                                        className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-lg font-black text-slate-800 focus:outline-none focus:border-amber-400 bg-slate-50 tracking-[0.5em] text-center"
+                                    />
+                                    {kodeOTP.length > 0 && kodeOTP.length < 6 && (
+                                        <p className="text-[10px] text-red-500 mt-1.5 font-semibold">Kode OTP harus tepat 6 digit</p>
+                                    )}
+                                    {kodeOTP.length === 6 && (
+                                        <p className="text-[10px] text-green-600 mt-1.5 font-semibold flex items-center gap-1"><Icon name="circle-check" /> Kode valid</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={handleSaveKode}
+                                disabled={savingKode || !kodeLoaded}
+                                className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                                {savingKode ? <><span className="typing-dot bg-white"></span><span className="typing-dot bg-white"></span><span className="typing-dot bg-white"></span></> : <><Icon name="floppy-disk" /> Simpan Kode</>}
+                            </button>
+                        </div>
+                    )}
+
+                    {/* ---- TAB: PENGATURAN ---- */}
+                    {activeTab === 'pengaturan' && (
+                        <SettingsView settings={ownerSettings} onSave={onSaveSettings} loading={savingSettings} authSession={ownerAuthSession} inOwnerPanel={true} />
+                    )}
+
+                    {/* Confirm Modal */}
+                    {confirmModal.show && (
+                        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm fade-in" onClick={() => setConfirmModal({ show: false, type: '', user: null })}>
+                            <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm pop-in" onClick={e => e.stopPropagation()}>
+                                <div className="text-center mb-5">
+                                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3 ${confirmModal.type === 'delete' ? 'bg-red-100' : confirmModal.type === 'deactivate' ? 'bg-yellow-100' : 'bg-green-100'}`}>
+                                        <Icon name={confirmModal.type === 'delete' ? 'trash' : confirmModal.type === 'deactivate' ? 'circle-pause' : 'circle-check'} className={`text-xl ${confirmModal.type === 'delete' ? 'text-red-500' : confirmModal.type === 'deactivate' ? 'text-yellow-600' : 'text-green-500'}`} />
+                                    </div>
+                                    <h3 className="font-black text-slate-800 text-lg">
+                                        {confirmModal.type === 'delete' ? 'Hapus Akun Permanen?' : confirmModal.type === 'deactivate' ? 'Nonaktifkan Akun?' : 'Aktifkan Akun?'}
+                                    </h3>
+                                    <p className="text-slate-500 text-sm mt-2 leading-relaxed">
+                                        {confirmModal.type === 'delete'
+                                            ? <><strong>{confirmModal.user?.namaLengkap}</strong> akan dihapus <span className="text-red-600 font-bold">permanen</span> dan tidak bisa login lagi.</>
+                                            : confirmModal.type === 'deactivate'
+                                            ? <><strong>{confirmModal.user?.namaLengkap}</strong> tidak bisa login sampai diaktifkan kembali.</>
+                                            : <>Akun <strong>{confirmModal.user?.namaLengkap}</strong> akan aktif kembali dan bisa login.</>
+                                        }
+                                    </p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <button onClick={() => setConfirmModal({ show: false, type: '', user: null })} className="flex-1 py-3 rounded-xl bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200">Batal</button>
+                                    <button
+                                        onClick={() => confirmModal.type === 'delete' ? handleDeleteUser(confirmModal.user) : handleToggleActive(confirmModal.user)}
+                                        disabled={actionLoading}
+                                        className={`flex-1 py-3 rounded-xl text-white font-bold text-sm shadow-md disabled:opacity-50 ${confirmModal.type === 'delete' ? 'bg-red-500 hover:bg-red-600' : confirmModal.type === 'deactivate' ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-green-500 hover:bg-green-600'}`}
+                                    >
+                                        {actionLoading ? '...' : confirmModal.type === 'delete' ? 'Ya, Hapus' : confirmModal.type === 'deactivate' ? 'Nonaktifkan' : 'Aktifkan'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+        // ==================== END OWNER PANEL ====================
+
+        const SettingsView = ({ settings, onSave, loading, authSession, inOwnerPanel }) => {
+            const isOwner = isOwnerEmail(authSession?.email);
             const [localSettings, setLocalSettings] = useState(settings);
             const [profiles, setProfiles] = useState(() => settings.storeProfiles || [{ id: 'default', name: settings.storeName || APP_NAME, address: settings.storeAddress || '', footer: settings.receiptFooter || "Terima Kasih", headers: [] }]);
             
@@ -539,13 +1163,13 @@
             const [activeMenu, setActiveMenu] = useState(null);
 
             const settingsMenus = [
-                { id: 'menu_visibility', label: 'Tampilan Menu', desc: 'Aktifkan/nonaktifkan menu aplikasi', icon: 'eye', color: 'sky' },
                 { id: 'toko', label: 'Profil & Cabang Toko', desc: 'Kelola nama, alamat, dan cabang toko', icon: 'shop', color: 'sky' },
                 { id: 'stok', label: 'Pengaturan Stok', desc: 'Batas stok menipis', icon: 'boxes-stacked', color: 'slate' },
                 { id: 'struk', label: 'Format Cetak Struk', desc: 'Header, footer, dan format struk printer', icon: 'print', color: 'slate' },
                 { id: 'kasir', label: 'Identitas Kasir', desc: 'Nama kasir default perangkat ini', icon: 'user-tie', color: 'sky' },
                 { id: 'pembayaran', label: 'Metode Pembayaran', desc: 'Setting QRIS dan rekening transfer', icon: 'credit-card', color: 'teal' },
                 { id: 'whatsapp', label: 'Format WhatsApp', desc: 'Info pengiriman gambar struk via WA', icon: 'whatsapp', color: 'green' },
+                ...(isOwner && !inOwnerPanel ? [{ id: 'owner_panel', label: 'Panel Owner 👑', desc: 'Kelola karyawan, akses menu, dan akun', icon: 'crown', color: 'amber' }] : []),
             ];
 
             const colorMap = {
@@ -553,18 +1177,19 @@
                 slate: { bg: 'bg-slate-50', border: 'border-slate-200', icon: 'bg-slate-700', text: 'text-slate-800', btn: 'bg-slate-800 hover:bg-slate-900' },
                 teal: { bg: 'bg-teal-50', border: 'border-teal-200', icon: 'bg-teal-600', text: 'text-teal-800', btn: 'bg-teal-600 hover:bg-teal-700' },
                 green: { bg: 'bg-green-50', border: 'border-green-200', icon: 'bg-green-600', text: 'text-green-800', btn: 'bg-green-600 hover:bg-green-700' },
+                amber: { bg: 'bg-amber-50', border: 'border-amber-200', icon: 'bg-amber-500', text: 'text-amber-900', btn: 'bg-amber-500 hover:bg-amber-600' },
             };
 
             return (
-                <div className="fade-in max-w-2xl mx-auto w-full pt-4 md:pt-10 pb-20">
+                <div className={inOwnerPanel ? "fade-in" : "fade-in max-w-2xl mx-auto w-full pt-4 md:pt-10 pb-20"}>
                     {/* MENU LIST */}
                     {!activeMenu && (
-                        <div className="bg-white/90 backdrop-blur-sm rounded-[30px] shadow-soft border border-white overflow-hidden">
-                            <div className="p-6 pb-4 border-b border-slate-100 flex items-center gap-4">
+                        <div className={inOwnerPanel ? "divide-y divide-slate-100" : "bg-white/90 backdrop-blur-sm rounded-[30px] shadow-soft border border-white overflow-hidden"}>
+                            {!inOwnerPanel && <div className="p-6 pb-4 border-b border-slate-100 flex items-center gap-4">
                                 <div className="w-12 h-12 bg-slate-800 text-white rounded-2xl flex items-center justify-center text-xl shadow-sm"><Icon name="gears" /></div>
                                 <div><h2 className="text-xl font-bold text-slate-800">Pengaturan</h2><p className="text-xs text-slate-400">Pilih menu untuk dikonfigurasi</p></div>
-                            </div>
-                            <div className="divide-y divide-slate-100">
+                            </div>}
+                            <div className={inOwnerPanel ? "divide-y divide-slate-100" : "divide-y divide-slate-100"}>
                                 {settingsMenus.map(menu => {
                                     const c = colorMap[menu.color];
                                     return (
@@ -601,17 +1226,6 @@
                             </div>
                         );
 
-                        if (activeMenu === 'menu_visibility') return (
-                            <div className={`bg-white/90 backdrop-blur-sm rounded-[30px] shadow-soft border ${c.border} overflow-hidden`}>
-                                <SubHeader />
-                                <div className="p-5 space-y-2">
-                                    <ToggleSwitch label="Aktifkan Menu Kasir" checked={localSettings.enableCashier !== false} onChange={(val) => handleChange('enableCashier', val)} icon="cash-register" />
-                                    <ToggleSwitch label="Aktifkan Menu Riwayat" checked={localSettings.enableHistory !== false} onChange={(val) => handleChange('enableHistory', val)} icon="clock-rotate-left" />
-                                    <ToggleSwitch label="Aktifkan Menu Pembelian (Faktur)" checked={localSettings.enablePurchases !== false} onChange={(val) => handleChange('enablePurchases', val)} icon="file-invoice-dollar" />
-                                </div>
-                                <SaveBtn />
-                            </div>
-                        );
 
                         if (activeMenu === 'toko') return (
                             <div className={`bg-white/90 backdrop-blur-sm rounded-[30px] shadow-soft border ${c.border} overflow-hidden`}>
@@ -752,6 +1366,10 @@
                             </div>
                         );
 
+                        if (activeMenu === 'owner_panel') return (
+                            <OwnerPanel onBack={() => setActiveMenu(null)} localSettings={localSettings} handleChange={handleChange} onSave={handleSave} savingSettings={loading} ownerSettings={settings} onSaveSettings={onSave} ownerAuthSession={authSession} />
+                        );
+
                         return null;
                     })()}
                 </div>
@@ -759,7 +1377,7 @@
         };
 
         // --- PURCHASE VIEW ---
-        const PurchaseView = ({ user, showToast, items, currentProfile }) => {
+        const PurchaseView = ({ user, showToast, items, currentProfile, readOnly }) => {
             const [purchases, setPurchases] = useState([]);
             const [suppliers, setSuppliers] = useState([]);
             const [loading, setLoading] = useState(true);
@@ -1331,7 +1949,8 @@
             return (
                 <>
                 <div className="fade-in pb-20 md:pb-0 h-full flex flex-col relative z-10">
-                     <header className="mb-6 flex items-center justify-between"><div><h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Faktur Pembelian</h2><p className="text-slate-500 text-xs mt-1">Kelola tagihan supplier</p></div><div className="flex gap-2"><button className="hidden md:flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-xs hover:bg-slate-50 transition-all shadow-sm"><Icon name="download" /> Unduh Laporan</button><button onClick={() => setSupplierModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-xl font-bold text-xs hover:bg-teal-700 transition-all shadow-lg shadow-teal-200 active:scale-95"><Icon name="plus" /> Catat Faktur</button></div></header>
+                     {readOnly && <ReadOnlyBanner />}
+                     <header className="mb-6 flex items-center justify-between"><div><h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Faktur Pembelian</h2><p className="text-slate-500 text-xs mt-1">Kelola tagihan supplier</p></div><div className="flex gap-2"><button className="hidden md:flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-xs hover:bg-slate-50 transition-all shadow-sm"><Icon name="download" /> Unduh Laporan</button>{!readOnly && <button onClick={() => setSupplierModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-xl font-bold text-xs hover:bg-teal-700 transition-all shadow-lg shadow-teal-200 active:scale-95"><Icon name="plus" /> Catat Faktur</button>}</div></header>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                          <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden"><h4 className="font-bold text-slate-800 text-xs mb-1">Total Pembelian</h4><div className="text-xl font-black text-slate-800 mb-1">{formatRupiah(stats.totalPurchase)}</div><p className="text-[10px] text-slate-400">{stats.countTotal} faktur tercatat</p></div>
                          <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden"><div className="absolute top-0 right-0 w-16 h-16 bg-amber-50 rounded-bl-full -mr-2 -mt-2"></div><h4 className="font-bold text-slate-800 text-xs mb-1 relative z-10">Jatuh Tempo (7 Hari)</h4><div className="text-xl font-black text-amber-600 mb-1 relative z-10">{formatRupiah(stats.dueSoon)}</div><p className="text-[10px] text-slate-400 relative z-10">{stats.countDue} faktur dari supplier</p></div>
@@ -1864,7 +2483,7 @@
         };
 
         // --- CASHBOOK COMPONENT ---
-        const CashBookView = ({ user, currentProfile, showToast }) => {
+        const CashBookView = ({ user, currentProfile, showToast, readOnly }) => {
             const [viewMode, setViewMode] = useState('operational'); // 'operational' | 'revenue'
             const [entries, setEntries] = useState([]);
             const [revenueLogs, setRevenueLogs] = useState([]);
@@ -2063,6 +2682,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
 
             return (
                 <div className="max-w-4xl mx-auto space-y-4">
+                    {readOnly && <ReadOnlyBanner />}
                     <div><h1 className="text-lg font-bold text-slate-800">Buku Kas</h1><p className="text-[10px] text-slate-500 font-bold">{currentProfile.name}</p></div>
                     
                     <div className="flex bg-white p-1.5 rounded-xl shadow-sm border border-slate-100">
@@ -2088,12 +2708,12 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                         </div>
                                         <div className="text-right">
                                             <p className={`font-bold text-sm ${t.type === 'in' ? 'text-green-600' : 'text-red-600'}`}>{t.type === 'in' ? '+' : '-'} {formatRupiah(t.amount)}</p>
-                                            <button onClick={() => handleOpDelete(t.id)} className="text-slate-300 hover:text-red-500 text-[10px] p-1"><Icon name="trash" /></button>
+                                            {!readOnly && <button onClick={() => handleOpDelete(t.id)} className="text-slate-300 hover:text-red-500 text-[10px] p-1"><Icon name="trash" /></button>}
                                         </div>
                                     </div>
                                 ))}
                             </div>
-                            <button onClick={() => setShowModal(true)} className="fixed bottom-24 md:bottom-10 right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center z-30"><Icon name="plus" className="text-2xl" /></button>
+                            {!readOnly && <button onClick={() => setShowModal(true)} className="fixed bottom-24 md:bottom-10 right-6 bg-blue-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center z-30"><Icon name="plus" className="text-2xl" /></button>}
                             {showModal && (
                                 <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm fade-in">
                                     <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl">
@@ -2185,7 +2805,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
         };
 
         // --- CASHIER COMPONENT ---
-        const CashierView = ({ items, user, showToast, settings, onGenerateImage, currentProfile }) => {
+        const CashierView = ({ items, user, showToast, settings, onGenerateImage, currentProfile, readOnly }) => {
             const [isSessionActive, setIsSessionActive] = useState(false);
             const [search, setSearch] = useState('');
             const [cart, setCart] = useState([]);
@@ -3201,6 +3821,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             return (
                 <div className="fade-in h-full flex flex-col md:flex-row gap-4 pb-20 md:pb-0 relative z-10">
                     <div className="flex-1 flex flex-col h-full min-h-0">
+                        {readOnly && <ReadOnlyBanner />}
                         {/* Slim kasir indicator */}
                         <div className="flex items-center gap-2 mb-3 px-1">
                             <div className="w-6 h-6 bg-sky-500 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm">{cashierName.charAt(0).toUpperCase()}</div>
@@ -3218,8 +3839,8 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar min-h-[200px]">{cart.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60"><Icon name="basket-shopping" className="text-4xl mb-2" /><p className="text-xs font-medium">Keranjang Kosong</p></div>) : (cart.map(item => (<div key={item.id + (item.selectedUnit || '') + (item.price || '')} onClick={() => editCartItem(item)} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex gap-3 group relative cursor-pointer hover:bg-sky-50 hover:border-sky-300 transition-all"><div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity"><Icon name="pen-to-square" className="text-[10px] text-sky-500" /></div><div className="flex-1 min-w-0"><h4 className="text-xs font-bold text-slate-700 truncate">{item.name}</h4><p className="text-[10px] text-slate-500">{formatRupiah(item.originalPrice || item.price)} {item.selectedUnit ? `per ${item.selectedUnit}` : ''} x {item.cartQty}</p>{item.discount && <p className="text-[9px] text-red-500 font-bold">Diskon: {item.discount.type === '%' ? `${item.discount.value}%` : formatRupiah(item.discount.value)}</p>}</div><div className="flex flex-col items-end gap-1"><p className="text-xs font-bold text-slate-800">{formatRupiah(item.price * item.cartQty)}</p><div className="flex items-center gap-1 bg-white rounded-lg shadow-sm border border-slate-200 p-0.5" onClick={e => e.stopPropagation()}><button onClick={() => updateQty(item.id, -1, item.selectedUnit, item.price)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="minus" /></button><span className="text-xs font-bold w-4 text-center">{item.cartQty}</span><button onClick={() => updateQty(item.id, 1, item.selectedUnit, item.price)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="plus" /></button></div></div></div>)))}</div>
                         <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-3xl">
                             <div className="flex justify-between items-end mb-4"><span className="text-xs text-slate-500 font-medium">Total Tagihan</span><span className="text-xl font-black text-slate-800">{formatRupiah(grandTotal)}</span></div>
-                            <button onClick={() => { setPaymentAmount(''); setPaymentMethod(''); setCheckoutModal(true); }} disabled={cart.length === 0} className="w-full py-3.5 bg-gradient-to-r from-sky-600 to-sky-500 text-white rounded-xl font-bold shadow-lg shadow-sky-200 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-2"><Icon name="money-bill-wave" /> Bayar Sekarang</button>
-                            <button onClick={() => setCancelModal(true)} disabled={cart.length === 0} className="w-full mt-3 py-3 rounded-xl border border-red-200 text-red-500 font-bold hover:bg-red-50 transition-all text-sm disabled:opacity-50 disabled:border-slate-200 disabled:text-slate-400 active:scale-95">Batalkan Transaksi</button>
+                            <button onClick={() => { if(readOnly){showToast('Akses terbatas — hubungi owner','error');return;} setPaymentAmount(''); setPaymentMethod(''); setCheckoutModal(true); }} disabled={cart.length === 0} className="w-full py-3.5 bg-gradient-to-r from-sky-600 to-sky-500 text-white rounded-xl font-bold shadow-lg shadow-sky-200 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-2"><Icon name="money-bill-wave" /> Bayar Sekarang</button>
+                            <button onClick={() => { if(readOnly) return; setCancelModal(true); }} disabled={cart.length === 0 || readOnly} className="w-full mt-3 py-3 rounded-xl border border-red-200 text-red-500 font-bold hover:bg-red-50 transition-all text-sm disabled:opacity-50 disabled:border-slate-200 disabled:text-slate-400 active:scale-95">Batalkan Transaksi</button>
                         </div>
                     </div>
                     {checkoutModal && ( <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in"> {!paymentSuccess ? ( <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 relative"> <button onClick={() => { setCheckoutModal(false); setPaymentMethod(''); }} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><Icon name="xmark" /></button>
@@ -3476,7 +4097,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
         };
 
         // --- UPDATED: HISTORY VIEW ---
-        const HistoryView = ({ user, showToast, settings, onGenerateImage, currentProfile, items }) => {
+        const HistoryView = ({ user, showToast, settings, onGenerateImage, currentProfile, items, readOnly }) => {
             const [transactions, setTransactions] = useState([]);
             const [loading, setLoading] = useState(true);
             const [selectedTx, setSelectedTx] = useState(null);
@@ -3876,6 +4497,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
 
             return (
                 <div className="fade-in pb-20 md:pb-0 h-full flex flex-col relative z-10">
+                    {readOnly && <ReadOnlyBanner />}
                     <header className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div>
                             <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Riwayat {currentProfile.name}</h2>
@@ -4069,12 +4691,24 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             );
         };
 
-        const BulkImportView = ({ onImportComplete, user, currentProfile }) => {
+        const BulkImportView = ({ onImportComplete, user, currentProfile, readOnly }) => {
             const [textInput, setTextInput] = useState('');
             const [parsedItems, setParsedItems] = useState([]);
             const [step, setStep] = useState('input');
             const [isImporting, setIsImporting] = useState(false);
             const [progress, setProgress] = useState(0);
+
+            if (readOnly) {
+                return (
+                    <div className="fade-in max-w-xl mx-auto w-full pt-10 text-center">
+                        <div className="bg-white/90 p-8 rounded-3xl shadow-soft">
+                            <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-3 text-2xl"><Icon name="lock" className="text-amber-500" /></div>
+                            <h3 className="text-xl font-bold text-slate-800 mb-2">Akses Terbatas</h3>
+                            <p className="text-slate-500 text-sm">Kamu tidak punya akses untuk Import Masal. Hubungi owner untuk mengaktifkan akses ini.</p>
+                        </div>
+                    </div>
+                );
+            }
 
             if (currentProfile.id === 'all_stores') {
                 return <div className="p-10 text-center text-slate-500">Mode Gabungan (View Only). Silakan pilih toko spesifik untuk import data.</div>;
@@ -4268,7 +4902,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             );
         };
 
-        const ListView = ({ items, searchQuery, setSearchQuery, onEdit, onDelete, onDeleteRack, showOnlyLowStock, setShowOnlyLowStock, selectedRacks, setSelectedRacks, uniqueRacksData, onCopySuccess, loading, settings, currentProfile }) => {
+        const ListView = ({ items, searchQuery, setSearchQuery, onEdit, onDelete, onDeleteRack, showOnlyLowStock, setShowOnlyLowStock, selectedRacks, setSelectedRacks, uniqueRacksData, onCopySuccess, loading, settings, currentProfile, readOnly }) => {
             const [isRackDropdownOpen, setIsRackDropdownOpen] = useState(false);
             const [rackSearch, setRackSearch] = useState('');
             const dropdownRef = useRef(null);
@@ -4431,6 +5065,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
 
             return (
                 <div className="space-y-4 fade-in h-full flex flex-col relative z-10">
+                    {readOnly && <ReadOnlyBanner />}
                     <header className="flex flex-col gap-3">
                         <div className="flex items-start justify-between gap-3">
                             <div>
@@ -4496,15 +5131,28 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                             )}
                         </div></div></div><div className="flex items-center gap-4 md:gap-8 flex-shrink-0"><div className="text-right"><p className="text-[8px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Stok</p><div className="flex items-baseline justify-end gap-1"><span className={`text-sm font-black ${isLow ? 'text-amber-600' : 'text-slate-800'}`}>{item.qty}</span><span className="text-[9px] font-semibold text-slate-500">{item.unit || 'Pcs'}</span></div>
                             {/* Display Price */}
-                            {item.price > 0 && <div className="text-[10px] text-green-600 font-bold mt-0.5 bg-green-50 px-1.5 rounded-md inline-block">{formatRupiah(item.price)}</div>}</div></div><div className="flex gap-1.5 flex-shrink-0 pl-2 border-l border-slate-100 ml-1"><button onClick={() => onEdit(item)} className="w-7 h-7 rounded-lg text-[10px] bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-800 border border-slate-200 transition-colors flex items-center justify-center"><Icon name="pen" /></button><button onClick={() => onDelete(item)} className="w-7 h-7 rounded-lg text-[10px] bg-white text-slate-400 hover:bg-red-50 hover:text-red-500 border border-slate-200 hover:border-red-200 transition-colors flex items-center justify-center"><Icon name="trash" /></button></div></div>); })}</div><div ref={loaderRef} className="h-10 flex items-center justify-center w-full mt-4 pb-20 md:pb-0">{displayedLimit < filteredItems.length ? (<div className="flex items-center gap-2 text-slate-400 text-xs"><div className="w-4 h-4 border-2 border-slate-300 border-t-sky-500 rounded-full animate-spin"></div><span>Memuat...</span></div>) : filteredItems.length > 0 && ( <span className="text-[10px] text-slate-300">Semua data ditampilkan</span> )}</div></>)}
+                            {item.price > 0 && <div className="text-[10px] text-green-600 font-bold mt-0.5 bg-green-50 px-1.5 rounded-md inline-block">{formatRupiah(item.price)}</div>}</div></div><div className="flex gap-1.5 flex-shrink-0 pl-2 border-l border-slate-100 ml-1">{!readOnly && <button onClick={() => onEdit(item)} className="w-7 h-7 rounded-lg text-[10px] bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-800 border border-slate-200 transition-colors flex items-center justify-center"><Icon name="pen" /></button>}{!readOnly && <button onClick={() => onDelete(item)} className="w-7 h-7 rounded-lg text-[10px] bg-white text-slate-400 hover:bg-red-50 hover:text-red-500 border border-slate-200 hover:border-red-200 transition-colors flex items-center justify-center"><Icon name="trash" /></button>}</div></div>); })}</div><div ref={loaderRef} className="h-10 flex items-center justify-center w-full mt-4 pb-20 md:pb-0">{displayedLimit < filteredItems.length ? (<div className="flex items-center gap-2 text-slate-400 text-xs"><div className="w-4 h-4 border-2 border-slate-300 border-t-sky-500 rounded-full animate-spin"></div><span>Memuat...</span></div>) : filteredItems.length > 0 && ( <span className="text-[10px] text-slate-300">Semua data ditampilkan</span> )}</div></>)}
                     </div>
                 </div>
             );
         };
 
-        const FormView = ({ formData, setFormData, onSubmit, isEditing, onCancel, submitting, currentProfile }) => {
+        const FormView = ({ formData, setFormData, onSubmit, isEditing, onCancel, submitting, currentProfile, readOnly }) => {
             const unitOptions = [ "Pcs", "Box", "Botol", "Strip", "Tube", "Ampul", "Vial", "Tablet", "Kapsul", "Sachet", "Pack", "Roll", "Set", "Lembar", "Pasang", "Galon" ];
             
+            if (readOnly) {
+                return (
+                    <div className="fade-in max-w-xl mx-auto w-full pt-10 text-center">
+                        <div className="bg-white/90 p-8 rounded-3xl shadow-soft">
+                            <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-3 text-2xl"><Icon name="lock" className="text-amber-500" /></div>
+                            <h3 className="text-xl font-bold text-slate-800 mb-2">Akses Terbatas</h3>
+                            <p className="text-slate-500 text-sm mb-4">Kamu tidak punya akses untuk menambah atau mengedit barang. Hubungi owner untuk mengaktifkan akses Input Manual.</p>
+                            <button onClick={onCancel} className="px-6 py-2.5 bg-sky-500 text-white rounded-xl font-bold text-sm hover:bg-sky-600 transition-all active:scale-95">Kembali ke Stok Barang</button>
+                        </div>
+                    </div>
+                );
+            }
+
             if (currentProfile.id === 'all_stores') {
                 return (
                      <div className="fade-in max-w-xl mx-auto w-full pt-10 text-center">
@@ -4542,7 +5190,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
         };
 
         // ==================== PAPAN CATATAN ====================
-        const PapanCatatan = ({ user }) => {
+        const PapanCatatan = ({ user, readOnly }) => {
             const [items, setItems] = useState([]);
             const [loading, setLoading] = useState(true);
             const [addModal, setAddModal] = useState(false);
@@ -4857,7 +5505,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
 
             return (
                 <div className="flex flex-col" style={{ height: '100%', padding: '16px', overflow: 'hidden', boxSizing: 'border-box' }}>
-                    
+                    {readOnly && <ReadOnlyBanner />}
                     {/* Info Banner */}
                     {showInfoBanner && (
                         <div className="mb-3 rounded-2xl flex-shrink-0 overflow-hidden"
@@ -4886,14 +5534,14 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                             <p className="text-xs text-slate-400 mt-0.5">{items.filter(i=>i.type==='note').length} catatan · {items.filter(i=>i.type==='photo').length} foto</p>
                         </div>
                         <div className="flex items-center gap-2">
-                            <button onClick={() => photoInputRef.current?.click()}
+                            {!readOnly && <button onClick={() => photoInputRef.current?.click()}
                                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50 shadow-sm active:scale-95 transition-all">
                                 <Icon name="image" className="text-sm text-rose-400" /> Foto
-                            </button>
-                            <button onClick={() => setAddModal(true)}
+                            </button>}
+                            {!readOnly && <button onClick={() => setAddModal(true)}
                                 className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-white font-bold text-xs shadow-md active:scale-95 transition-all">
                                 <Icon name="plus" /> Catatan
-                            </button>
+                            </button>}
                         </div>
                     </div>
 
@@ -5239,7 +5887,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
         // ==================== END PAPAN CATATAN ====================
 
         // ==================== STOCK OPNAME VIEW ====================
-        const StockOpnameView = ({ items, user, showToast, currentProfile }) => {
+        const StockOpnameView = ({ items, user, showToast, currentProfile, readOnly }) => {
             const [physicalCounts, setPhysicalCounts] = useState({});
             const [sessions, setSessions] = useState([]);
             const [activeSession, setActiveSession] = useState(null);
@@ -5580,6 +6228,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
 
             return (
                 <div className="fade-in space-y-6">
+                    {readOnly && <ReadOnlyBanner />}
                     <div className="flex items-center justify-between flex-wrap gap-3">
                         <div>
                             <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2"><Icon name="clipboard-check" className="text-sky-500" /> Stock Opname</h2>
@@ -5593,9 +6242,9 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                             <div className="w-16 h-16 bg-sky-100 rounded-2xl flex items-center justify-center mx-auto mb-4"><Icon name="clipboard-check" className="text-sky-500 text-3xl" /></div>
                             <h3 className="text-lg font-black text-slate-700 mb-2">Belum Ada Sesi Aktif</h3>
                             <p className="text-slate-400 text-sm mb-6">Mulai sesi baru untuk menghitung stok fisik dan membandingkannya dengan data sistem.</p>
-                            <button onClick={startSession} disabled={saving} className="bg-sky-500 hover:bg-sky-600 text-white font-bold px-8 py-3 rounded-xl shadow-md active:scale-95 transition-all">
+                            {!readOnly && <button onClick={startSession} disabled={saving} className="bg-sky-500 hover:bg-sky-600 text-white font-bold px-8 py-3 rounded-xl shadow-md active:scale-95 transition-all">
                                 {saving ? 'Memulai...' : ' Mulai Sesi Opname'}
-                            </button>
+                            </button>}
                         </div>
                     )}
 
@@ -5716,6 +6365,354 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
         // ==================== END STOCK OPNAME VIEW ====================
 
 
+        // ==================== AUTH UTILITIES ====================
+        const INVITATION_CODE = "12345670";
+        const OWNER_EMAILS = ["kayzen796@gmail.com", "hayatifadhilah11199@gmail.com"];
+        const OWNER_EMAIL = OWNER_EMAILS[0]; // email utama untuk tampilan pesan
+        const isOwnerEmail = (email) => OWNER_EMAILS.includes((email || '').toLowerCase());
+
+        const hashPassword = async (password) => {
+            const msgBuffer = new TextEncoder().encode(password);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        };
+
+        const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
+
+        const getStoredSession = () => {
+            try { const s = localStorage.getItem('husna_auth_session'); return s ? JSON.parse(s) : null; } catch { return null; }
+        };
+        const saveSession = (userData) => localStorage.setItem('husna_auth_session', JSON.stringify(userData));
+        const clearSession = () => localStorage.removeItem('husna_auth_session');
+
+        // ==================== AUTH SCREEN ====================
+        const AuthScreen = ({ onAuthSuccess }) => {
+            const [view, setView] = useState('login'); // 'login' | 'register' | 'forgot' | 'otp'
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState('');
+            const [success, setSuccess] = useState('');
+            const [showPass, setShowPass] = useState(false);
+            const [otpValues, setOtpValues] = useState(['','','','','','']);
+            const [otpEmail, setOtpEmail] = useState('');
+            const [generatedOTP, setGeneratedOTP] = useState('');
+            const otpRefs = [useRef(),useRef(),useRef(),useRef(),useRef(),useRef()];
+
+            const [loginForm, setLoginForm] = useState({ emailOrUsername: '', password: '' });
+            const [regForm, setRegForm] = useState({ namaLengkap: '', username: '', email: '', whatsapp: '', kodeUndangan: '', password: '', confirmPassword: '' });
+            const [forgotEmail, setForgotEmail] = useState('');
+
+            const setErrTimeout = (msg) => { setError(msg); setTimeout(() => setError(''), 4000); };
+
+            const handleLogin = async () => {
+                if (!loginForm.emailOrUsername || !loginForm.password) { setErrTimeout('Isi semua field terlebih dahulu'); return; }
+                setLoading(true); setError('');
+                try {
+                    const hashedPass = await hashPassword(loginForm.password);
+                    // Search by email or username
+                    const usersRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'users');
+                    const qEmail = window.query(usersRef, window.where('email', '==', loginForm.emailOrUsername.toLowerCase()));
+                    const qUsername = window.query(usersRef, window.where('username', '==', loginForm.emailOrUsername.toLowerCase()));
+                    
+                    let foundUser = null;
+                    const snapEmail = await window.getDocs(qEmail);
+                    if (!snapEmail.empty) foundUser = { id: snapEmail.docs[0].id, ...snapEmail.docs[0].data() };
+                    
+                    if (!foundUser) {
+                        const snapUser = await window.getDocs(qUsername);
+                        if (!snapUser.empty) foundUser = { id: snapUser.docs[0].id, ...snapUser.docs[0].data() };
+                    }
+
+                    if (!foundUser) { setErrTimeout('Akun tidak ditemukan'); setLoading(false); return; }
+                    if (foundUser.password !== hashedPass) { setErrTimeout('Password salah'); setLoading(false); return; }
+                    if (foundUser.isActive === false && !isOwnerEmail(foundUser.email)) { setErrTimeout('Akun kamu telah dinonaktifkan. Hubungi owner.'); setLoading(false); return; }
+
+                    const sessionData = { id: foundUser.id, namaLengkap: foundUser.namaLengkap, username: foundUser.username, email: foundUser.email, whatsapp: foundUser.whatsapp, loginAt: Date.now() };
+                    saveSession(sessionData);
+                    onAuthSuccess(sessionData);
+                } catch (e) { console.error(e); setErrTimeout('Terjadi kesalahan. Coba lagi.'); }
+                setLoading(false);
+            };
+
+            const handleRegister = async () => {
+                const { namaLengkap, username, email, whatsapp, kodeUndangan, password, confirmPassword } = regForm;
+                if (!namaLengkap || !username || !email || !whatsapp || !kodeUndangan || !password || !confirmPassword) { setErrTimeout('Isi semua field terlebih dahulu'); return; }
+                if (password.length < 6) { setErrTimeout('Password minimal 6 karakter'); return; }
+                if (password !== confirmPassword) { setErrTimeout('Konfirmasi password tidak cocok'); return; }
+                if (!/^[a-zA-Z0-9_]+$/.test(username)) { setErrTimeout('Username hanya boleh huruf, angka, dan underscore'); return; }
+                
+                setLoading(true); setError('');
+                try {
+                    // Ambil kode undangan aktif dari Firestore (fallback ke konstanta)
+                    let activeInvCode = INVITATION_CODE;
+                    try {
+                        const codesRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'system_codes', 'codes');
+                        const codesSnap = await window.getDoc(codesRef);
+                        if (codesSnap.exists() && codesSnap.data().invitationCode) activeInvCode = codesSnap.data().invitationCode;
+                    } catch {}
+                    if (kodeUndangan !== activeInvCode) { setErrTimeout('Kode undangan salah. Minta ke owner.'); setLoading(false); return; }
+                    const usersRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'users');
+                    // Check duplicate email
+                    const snapEmail = await window.getDocs(window.query(usersRef, window.where('email', '==', email.toLowerCase())));
+                    if (!snapEmail.empty) { setErrTimeout('Email sudah terdaftar'); setLoading(false); return; }
+                    // Check duplicate username
+                    const snapUname = await window.getDocs(window.query(usersRef, window.where('username', '==', username.toLowerCase())));
+                    if (!snapUname.empty) { setErrTimeout('Username sudah dipakai'); setLoading(false); return; }
+
+                    const hashedPass = await hashPassword(password);
+                    const newUser = { namaLengkap, username: username.toLowerCase(), email: email.toLowerCase(), whatsapp, password: hashedPass, createdAt: window.serverTimestamp(), role: 'kasir' };
+                    const docRef = await window.addDoc(usersRef, newUser);
+
+                    const sessionData = { id: docRef.id, namaLengkap, username: username.toLowerCase(), email: email.toLowerCase(), whatsapp, loginAt: Date.now() };
+                    saveSession(sessionData);
+                    onAuthSuccess(sessionData);
+                } catch (e) { console.error(e); setErrTimeout('Gagal mendaftar. Coba lagi.'); }
+                setLoading(false);
+            };
+
+            const handleForgotPassword = async () => {
+                if (!forgotEmail) { setErrTimeout('Masukkan email kamu'); return; }
+                setLoading(true); setError('');
+                try {
+                    const usersRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'users');
+                    const snap = await window.getDocs(window.query(usersRef, window.where('email', '==', forgotEmail.toLowerCase())));
+                    if (snap.empty) { setErrTimeout('Email tidak terdaftar di sistem'); setLoading(false); return; }
+
+                    // Ambil kode OTP aktif dari Firestore (fallback ke 654321)
+                    let activeOTP = "654321";
+                    try {
+                        const codesRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'system_codes', 'codes');
+                        const codesSnap = await window.getDoc(codesRef);
+                        if (codesSnap.exists() && codesSnap.data().otpCode) activeOTP = codesSnap.data().otpCode;
+                    } catch {}
+
+                    // OTP statis yang hanya diketahui owner
+                    const otp = activeOTP;
+                    const expiry = Date.now() + 30 * 60 * 1000; // 30 menit
+                    const otpRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'otp_reset', snap.docs[0].id);
+                    await window.setDoc(otpRef, { otp, expiry, email: forgotEmail.toLowerCase() });
+                    
+                    setGeneratedOTP(otp);
+                    setOtpEmail(forgotEmail.toLowerCase());
+                    setSuccess(`Permintaan reset password berhasil! Hubungi owner di ${OWNER_EMAIL} atau WhatsApp owner untuk mendapatkan kode OTP 6 digit.`);
+                    setView('otp');
+                } catch (e) { console.error(e); setErrTimeout('Gagal mengirim OTP. Coba lagi.'); }
+                setLoading(false);
+            };
+
+            const handleOTPInput = (i, val) => {
+                if (!/^\d*$/.test(val)) return;
+                const newVals = [...otpValues];
+                newVals[i] = val.slice(-1);
+                setOtpValues(newVals);
+                if (val && i < 5) otpRefs[i+1].current?.focus();
+            };
+            const handleOTPKeyDown = (i, e) => {
+                if (e.key === 'Backspace' && !otpValues[i] && i > 0) otpRefs[i-1].current?.focus();
+            };
+
+            const [newPass, setNewPass] = useState('');
+            const [confirmNewPass, setConfirmNewPass] = useState('');
+
+            const handleVerifyOTP = async () => {
+                const enteredOTP = otpValues.join('');
+                if (enteredOTP.length < 6) { setErrTimeout('Masukkan 6 digit OTP'); return; }
+                if (!newPass || newPass.length < 6) { setErrTimeout('Password baru minimal 6 karakter'); return; }
+                if (newPass !== confirmNewPass) { setErrTimeout('Konfirmasi password tidak cocok'); return; }
+                
+                setLoading(true); setError('');
+                try {
+                    const otpRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'otp_reset');
+                    const usersRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'users');
+                    const snap = await window.getDocs(window.query(usersRef, window.where('email', '==', otpEmail)));
+                    if (snap.empty) { setErrTimeout('Terjadi kesalahan'); setLoading(false); return; }
+                    
+                    const userId = snap.docs[0].id;
+                    const otpDocRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'otp_reset', userId);
+                    const otpSnap = await window.getDoc(otpDocRef);
+                    
+                    if (!otpSnap.exists()) { setErrTimeout('OTP tidak valid atau sudah kadaluarsa'); setLoading(false); return; }
+                    const otpData = otpSnap.data();
+                    if (otpData.otp !== enteredOTP) { setErrTimeout('OTP salah'); setLoading(false); return; }
+                    if (Date.now() > otpData.expiry) { setErrTimeout('OTP sudah kadaluarsa. Minta ulang.'); setLoading(false); return; }
+
+                    const hashedPass = await hashPassword(newPass);
+                    await window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'users', userId), { password: hashedPass });
+                    await window.deleteDoc(otpDocRef);
+                    
+                    setSuccess('Password berhasil direset! Silakan login.');
+                    setTimeout(() => { setView('login'); setSuccess(''); setOtpValues(['','','','','','']); setNewPass(''); setConfirmNewPass(''); }, 2000);
+                } catch (e) { console.error(e); setErrTimeout('Gagal verifikasi OTP.'); }
+                setLoading(false);
+            };
+
+            const inputStyle = { position: 'relative' };
+
+            return (
+                <div className="auth-bg flex items-center justify-center min-h-screen p-4">
+                    {/* Orbs */}
+                    <div className="auth-orb" style={{width:'400px',height:'400px',background:'rgba(14,165,233,0.15)',top:'-100px',left:'-100px'}}></div>
+                    <div className="auth-orb" style={{width:'300px',height:'300px',background:'rgba(250,204,21,0.1)',bottom:'50px',right:'-80px'}}></div>
+                    <div className="auth-orb" style={{width:'200px',height:'200px',background:'rgba(34,197,94,0.1)',top:'40%',right:'5%'}}></div>
+                    
+                    {/* Stars */}
+                    {[...Array(8)].map((_,i) => (
+                        <div key={i} className="auth-floating-star text-yellow-300" style={{
+                            top: Math.random()*80+'%', left: Math.random()*95+'%',
+                            fontSize: (Math.random()*8+6)+'px', animationDelay: i*0.5+'s', opacity:0.4
+                        }}><Icon name="star" /></div>
+                    ))}
+
+                    <div className="auth-card auth-fade-in w-full max-w-md relative z-10">
+                        {/* Header */}
+                        <div className="text-center py-8 px-8 border-b border-slate-100">
+                            <div className="relative inline-flex pulse-ring mb-4">
+                                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-sky-500 to-sky-700 flex items-center justify-center shadow-xl shadow-sky-500/30">
+                                    <Icon name="shop" className="text-white text-2xl" />
+                                </div>
+                            </div>
+                            <h1 className="font-black text-2xl text-slate-800 tracking-tight">Toko Husna</h1>
+                            <p className="text-slate-500 text-sm font-medium mt-1">Sistem Kasir & Manajemen Stok</p>
+                        </div>
+
+                        <div className="p-8">
+                            {/* Tab switcher (login/register only) */}
+                            {(view === 'login' || view === 'register') && (
+                                <div className="flex gap-1 bg-slate-100 rounded-xl p-1 mb-6">
+                                    <button className={`auth-tab flex-1 ${view==='login'?'active':''}`} onClick={() => { setView('login'); setError(''); }}>Masuk</button>
+                                    <button className={`auth-tab flex-1 ${view==='register'?'active':''}`} onClick={() => { setView('register'); setError(''); }}>Daftar</button>
+                                </div>
+                            )}
+
+                            {/* Error/Success alerts */}
+                            {error && <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm font-semibold flex items-center gap-2 fade-in"><Icon name="circle-exclamation" className="flex-shrink-0" />{error}</div>}
+                            {success && <div className="mb-4 px-4 py-3 bg-green-50 border border-green-200 rounded-xl text-green-700 text-sm font-semibold flex items-start gap-2 fade-in"><Icon name="circle-check" className="flex-shrink-0 mt-0.5" /><span>{success}</span></div>}
+
+                            {/* ===== LOGIN VIEW ===== */}
+                            {view === 'login' && (
+                                <div className="space-y-4">
+                                    <div style={inputStyle}>
+                                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 z-10"><Icon name="user" /></div>
+                                        <input className="auth-input" placeholder="Email atau Username" value={loginForm.emailOrUsername} onChange={e=>setLoginForm({...loginForm,emailOrUsername:e.target.value})} onKeyDown={e=>e.key==='Enter'&&handleLogin()} />
+                                    </div>
+                                    <div style={{position:'relative'}}>
+                                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 z-10"><Icon name="lock" /></div>
+                                        <input className="auth-input" style={{paddingRight:'44px'}} type={showPass?'text':'password'} placeholder="Kata Sandi" value={loginForm.password} onChange={e=>setLoginForm({...loginForm,password:e.target.value})} onKeyDown={e=>e.key==='Enter'&&handleLogin()} />
+                                        <button className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 z-10" onClick={()=>setShowPass(!showPass)}><Icon name={showPass?'eye-slash':'eye'} /></button>
+                                    </div>
+                                    <button className="auth-btn-primary" onClick={handleLogin} disabled={loading}>
+                                        {loading ? <span className="flex items-center justify-center gap-2"><span className="typing-dot"></span><span className="typing-dot"></span><span className="typing-dot"></span></span> : <><Icon name="right-to-bracket" className="mr-2" />Masuk ke Sistem</>}
+                                    </button>
+                                    <button className="w-full text-center text-sky-600 text-sm font-semibold hover:underline mt-2" onClick={()=>{setView('forgot');setError('');setSuccess('');}}>
+                                        <Icon name="key" className="mr-1" /> Lupa Password?
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* ===== REGISTER VIEW ===== */}
+                            {view === 'register' && (
+                                <div className="space-y-3">
+                                    <div style={inputStyle}>
+                                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 z-10"><Icon name="id-card" /></div>
+                                        <input className="auth-input" placeholder="Nama Lengkap" value={regForm.namaLengkap} onChange={e=>setRegForm({...regForm,namaLengkap:e.target.value})} />
+                                    </div>
+                                    <div style={inputStyle}>
+                                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 z-10"><Icon name="at" /></div>
+                                        <input className="auth-input" placeholder="Username (tanpa spasi)" value={regForm.username} onChange={e=>setRegForm({...regForm,username:e.target.value})} />
+                                    </div>
+                                    <div style={inputStyle}>
+                                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 z-10"><Icon name="envelope" /></div>
+                                        <input className="auth-input" type="email" placeholder="Alamat Email" value={regForm.email} onChange={e=>setRegForm({...regForm,email:e.target.value})} />
+                                    </div>
+                                    <div style={inputStyle}>
+                                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 z-10"><Icon name="whatsapp" type="brands" /></div>
+                                        <input className="auth-input" type="tel" placeholder="Nomor WhatsApp" value={regForm.whatsapp} onChange={e=>setRegForm({...regForm,whatsapp:e.target.value})} />
+                                    </div>
+                                    <div style={inputStyle}>
+                                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 z-10"><Icon name="ticket" /></div>
+                                        <input className="auth-input" placeholder="Kode Undangan (minta ke owner)" value={regForm.kodeUndangan} onChange={e=>setRegForm({...regForm,kodeUndangan:e.target.value})} />
+                                    </div>
+                                    <div style={{position:'relative'}}>
+                                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 z-10"><Icon name="lock" /></div>
+                                        <input className="auth-input" style={{paddingRight:'44px'}} type={showPass?'text':'password'} placeholder="Kata Sandi (min. 6 karakter)" value={regForm.password} onChange={e=>setRegForm({...regForm,password:e.target.value})} />
+                                        <button className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 z-10" onClick={()=>setShowPass(!showPass)}><Icon name={showPass?'eye-slash':'eye'} /></button>
+                                    </div>
+                                    <div style={inputStyle}>
+                                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 z-10"><Icon name="lock" /></div>
+                                        <input className="auth-input" type="password" placeholder="Konfirmasi Kata Sandi" value={regForm.confirmPassword} onChange={e=>setRegForm({...regForm,confirmPassword:e.target.value})} onKeyDown={e=>e.key==='Enter'&&handleRegister()} />
+                                    </div>
+                                    <button className="auth-btn-primary" onClick={handleRegister} disabled={loading}>
+                                        {loading ? <span className="flex items-center justify-center gap-2"><span className="typing-dot"></span><span className="typing-dot"></span><span className="typing-dot"></span></span> : <><Icon name="user-plus" className="mr-2" />Buat Akun</>}
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* ===== FORGOT PASSWORD VIEW ===== */}
+                            {view === 'forgot' && (
+                                <div className="space-y-4">
+                                    <div className="text-center mb-2">
+                                        <div className="w-12 h-12 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-2"><Icon name="key" className="text-amber-500 text-xl" /></div>
+                                        <h2 className="font-black text-slate-800 text-lg">Lupa Password</h2>
+                                        <p className="text-slate-500 text-sm mt-1">Masukkan email yang terdaftar untuk menerima kode OTP</p>
+                                    </div>
+                                    <div style={inputStyle}>
+                                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 z-10"><Icon name="envelope" /></div>
+                                        <input className="auth-input" type="email" placeholder="Email terdaftar kamu" value={forgotEmail} onChange={e=>setForgotEmail(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleForgotPassword()} />
+                                    </div>
+                                    <button className="auth-btn-primary" onClick={handleForgotPassword} disabled={loading}>
+                                        {loading ? <span className="flex items-center justify-center gap-2"><span className="typing-dot"></span><span className="typing-dot"></span><span className="typing-dot"></span></span> : <><Icon name="paper-plane" className="mr-2" />Kirim Kode OTP</>}
+                                    </button>
+                                    <button className="w-full text-center text-slate-500 text-sm font-semibold hover:underline" onClick={()=>{setView('login');setError('');setSuccess('');}}>
+                                        <Icon name="arrow-left" className="mr-1" /> Kembali ke Login
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* ===== OTP VIEW ===== */}
+                            {view === 'otp' && (
+                                <div className="space-y-4">
+                                    <div className="text-center mb-2">
+                                        <div className="w-12 h-12 bg-sky-100 rounded-2xl flex items-center justify-center mx-auto mb-2"><Icon name="shield-halved" className="text-sky-500 text-xl" /></div>
+                                        <h2 className="font-black text-slate-800 text-lg">Verifikasi OTP</h2>
+                                        <p className="text-slate-500 text-sm mt-1">Hubungi owner di <span className="text-sky-600 font-bold">{OWNER_EMAIL}</span> untuk mendapatkan kode OTP 6 digit</p>
+                                    </div>
+                                    <div className="flex justify-center gap-2 py-2">
+                                        {otpValues.map((val,i) => (
+                                            <input key={i} ref={otpRefs[i]} className="otp-input" maxLength={1} value={val} onChange={e=>handleOTPInput(i,e.target.value)} onKeyDown={e=>handleOTPKeyDown(i,e)} />
+                                        ))}
+                                    </div>
+                                    <div className="border-t border-slate-100 pt-4 space-y-3">
+                                        <p className="text-sm font-bold text-slate-600 text-center">Buat Password Baru</p>
+                                        <div style={{position:'relative'}}>
+                                            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 z-10"><Icon name="lock" /></div>
+                                            <input className="auth-input" type={showPass?'text':'password'} placeholder="Password baru" value={newPass} onChange={e=>setNewPass(e.target.value)} style={{paddingRight:'44px'}} />
+                                            <button className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 z-10" onClick={()=>setShowPass(!showPass)}><Icon name={showPass?'eye-slash':'eye'} /></button>
+                                        </div>
+                                        <div style={inputStyle}>
+                                            <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 z-10"><Icon name="lock" /></div>
+                                            <input className="auth-input" type="password" placeholder="Konfirmasi password baru" value={confirmNewPass} onChange={e=>setConfirmNewPass(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleVerifyOTP()} />
+                                        </div>
+                                    </div>
+                                    <button className="auth-btn-primary" onClick={handleVerifyOTP} disabled={loading}>
+                                        {loading ? <span className="flex items-center justify-center gap-2"><span className="typing-dot"></span><span className="typing-dot"></span><span className="typing-dot"></span></span> : <><Icon name="check" className="mr-2" />Reset Password</>}
+                                    </button>
+                                    <button className="w-full text-center text-slate-500 text-sm font-semibold hover:underline" onClick={()=>{setView('forgot');setError('');setSuccess('');}}>
+                                        <Icon name="arrow-left" className="mr-1" /> Minta OTP Ulang
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="px-8 pb-6 text-center">
+                            <p className="text-xs text-slate-400">© Toko Husna • Sistem Kasir V37 <span className="mx-1">•</span> <Icon name="shield-halved" className="text-green-400" /> Aman & Terenkripsi</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+        // ==================== END AUTH SCREEN ====================
+
         const App = () => {
             const [inventoryData, setInventoryData] = useState([]);
             const [rawInventory, setRawInventory] = useState([]); // Store original data from DB
@@ -5738,13 +6735,34 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             const [activeStoreId, setActiveStoreId] = useState(localStorage.getItem('activeStoreId') || 'default');
             const [showStoreMenu, setShowStoreMenu] = useState(false);
             const [notifCounts, setNotifCounts] = useState({ pendingCarts: 0, activeCarts: 0 });
+            const [authSession, setAuthSession] = useState(() => getStoredSession());
+            const [personalMenuAccess, setPersonalMenuAccess] = useState(null); // null = follow global
+
+            // Listen to current user's doc for live menuAccess updates
+            useEffect(() => {
+                if (!authSession?.id || !user) return;
+                const ref = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'users', authSession.id);
+                const unsub = window.onSnapshot(ref, (snap) => {
+                    if (snap.exists()) {
+                        const data = snap.data();
+                        // If user is deactivated while logged in, force logout
+                        if (data.isActive === false && !isOwnerEmail(authSession.email)) {
+                            clearSession();
+                            setAuthSession(null);
+                            return;
+                        }
+                        setPersonalMenuAccess(data.menuAccess || null);
+                    }
+                });
+                return () => unsub();
+            }, [authSession?.id, user]);
 
             useEffect(() => {
                 const initAuth = async () => { if (window.initialAuthToken) { await window.signInWithCustomToken(window.auth, window.initialAuthToken); } else { await window.signInAnonymously(window.auth); } };
-                initAuth();
+                if (authSession) initAuth();
                 const unsubscribeAuth = window.onAuthStateChanged(window.auth, (currentUser) => { setUser(currentUser); if (!currentUser) setLoading(true); });
                 return () => unsubscribeAuth();
-            }, []);
+            }, [authSession]);
 
             useEffect(() => { const globalClickHandler = (e) => { triggerFireworks(e.clientX, e.clientY); }; window.addEventListener('click', globalClickHandler); return () => window.removeEventListener('click', globalClickHandler); }, []);
 
@@ -5966,18 +6984,37 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             const handleConfirmDeleteRack = async () => { if (!deleteRackModal.rackName || !user) return; const rackName = deleteRackModal.rackName; try { const batch = window.writeBatch(window.db); const itemsToUpdate = inventoryData.filter(item => item.rack && item.rack.includes(rackName)); if (itemsToUpdate.length === 0) { showToast("Tidak ada item di rak ini"); setDeleteRackModal({ show: false, rackName: null }); return; } itemsToUpdate.forEach(item => { const newRacks = item.rack.split(',').map(r => r.trim()).filter(r => r !== rackName); const newRackString = newRacks.length > 0 ? newRacks.join(', ') : '-'; const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id); batch.update(docRef, { rack: newRackString }); }); await batch.commit(); showToast(`Rak "${rackName}" berhasil dihapus`); setSelectedRacks([]); } catch (err) { console.error("Failed delete rack", err); showToast("Gagal menghapus rak", "error"); } finally { setDeleteRackModal({ show: false, rackName: null }); } };
             const handleNavClick = (tabId, event) => { setActiveTab(tabId); if (tabId !== 'list') setShowOnlyLowStock(false); setIsSidebarOpen(false); };
             
+            const handleLogout = () => {
+                clearSession();
+                setAuthSession(null);
+            };
+
+            // Show auth screen if no session
+            if (!authSession) {
+                return <AuthScreen onAuthSuccess={(sessionData) => { setAuthSession(sessionData); }} />;
+            }
+            
+            const isOwner = isOwnerEmail(authSession?.email);
+
+            // Resolve a menu key: owner always true, else user-specific override → global setting
+            const menuOn = (key, globalVal) => {
+                if (isOwner) return true;
+                if (personalMenuAccess && personalMenuAccess[key] !== undefined) return personalMenuAccess[key] !== false;
+                return globalVal !== false;
+            };
+
             const menuItems = [ 
-                { id: 'cashier', label: 'Kasir', icon: 'cash-register', enabled: settingsData.enableCashier !== false, badge: notifCounts.pendingCarts + notifCounts.activeCarts }, 
-                { id: 'history', label: 'Riwayat', icon: 'clock-rotate-left', enabled: settingsData.enableHistory !== false }, 
-                { id: 'purchases', label: 'Faktur Pembelian', icon: 'file-invoice-dollar', enabled: settingsData.enablePurchases !== false }, 
-                { id: 'home', label: 'Dashboard', icon: 'chart-pie', enabled: true }, 
-                { id: 'list', label: 'Stok Barang', icon: 'boxes-stacked', enabled: true }, 
-                { id: 'stock_opname', label: 'Stock Opname', icon: 'clipboard-check', enabled: true },
-                { id: 'cashbook', label: 'Buku Kas', icon: 'book', enabled: true },
-                { id: 'catatan', label: 'Catatan', icon: 'thumbtack', enabled: true },
-                { id: 'add', label: 'Input Manual', icon: 'pen-to-square', enabled: true }, 
-                { id: 'import', label: 'Import Masal', icon: 'file-import', enabled: true }, 
-                { id: 'settings', label: 'Pengaturan', icon: 'gears', enabled: true } 
+                { id: 'cashier',     label: 'Kasir',             icon: 'cash-register',      enabled: true, readOnly: !isOwner && !menuOn('enableCashier', settingsData.enableCashier),    badge: notifCounts.pendingCarts + notifCounts.activeCarts }, 
+                { id: 'history',     label: 'Riwayat',           icon: 'clock-rotate-left',  enabled: true, readOnly: !isOwner && !menuOn('enableHistory', settingsData.enableHistory) }, 
+                { id: 'purchases',   label: 'Faktur Pembelian',  icon: 'file-invoice-dollar', enabled: true, readOnly: !isOwner && !menuOn('enablePurchases', settingsData.enablePurchases) }, 
+                { id: 'home',        label: 'Dashboard',         icon: 'chart-pie',           enabled: true, readOnly: false }, 
+                { id: 'list',        label: 'Stok Barang',       icon: 'boxes-stacked',       enabled: true, readOnly: !isOwner && !menuOn('enableStock', settingsData.enableStock) }, 
+                { id: 'stock_opname',label: 'Stock Opname',      icon: 'clipboard-check',     enabled: true, readOnly: !isOwner && !menuOn('enableStockOpname', settingsData.enableStockOpname) },
+                { id: 'cashbook',    label: 'Buku Kas',          icon: 'book',                enabled: true, readOnly: !isOwner && !menuOn('enableCashbook', settingsData.enableCashbook) },
+                { id: 'catatan',     label: 'Catatan',           icon: 'thumbtack',           enabled: true, readOnly: !isOwner && !menuOn('enableCatatan', settingsData.enableCatatan) },
+                { id: 'add',         label: 'Input Manual',      icon: 'pen-to-square',       enabled: true, readOnly: !isOwner && !menuOn('enableInputManual', settingsData.enableInputManual) }, 
+                { id: 'import',      label: 'Import Masal',      icon: 'file-import',         enabled: true, readOnly: !isOwner && !menuOn('enableImport', settingsData.enableImport) }, 
+                ...(isOwner ? [{ id: 'settings', label: 'Pengaturan', icon: 'gears', enabled: true, readOnly: false }] : []),
             ];
             const visibleMenuItems = menuItems.filter(m => m.enabled);
 
@@ -6068,23 +7105,41 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                 </div>
                                 <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600 p-2"><Icon name="xmark" className="text-xl" /></button>
                             </div>
-                            <nav className="space-y-2 flex-1">{visibleMenuItems.map(menu => (<button key={menu.id} onClick={(e) => handleNavClick(menu.id, e)} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold transition-all duration-300 relative overflow-hidden group ${activeTab === menu.id ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}><div className="relative w-5 flex-shrink-0"><Icon name={menu.icon} className={`text-base ${activeTab === menu.id ? 'text-white' : 'text-slate-400'}`} />{menu.badge > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center leading-none shadow-sm animate-pulse">{menu.badge > 9 ? '9+' : menu.badge}</span>}</div><span className="flex-1 text-left">{menu.label}</span>{menu.badge > 0 && activeTab !== menu.id && <span className="text-[9px] bg-red-100 text-red-600 font-black px-1.5 py-0.5 rounded-full border border-red-200">{menu.badge} baru</span>}</button>))}</nav>
-                            <div className="mt-auto pt-6 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400">Versi 36 • Edit Barang Faktur</p></div>
+                            <nav className="space-y-2 flex-1">{visibleMenuItems.map(menu => (<button key={menu.id} onClick={(e) => handleNavClick(menu.id, e)} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl text-sm font-bold transition-all duration-300 relative overflow-hidden group ${activeTab === menu.id ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}><div className="relative w-5 flex-shrink-0"><Icon name={menu.icon} className={`text-base ${activeTab === menu.id ? 'text-white' : 'text-slate-400'}`} />{menu.badge > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center leading-none shadow-sm animate-pulse">{menu.badge > 9 ? '9+' : menu.badge}</span>}</div><span className="flex-1 text-left">{menu.label}</span>{menu.readOnly && activeTab !== menu.id && <Icon name="eye" className="text-[9px] text-slate-300 flex-shrink-0" title="Lihat saja" />}{menu.badge > 0 && activeTab !== menu.id && <span className="text-[9px] bg-red-100 text-red-600 font-black px-1.5 py-0.5 rounded-full border border-red-200">{menu.badge} baru</span>}</button>))}</nav>
+                            <div className="mt-auto pt-6 border-t border-slate-100">
+                                {authSession && (
+                                    <div className="mb-3 px-3 py-2.5 bg-sky-50 rounded-xl border border-sky-100">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="w-8 h-8 rounded-lg bg-sky-500 flex items-center justify-center flex-shrink-0">
+                                                <span className="text-white text-xs font-black">{(authSession.namaLengkap||'U').charAt(0).toUpperCase()}</span>
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-xs font-black text-slate-700 truncate">{authSession.namaLengkap}</p>
+                                                <p className="text-[10px] text-slate-400 truncate">@{authSession.username}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                <button onClick={handleLogout} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-red-500 hover:bg-red-50 font-bold text-xs transition-all mb-2">
+                                    <Icon name="right-from-bracket" className="text-sm" /> Keluar / Logout
+                                </button>
+                                <p className="text-[10px] text-center text-slate-400">Versi 41 • Mode Lihat Saja & Pengaturan di Panel Owner</p>
+                            </div>
                         </div>
                     </aside>
                     <main className="flex-1 md:ml-0 p-4 md:p-8 max-w-7xl mx-auto w-full mb-0">
                         <div className="md:hidden mb-6 flex items-center justify-between gap-4 relative z-30"><div className="flex items-center gap-2"><div className={`w-9 h-9 rounded-lg flex items-center justify-center text-white ${activeStoreId === 'all_stores' ? 'bg-indigo-600' : 'bg-sky-600'} shadow-md`}><Icon name="shop" /></div><h1 className="font-bold text-slate-800 text-lg">{currentProfile.name}</h1></div><button onClick={() => setIsSidebarOpen(true)} className="bg-white/90 backdrop-blur-md px-4 py-2.5 rounded-xl text-slate-700 font-bold text-sm shadow-sm border border-slate-200 active:scale-95 transition-all flex items-center gap-2"><Icon name="bars" className="text-sky-600" /> Menu</button></div>
                         {activeTab === 'home' && (<DashboardView items={inventoryData} settings={settingsData} onShowLowStock={() => { setActiveTab('list'); setShowOnlyLowStock(true); }} />)}
-                        {activeTab === 'cashier' && (<CashierView items={inventoryData} user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} />)}
-                        {activeTab === 'history' && (<HistoryView user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} items={inventoryData} />)}
-                        {activeTab === 'purchases' && (<PurchaseView user={user} showToast={showToast} items={inventoryData} currentProfile={currentProfile} />)}
-                        {activeTab === 'cashbook' && (<CashBookView user={user} currentProfile={currentProfile} showToast={showToast} />)}
-                        {activeTab === 'list' && (<ListView items={inventoryData} loading={loading} settings={settingsData} searchQuery={searchQuery} setSearchQuery={setSearchQuery} showOnlyLowStock={showOnlyLowStock} setShowOnlyLowStock={setShowOnlyLowStock} selectedRacks={selectedRacks} setSelectedRacks={setSelectedRacks} uniqueRacksData={uniqueRacksData} onCopySuccess={showToast} onEdit={(item) => { setFormData({...item}); setEditingItem(item); setActiveTab('add'); }} onDelete={(item) => setDeleteModal({ show: true, item: item })} onDeleteRack={(rackName) => setDeleteRackModal({ show: true, rackName })} currentProfile={currentProfile} />)}
-                        {activeTab === 'add' && (<FormView formData={formData} setFormData={setFormData} onSubmit={handleSubmit} isEditing={!!editingItem} submitting={submitting} onCancel={() => { setEditingItem(null); setFormData({name:'', qty:'', unit:'Pcs', exp:'', rack:'', price:'', costPrice:'', minStock: ''}); setActiveTab('list'); }} currentProfile={currentProfile} />)}
-                        {activeTab === 'import' && (<BulkImportView user={user} onImportComplete={(count) => { showToast(`${count} Barang berhasil diimport`); setActiveTab('list'); }} currentProfile={currentProfile} />)}
-                        {activeTab === 'stock_opname' && (<StockOpnameView items={inventoryData} user={user} showToast={showToast} currentProfile={currentProfile} />)}
-                        {activeTab === 'settings' && (<SettingsView settings={settingsData} onSave={handleSaveSettings} loading={submitting} />)}
-                        {activeTab === 'catatan' && (<PapanCatatan user={user} />)}
+                        {activeTab === 'cashier' && (<CashierView items={inventoryData} user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='cashier')?.readOnly} />)}
+                        {activeTab === 'history' && (<HistoryView user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} items={inventoryData} readOnly={menuItems.find(m=>m.id==='history')?.readOnly} />)}
+                        {activeTab === 'purchases' && (<PurchaseView user={user} showToast={showToast} items={inventoryData} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='purchases')?.readOnly} />)}
+                        {activeTab === 'cashbook' && (<CashBookView user={user} currentProfile={currentProfile} showToast={showToast} readOnly={menuItems.find(m=>m.id==='cashbook')?.readOnly} />)}
+                        {activeTab === 'list' && (<ListView items={inventoryData} loading={loading} settings={settingsData} searchQuery={searchQuery} setSearchQuery={setSearchQuery} showOnlyLowStock={showOnlyLowStock} setShowOnlyLowStock={setShowOnlyLowStock} selectedRacks={selectedRacks} setSelectedRacks={setSelectedRacks} uniqueRacksData={uniqueRacksData} onCopySuccess={showToast} onEdit={(item) => { setFormData({...item}); setEditingItem(item); setActiveTab('add'); }} onDelete={(item) => setDeleteModal({ show: true, item: item })} onDeleteRack={(rackName) => setDeleteRackModal({ show: true, rackName })} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='list')?.readOnly} />)}
+                        {activeTab === 'add' && (<FormView formData={formData} setFormData={setFormData} onSubmit={handleSubmit} isEditing={!!editingItem} submitting={submitting} onCancel={() => { setEditingItem(null); setFormData({name:'', qty:'', unit:'Pcs', exp:'', rack:'', price:'', costPrice:'', minStock: ''}); setActiveTab('list'); }} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='add')?.readOnly} />)}
+                        {activeTab === 'import' && (<BulkImportView user={user} onImportComplete={(count) => { showToast(`${count} Barang berhasil diimport`); setActiveTab('list'); }} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='import')?.readOnly} />)}
+                        {activeTab === 'stock_opname' && (<StockOpnameView items={inventoryData} user={user} showToast={showToast} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='stock_opname')?.readOnly} />)}
+                        {activeTab === 'settings' && (<SettingsView settings={settingsData} onSave={handleSaveSettings} loading={submitting} authSession={authSession} />)}
+                        {activeTab === 'catatan' && (<PapanCatatan user={user} readOnly={menuItems.find(m=>m.id==='catatan')?.readOnly} />)}
                     </main>
                     <ConfirmModal isOpen={deleteModal.show} title="Hapus Barang?" message={`Yakin ingin menghapus permanen "${deleteModal.item?.name}"? Barang ini akan hilang dari SEMUA toko.`} onConfirm={handleDelete} onCancel={() => setDeleteModal({ show: false, item: null })} />
                     <ConfirmModal isOpen={deleteRackModal.show} title="Hapus Rak?" message={`Yakin ingin menghapus rak "${deleteRackModal.rackName}"? Semua barang di rak ini akan menjadi 'No Rack' (-).`} onConfirm={handleConfirmDeleteRack} onCancel={() => setDeleteRackModal({ show: false, rackName: null })} confirmText="Ya, Hapus Rak" />
