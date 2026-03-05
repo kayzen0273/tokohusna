@@ -821,6 +821,7 @@
             const [itemPrice, setItemPrice] = useState('');
             const [itemBuyPrice, setItemBuyPrice] = useState('');
             const [editingItemIndex, setEditingItemIndex] = useState(null); // index item yang sedang diedit
+            const [originalItemsSnapshot, setOriginalItemsSnapshot] = useState({}); // qty asli sebelum diedit { itemId: qty }
 
             useEffect(() => {
                 if (!user) return;
@@ -1070,22 +1071,11 @@
                     let successCount = 0;
                     let failedItems = [];
 
-                    // Jika mode EDIT: ambil data faktur lama untuk hitung selisih qty
-                    let originalItemsMap = {}; // { itemId: originalQty }
+                    // Jika mode EDIT: gunakan snapshot qty asli yang disimpan saat form dibuka
+                    let originalItemsMap = {};
                     if (editingPurchaseId) {
-                        try {
-                            const originalDoc = await window.getDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'purchases', editingPurchaseId));
-                            if (originalDoc.exists()) {
-                                const originalData = originalDoc.data();
-                                (originalData.items || []).forEach(origItem => {
-                                    // Jika ada duplikat id, akumulasi qty
-                                    originalItemsMap[origItem.id] = (originalItemsMap[origItem.id] || 0) + Number(origItem.qty);
-                                });
-                            }
-                            console.log('📋 Qty asli dari faktur lama:', originalItemsMap);
-                        } catch (fetchErr) {
-                            console.warn('Gagal ambil data faktur lama, pakai qty penuh:', fetchErr);
-                        }
+                        originalItemsMap = originalItemsSnapshot;
+                        console.log('📋 Qty asli dari snapshot:', originalItemsMap);
                     }
                     
                     for (const item of invoiceData.items) {
@@ -1215,6 +1205,7 @@
                     clearDraft();
                     setEditingPurchaseId(null);
                     setIsEditMode(false);
+                    setOriginalItemsSnapshot({});
                     setInvoiceModalOpen(false); 
                     setInvoiceData({ supplier: '', invoiceNumber: '', date: '', receivedDate: new Date().toISOString().slice(0,10), receivedTime: new Date().toTimeString().slice(0,5), dueDate: '', total: '', ppn: '', paymentMethod: 'Kredit', isPaid: false, isConsignment: false, items: [] });
                     setDiskon('0'); setDiskonType('percent'); setMaterai('0'); setPengiriman('0'); setPembulatan('0');
@@ -1274,6 +1265,15 @@
                 setEditingPurchaseId(purchase.id);
                 setIsEditMode(true);
                 const fmt = n => n ? n.toLocaleString('id-ID') : '0';
+
+                // Simpan snapshot qty asli SEKARANG sebelum user mengubah apapun
+                const snapshot = {};
+                (purchase.items || []).forEach(item => {
+                    snapshot[item.id] = (snapshot[item.id] || 0) + Number(item.qty);
+                });
+                setOriginalItemsSnapshot(snapshot);
+                console.log('📋 Snapshot qty asli tersimpan:', snapshot);
+
                 setInvoiceData({
                     supplier: purchase.supplier || '',
                     invoiceNumber: purchase.invoiceNumber || '',
@@ -1712,7 +1712,7 @@
 
                             {/* FOOTER - fixed bottom */}
                             <div className="flex-shrink-0 flex justify-between items-center px-4 py-3 border-t border-gray-200 bg-white">
-                                <button type="button" onClick={() => { clearDraft(); setEditingPurchaseId(null); setIsEditMode(false); setInvoiceModalOpen(false); setAttachmentFile(null); setAttachmentPreview(null); }} className="bg-white border border-red-400 text-red-500 px-3 py-1.5 rounded-md text-xs font-medium">
+                                <button type="button" onClick={() => { clearDraft(); setEditingPurchaseId(null); setIsEditMode(false); setOriginalItemsSnapshot({}); setInvoiceModalOpen(false); setAttachmentFile(null); setAttachmentPreview(null); }} className="bg-white border border-red-400 text-red-500 px-3 py-1.5 rounded-md text-xs font-medium">
                                     {isEditMode ? 'Batalkan Edit' : 'Hapus draf'}
                                 </button>
                                 <button type="button" onClick={handleSubmitInvoice} disabled={submitting || invoiceData.items.length === 0} className="bg-teal-700 text-white px-4 py-1.5 rounded-md text-xs font-medium disabled:opacity-50">
