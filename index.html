@@ -1069,6 +1069,24 @@
                     const storeId = currentProfile.id;
                     let successCount = 0;
                     let failedItems = [];
+
+                    // Jika mode EDIT: ambil data faktur lama untuk hitung selisih qty
+                    let originalItemsMap = {}; // { itemId: originalQty }
+                    if (editingPurchaseId) {
+                        try {
+                            const originalDoc = await window.getDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'purchases', editingPurchaseId));
+                            if (originalDoc.exists()) {
+                                const originalData = originalDoc.data();
+                                (originalData.items || []).forEach(origItem => {
+                                    // Jika ada duplikat id, akumulasi qty
+                                    originalItemsMap[origItem.id] = (originalItemsMap[origItem.id] || 0) + Number(origItem.qty);
+                                });
+                            }
+                            console.log('📋 Qty asli dari faktur lama:', originalItemsMap);
+                        } catch (fetchErr) {
+                            console.warn('Gagal ambil data faktur lama, pakai qty penuh:', fetchErr);
+                        }
+                    }
                     
                     for (const item of invoiceData.items) {
                         try {
@@ -1089,7 +1107,19 @@
                             // Hitung stok baru
                             const currentStocks = itemData.stocks || {};
                             const currentStockInStore = Number(currentStocks[storeId]) || 0;
-                            const qtyToAdd = Number(item.qty);
+                            const newQty = Number(item.qty);
+
+                            // MODE EDIT: hanya tambah selisih (newQty - originalQty)
+                            // MODE BARU: tambah penuh
+                            let qtyToAdd;
+                            if (editingPurchaseId) {
+                                const originalQty = originalItemsMap[item.id] || 0;
+                                qtyToAdd = newQty - originalQty;
+                                console.log(`🔄 EDIT ${item.name}: qty lama=${originalQty}, qty baru=${newQty}, selisih=${qtyToAdd}`);
+                            } else {
+                                qtyToAdd = newQty;
+                            }
+
                             const newStockInStore = currentStockInStore + qtyToAdd;
                             
                             console.log(`🔄 ${item.name} (${storeId}):`, {
@@ -1120,6 +1150,14 @@
                                 updateData.costPrice = item.buyPrice;
                                 console.log(`🏷️ ${item.name}: harga beli diupdate ${itemData.costPrice} → ${item.buyPrice}`);
                             }
+
+                            // Jika selisih = 0, tetap update (harga mungkin berubah)
+                            // tapi jika tidak ada perubahan sama sekali, skip
+                            if (qtyToAdd === 0 && !updateData.price && !updateData.costPrice) {
+                                console.log(`⏭️ ${item.name}: tidak ada perubahan, skip`);
+                                successCount++;
+                                continue;
+                            }
                             
                             // Update ke Firestore
                             await window.updateDoc(itemRef, updateData);
@@ -1130,6 +1168,31 @@
                         } catch (error) {
                             console.error(`❌ Error update ${item.name}:`, error);
                             failedItems.push(item.name);
+                        }
+                    }
+
+                    // Jika mode EDIT: kurangi stok untuk item yang DIHAPUS dari faktur
+                    if (editingPurchaseId && Object.keys(originalItemsMap).length > 0) {
+                        const newItemIds = new Set(invoiceData.items.map(i => i.id));
+                        for (const [removedId, removedQty] of Object.entries(originalItemsMap)) {
+                            if (!newItemIds.has(removedId)) {
+                                try {
+                                    const removedRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', removedId);
+                                    const removedDoc = await window.getDoc(removedRef);
+                                    if (removedDoc.exists()) {
+                                        const removedData = removedDoc.data();
+                                        const currentStocks = removedData.stocks || {};
+                                        const currentStockInStore = Number(currentStocks[storeId]) || 0;
+                                        const newStock = Math.max(0, currentStockInStore - removedQty);
+                                        const removeUpdate = { [`stocks.${storeId}`]: newStock, updatedAt: window.serverTimestamp() };
+                                        if (storeId === 'default') removeUpdate.qty = newStock;
+                                        await window.updateDoc(removedRef, removeUpdate);
+                                        console.log(`↩️ Item dihapus dari faktur: ${removedId}, stok dikurangi ${removedQty}, stok baru: ${newStock}`);
+                                    }
+                                } catch (removeErr) {
+                                    console.warn('Gagal kurangi stok item yang dihapus:', removedId, removeErr);
+                                }
+                            }
                         }
                     }
                     
