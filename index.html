@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistem Kasir Toko Husna (V43 - Pengaturan Akses Lengkap)</title>
+    <title>Sistem Kasir Toko Husna (V44 - Faktur Pembelian Per Toko)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -1485,7 +1485,7 @@
         };
 
         // --- PURCHASE VIEW ---
-        const PurchaseView = ({ user, showToast, items, currentProfile, readOnly }) => {
+        const PurchaseView = ({ user, showToast, items, currentProfile, settings, readOnly }) => {
             const [purchases, setPurchases] = useState([]);
             const [suppliers, setSuppliers] = useState([]);
             const [loading, setLoading] = useState(true);
@@ -1691,18 +1691,25 @@
                 item.name.toLowerCase().includes(itemSearch.toLowerCase())
             ).slice(0, 10);
 
+            // Filter purchases by store
+            const storePurchases = purchases.filter(p => {
+                if (currentProfile.id === 'all_stores') return true;
+                if (!p.storeId) return currentProfile.id === 'default'; // backward compat: data lama tanpa storeId → default
+                return p.storeId === currentProfile.id;
+            });
+
             const stats = useMemo(() => {
                 const today = new Date(); today.setHours(0,0,0,0);
                 const next7Days = new Date(today); next7Days.setDate(today.getDate() + 7);
                 let totalPurchase = 0, dueSoon = 0, overdue = 0, unpaid = 0, countTotal = 0, countDue = 0, countOverdue = 0, countUnpaid = 0, consignmentTotal = 0, consignmentUnpaid = 0;
-                purchases.forEach(p => {
+                storePurchases.forEach(p => {
                     const amount = safeNumber(p.total); const dueDate = p.dueDate ? new Date(p.dueDate) : null; if(dueDate) dueDate.setHours(0,0,0,0);
                     if (p.isConsignment) { consignmentTotal += amount; if (!p.isPaid) { consignmentUnpaid += amount; } }
                     totalPurchase += amount; countTotal++;
                     if (!p.isPaid) { unpaid += amount; countUnpaid++; if (dueDate) { if (dueDate < today) { overdue += amount; countOverdue++; } else if (dueDate <= next7Days) { dueSoon += amount; countDue++; } } }
                 });
                 return { totalPurchase, dueSoon, overdue, unpaid, countTotal, countDue, countOverdue, countUnpaid, consignmentTotal, consignmentUnpaid };
-            }, [purchases]);
+            }, [storePurchases]);
 
             const handleSelectSupplier = (supplier) => { 
                 // Check if there's a draft for this supplier
@@ -1775,6 +1782,8 @@
                     const invoicePayload = {
                         supplier: invoiceData.supplier, 
                         invoiceNumber: invoiceData.invoiceNumber || '',
+                        storeId: currentProfile.id,
+                        storeName: currentProfile.name,
                         total: grandTotal, 
                         subtotal: subtotal,
                         diskon: diskonNominal,
@@ -2060,32 +2069,33 @@
                 setInvoiceModalOpen(true);
             };
             const filteredSuppliers = suppliers.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase()));
-            const filteredPurchases = purchases.filter(p => {
+            const filteredPurchases = storePurchases.filter(p => {
                 const q = purchaseSearch.toLowerCase();
                 const matchText = !q || (p.supplier || '').toLowerCase().includes(q) || (p.invoiceNumber || '').toLowerCase().includes(q) || (p.paymentMethod || '').toLowerCase().includes(q);
                 const matchStatus = purchaseFilterStatus === 'all' ? true : purchaseFilterStatus === 'paid' ? p.isPaid : purchaseFilterStatus === 'unpaid' ? !p.isPaid : purchaseFilterStatus === 'overdue' ? (!p.isPaid && p.dueDate && new Date(p.dueDate) < new Date()) : purchaseFilterStatus === 'consignment' ? p.isConsignment : true;
                 return matchText && matchStatus;
             });
 
-            // Guard untuk mode all_stores
-            if (currentProfile.id === 'all_stores') {
-                return (
-                    <div className="fade-in h-full flex flex-col items-center justify-center text-center p-6 relative z-10">
-                        <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 text-3xl mb-4 shadow-sm"><Icon name="shop-lock" /></div>
-                        <h2 className="text-xl font-bold text-slate-800 mb-2">Mode Gabungan (View Only)</h2>
-                        <p className="text-slate-500 max-w-xs mx-auto mb-6 text-sm">Untuk input faktur pembelian, silakan pilih salah satu toko spesifik dari menu di kiri atas.</p>
-                        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-xl text-xs text-yellow-700 font-medium">
-                            <Icon name="triangle-exclamation" className="mr-1" /> Faktur harus diinput ke toko spesifik.
-                        </div>
-                    </div>
-                );
-            }
+            // Guard untuk mode all_stores — boleh lihat, tapi tidak bisa input
+            const isAllStores = currentProfile.id === 'all_stores';
+
+            // Resolver nama toko dari storeId (untuk data lama yang tidak punya storeName)
+            const resolveStoreName = (purchase) => {
+                if (purchase.storeName) return purchase.storeName;
+                const profiles = settings?.storeProfiles || [];
+                const sid = purchase.storeId || 'default';
+                const found = profiles.find(p => p.id === sid);
+                if (found) return found.name;
+                // fallback ke nama toko utama dari settings
+                return settings?.storeName || 'Toko Utama';
+            };
 
             return (
                 <>
                 <div className="fade-in pb-20 md:pb-0 h-full flex flex-col relative z-10">
                      {readOnly && <ReadOnlyBanner />}
-                     <header className="mb-6 flex items-center justify-between"><div><h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Faktur Pembelian</h2><p className="text-slate-500 text-xs mt-1">Kelola tagihan supplier</p></div><div className="flex gap-2"><button className="hidden md:flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-xs hover:bg-slate-50 transition-all shadow-sm"><Icon name="download" /> Unduh Laporan</button>{!readOnly && <button onClick={() => setSupplierModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-xl font-bold text-xs hover:bg-teal-700 transition-all shadow-lg shadow-teal-200 active:scale-95"><Icon name="plus" /> Catat Faktur</button>}</div></header>
+                     <header className="mb-6 flex items-center justify-between"><div><h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Faktur Pembelian</h2><p className="text-slate-500 text-xs mt-1">{isAllStores ? 'Semua toko — lihat saja' : 'Kelola tagihan supplier'}</p></div><div className="flex gap-2"><button className="hidden md:flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-xs hover:bg-slate-50 transition-all shadow-sm"><Icon name="download" /> Unduh Laporan</button>{!readOnly && !isAllStores && <button onClick={() => setSupplierModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-xl font-bold text-xs hover:bg-teal-700 transition-all shadow-lg shadow-teal-200 active:scale-95"><Icon name="plus" /> Catat Faktur</button>}</div></header>
+                    {isAllStores && <div className="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-700 font-medium flex items-center gap-2"><Icon name="circle-info" /> Mode Semua Toko — data dari semua toko ditampilkan. Untuk input faktur baru, pilih toko spesifik.</div>}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                          <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden"><h4 className="font-bold text-slate-800 text-xs mb-1">Total Pembelian</h4><div className="text-xl font-black text-slate-800 mb-1">{formatRupiah(stats.totalPurchase)}</div><p className="text-[10px] text-slate-400">{stats.countTotal} faktur tercatat</p></div>
                          <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden"><div className="absolute top-0 right-0 w-16 h-16 bg-amber-50 rounded-bl-full -mr-2 -mt-2"></div><h4 className="font-bold text-slate-800 text-xs mb-1 relative z-10">Jatuh Tempo (7 Hari)</h4><div className="text-xl font-black text-amber-600 mb-1 relative z-10">{formatRupiah(stats.dueSoon)}</div><p className="text-[10px] text-slate-400 relative z-10">{stats.countDue} faktur dari supplier</p></div>
@@ -2119,6 +2129,14 @@
                             const itemDisplay = itemNames.length === 0 ? '-' : itemNames.length <= 3 ? itemNames.join(', ') : itemNames.slice(0,3).join(', ') + `, +${itemNames.length - 3} lainnya`;
                             return (
                                 <div key={p.id} onClick={() => handleOpenDetail(p)} className={`bg-white cursor-pointer active:scale-[0.99] border-b border-slate-100 py-4 px-2 transition-all hover:bg-slate-50 ${isOverdue ? 'border-l-4 border-l-red-500' : ''}`}>
+                                    {/* Store badge — hanya muncul di mode semua toko */}
+                                    {isAllStores && (
+                                        <div className="ml-11 mb-2">
+                                            <span className="inline-flex items-center gap-1 bg-sky-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm">
+                                                <Icon name="shop" className="text-[9px]" />{resolveStoreName(p)}
+                                            </span>
+                                        </div>
+                                    )}
                                     {/* Row 1: checkbox + no + invoice + amount */}
                                     <div className="flex items-start gap-3 mb-3">
                                         <div onClick={e => e.stopPropagation()} className="mt-0.5 flex-shrink-0">
@@ -2168,7 +2186,7 @@
                                             {p.isPaid ? (
                                                 <span className="flex items-center px-4 py-1.5 rounded-full border text-sm font-semibold bg-green-50 text-green-700 border-green-300 cursor-default select-none">Lunas</span>
                                             ) : (
-                                                readOnly ? (
+                                                (readOnly || isAllStores) ? (
                                                     <span className="flex items-center px-4 py-1.5 rounded-full border text-sm font-semibold bg-slate-50 text-slate-500 border-slate-200 cursor-default select-none">Belum lunas</span>
                                                 ) : (
                                                     <button onClick={(e) => { e.stopPropagation(); togglePaid(p); }} className="flex items-center gap-1.5 px-4 py-1.5 rounded-full border text-sm font-semibold bg-white text-slate-700 border-slate-300 hover:border-teal-400 transition-all active:scale-95">
@@ -2178,7 +2196,7 @@
                                                 )
                                             )}
                                         </div>
-                                        {!readOnly && (
+                                        {(!readOnly && !isAllStores) && (
                                             <button onClick={(e) => { e.stopPropagation(); openDeleteModal(p.id, false); }} className="text-[11px] text-red-400 hover:text-red-600 font-bold flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-red-50 transition-all">
                                                 <Icon name="trash" /> Hapus
                                             </button>
@@ -2490,11 +2508,18 @@
                                 <div className="flex items-center gap-2">
                                     <button type="button" onClick={() => setDetailModalOpen(false)} className="text-slate-400 hover:text-slate-700 mr-1"><Icon name="chevron-left" /></button>
                                     <div>
+                                        {isAllStores && (
+                                            <div className="mb-0.5">
+                                                <span className="inline-flex items-center gap-1 bg-sky-600 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">
+                                                    <Icon name="shop" className="text-[8px]" />{resolveStoreName(selectedPurchase)}
+                                                </span>
+                                            </div>
+                                        )}
                                         <span className="font-medium text-sm">{selectedPurchase.supplier}</span>
                                         {selectedPurchase.invoiceNumber && <span className="ml-2 text-[10px] font-bold text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded font-mono">#{selectedPurchase.invoiceNumber}</span>}
                                     </div>
                                 </div>
-                                {!readOnly && (
+                                {(!readOnly && !isAllStores) && (
                                     <button type="button" onClick={() => handleOpenEdit(selectedPurchase)} className="flex items-center gap-1.5 bg-teal-600 text-white px-3 py-1.5 rounded-md text-xs font-bold hover:bg-teal-700 active:scale-95 transition-all">
                                         <Icon name="pen-to-square" /> Edit
                                     </button>
@@ -2612,14 +2637,14 @@
 
                             {/* FOOTER */}
                             <div className="flex-shrink-0 flex justify-between items-center px-4 py-3 border-t border-gray-200 bg-white">
-                                {!readOnly ? (
+                                {(!readOnly && !isAllStores) ? (
                                     <button type="button" onClick={() => openDeleteModal(selectedPurchase.id, true)} className="bg-white border border-red-400 text-red-500 px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1">
                                         <Icon name="trash" /> Hapus
                                     </button>
                                 ) : (
-                                    <div className="flex items-center gap-1 text-amber-600 text-xs font-semibold"><Icon name="lock" /> Akses Terbatas</div>
+                                    <div className="flex items-center gap-1 text-amber-600 text-xs font-semibold"><Icon name="lock" /> {isAllStores ? 'Mode Gabungan' : 'Akses Terbatas'}</div>
                                 )}
-                                {!readOnly ? (
+                                {(!readOnly && !isAllStores) ? (
                                     <button type="button" onClick={() => handleOpenEdit(selectedPurchase)} className="bg-teal-600 text-white px-4 py-1.5 rounded-md text-xs font-bold flex items-center gap-1.5 hover:bg-teal-700 active:scale-95 transition-all">
                                         <Icon name="pen-to-square" /> Edit Faktur
                                     </button>
@@ -6530,7 +6555,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
 
         // ==================== AUTH UTILITIES ====================
         const INVITATION_CODE = "12345670";
-        const OWNER_EMAILS = ["kayzen796@gmail.com", "hayatifadhilah11199@gmail.com"];
+        const OWNER_EMAILS = ["kayzen796@gmail.com", hayatifadhilah11199@gmail.com"];
         const OWNER_EMAIL = OWNER_EMAILS[0]; // email utama untuk tampilan pesan
         const isOwnerEmail = (email) => OWNER_EMAILS.includes((email || '').toLowerCase());
 
@@ -7290,7 +7315,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                 <button onClick={handleLogout} className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-red-500 hover:bg-red-50 font-bold text-xs transition-all mb-2">
                                     <Icon name="right-from-bracket" className="text-sm" /> Keluar / Logout
                                 </button>
-                                <p className="text-[10px] text-center text-slate-400">Versi 43 • Pengaturan Sidebar & Submenu Dikontrol Owner</p>
+                                <p className="text-[10px] text-center text-slate-400">Versi 44 • Faktur Pembelian Dipisah Per Toko</p>
                             </div>
                         </div>
                     </aside>
@@ -7299,7 +7324,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         {activeTab === 'home' && (<DashboardView items={inventoryData} settings={settingsData} onShowLowStock={() => { setActiveTab('list'); setShowOnlyLowStock(true); }} />)}
                         {activeTab === 'cashier' && (<CashierView items={inventoryData} user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='cashier')?.readOnly} authSession={authSession} />)}
                         {activeTab === 'history' && (<HistoryView user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} items={inventoryData} readOnly={menuItems.find(m=>m.id==='history')?.readOnly} />)}
-                        {activeTab === 'purchases' && (<PurchaseView user={user} showToast={showToast} items={inventoryData} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='purchases')?.readOnly} />)}
+                        {activeTab === 'purchases' && (<PurchaseView user={user} showToast={showToast} items={inventoryData} currentProfile={currentProfile} settings={settingsData} readOnly={menuItems.find(m=>m.id==='purchases')?.readOnly} />)}
                         {activeTab === 'cashbook' && (<CashBookView user={user} currentProfile={currentProfile} showToast={showToast} readOnly={menuItems.find(m=>m.id==='cashbook')?.readOnly} />)}
                         {activeTab === 'list' && (<ListView items={inventoryData} loading={loading} settings={settingsData} searchQuery={searchQuery} setSearchQuery={setSearchQuery} showOnlyLowStock={showOnlyLowStock} setShowOnlyLowStock={setShowOnlyLowStock} selectedRacks={selectedRacks} setSelectedRacks={setSelectedRacks} uniqueRacksData={uniqueRacksData} onCopySuccess={showToast} onEdit={(item) => { setFormData({...item}); setEditingItem(item); setActiveTab('add'); }} onDelete={(item) => setDeleteModal({ show: true, item: item })} onDeleteRack={(rackName) => setDeleteRackModal({ show: true, rackName })} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='list')?.readOnly} />)}
                         {activeTab === 'add' && (<FormView formData={formData} setFormData={setFormData} onSubmit={handleSubmit} isEditing={!!editingItem} submitting={submitting} onCancel={() => { setEditingItem(null); setFormData({name:'', qty:'', unit:'Pcs', exp:'', rack:'', price:'', costPrice:'', minStock: ''}); setActiveTab('list'); }} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='add')?.readOnly} />)}
