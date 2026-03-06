@@ -491,10 +491,16 @@
                 headers.forEach(h => { if(h && h.trim()) encoder.text(h).newline(); });
                 
                 encoder.line().alignLeft().text(`Tgl: ${new Date(receipt.date.seconds ? receipt.date.toDate() : receipt.date).toLocaleString('id-ID')}`).newline().line();
+                let racikanCountBt = 0;
                 receipt.items.forEach(item => {
                     const validQty = item.cartQty - (item.returnedQty || 0);
                     if (validQty > 0) {
-                        encoder.text(item.name).newline();
+                        let displayName = item.name;
+                        if (item.isRacikanGroup) {
+                            racikanCountBt++;
+                            displayName = `Racikan ${racikanCountBt}`;
+                        }
+                        encoder.text(displayName).newline();
                         const qtyPrice = `${validQty} x ${formatRupiah(item.price).replace('Rp', '')}`;
                         const subTotal = formatRupiah(item.price * validQty).replace('Rp', '');
                         const spaces = 32 - qtyPrice.length - subTotal.length;
@@ -3065,6 +3071,99 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             const [showHelpCancelModal, setShowHelpCancelModal] = useState(false);
             const [priceModal, setPriceModal] = useState({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 }); // Modal pilih harga
             const [editingCartItem, setEditingCartItem] = useState(null); // Track item yang sedang diedit dari cart
+            
+            // --- RACIKAN / RESEP STATE ---
+            const [showRacikanPage, setShowRacikanPage] = useState(false);
+            const [racikanSearch, setRacikanSearch] = useState('');
+            const [editingRacikanCartId, setEditingRacikanCartId] = useState(null);
+            const [racikanModal, setRacikanModal] = useState({ show: false, item: null, qty: 1, selectedUnit: '', selectedPrice: 0, uangR: '' });
+            const [racikanForm, setRacikanForm] = useState({
+                dokter: '', pasien: '', signa: '', catatan: '',
+                budD: '', budM: '', budY: '',
+                uangR: '', items: []
+            });
+            const [racikanItemSearch, setRacikanItemSearch] = useState('');
+            const [showDokterPicker, setShowDokterPicker] = useState(false);
+            const [showPasienPicker, setShowPasienPicker] = useState(false);
+            const [dokterList, setDokterList] = useState([]);
+            const [pasienList, setPasienList] = useState([]);
+            const [dokterSearch, setDokterSearch] = useState('');
+            const [pasienSearch, setPasienSearch] = useState('');
+            const [dokterInput, setDokterInput] = useState('');
+            const [pasienInput, setPasienInput] = useState('');
+            const [pasienAge, setPasienAge] = useState('');
+            const [showAddDokterForm, setShowAddDokterForm] = useState(false);
+            const [showAddPasienForm, setShowAddPasienForm] = useState(false);
+            const [newDokterName, setNewDokterName] = useState('');
+            const [newPasienName, setNewPasienName] = useState('');
+            const [newPasienAge, setNewPasienAge] = useState('');
+            const [savingDokter, setSavingDokter] = useState(false);
+            const [savingPasien, setSavingPasien] = useState(false);
+            const [editingDokter, setEditingDokter] = useState(null);
+            const [editingPasien, setEditingPasien] = useState(null);
+            const [newDokterAlamat, setNewDokterAlamat] = useState('');
+            const [newDokterHp, setNewDokterHp] = useState('');
+            const [newPasienAlamat, setNewPasienAlamat] = useState('');
+            const [newPasienHp, setNewPasienHp] = useState('');
+
+            // Load daftar dokter & pasien dari Firestore
+            useEffect(() => {
+                if (!user) return;
+                const unsubDokter = window.onSnapshot(
+                    window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'dokter_list'),
+                    snap => setDokterList(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+                );
+                const unsubPasien = window.onSnapshot(
+                    window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pasien_list'),
+                    snap => setPasienList(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+                );
+                return () => { unsubDokter(); unsubPasien(); };
+            }, [user]);
+
+            const saveDokter = async (name, editId = null, alamat = '', hp = '') => {
+                if (!name.trim()) return;
+                if (editId) {
+                    await window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'dokter_list', editId), { name: name.trim(), alamat: alamat.trim(), hp: hp.trim() });
+                    showToast('Data dokter diperbarui');
+                } else {
+                    const exists = dokterList.find(d => d.name.toLowerCase() === name.trim().toLowerCase());
+                    if (!exists) {
+                        await window.addDoc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'dokter_list'), { name: name.trim(), alamat: alamat.trim(), hp: hp.trim(), createdAt: window.serverTimestamp() });
+                    }
+                    setRacikanForm(f => ({ ...f, dokter: name.trim() }));
+                    setDokterInput(''); setDokterSearch(''); setShowDokterPicker(false);
+                }
+            };
+
+            const deleteDokter = async (id) => {
+                try {
+                    await window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'dokter_list', id));
+                    showToast('Dokter dihapus');
+                } catch (e) { showToast('Gagal hapus', 'error'); }
+            };
+
+            const savePasien = async (name, age, editId = null, alamat = '', hp = '') => {
+                if (!name.trim()) return;
+                if (editId) {
+                    await window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'pasien_list', editId), { name: name.trim(), age: age || '', alamat: alamat.trim(), hp: hp.trim() });
+                    showToast('Data pasien diperbarui');
+                } else {
+                    const exists = pasienList.find(p => p.name.toLowerCase() === name.trim().toLowerCase());
+                    if (!exists) {
+                        await window.addDoc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pasien_list'), { name: name.trim(), age: age || '', alamat: alamat.trim(), hp: hp.trim(), createdAt: window.serverTimestamp() });
+                    }
+                    const label = age ? `${name.trim()}, ${age}` : name.trim();
+                    setRacikanForm(f => ({ ...f, pasien: label }));
+                    setPasienInput(''); setPasienAge(''); setPasienSearch(''); setShowPasienPicker(false);
+                }
+            };
+
+            const deletePasien = async (id) => {
+                try {
+                    await window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'pasien_list', id));
+                    showToast('Pasien dihapus');
+                } catch (e) { showToast('Gagal hapus', 'error'); }
+            };
 
             useEffect(() => {
                 if (!user) return;
@@ -3379,6 +3478,23 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             };
             
             const editCartItem = (cartItem) => {
+                // Jika ini item racikan gabungan, buka kembali halaman racikan untuk diedit
+                if (cartItem.isRacikanGroup) {
+                    const formData = cartItem.racikanFormData || {
+                        dokter: cartItem.racikanInfo?.dokter || '',
+                        pasien: cartItem.racikanInfo?.pasien || '',
+                        signa: cartItem.racikanInfo?.signa || '',
+                        catatan: cartItem.racikanInfo?.catatan || '',
+                        budD: '', budM: '', budY: '',
+                        uangR: cartItem.racikanInfo?.uangR ? String(cartItem.racikanInfo.uangR) : '',
+                        items: cartItem.racikanItems || []
+                    };
+                    setRacikanForm(formData);
+                    setEditingRacikanCartId(cartItem.racikanCartId);
+                    setShowRacikanPage(true);
+                    return;
+                }
+
                 // Simpan reference ke item yang sedang diedit
                 setEditingCartItem(cartItem);
                 
@@ -3469,6 +3585,101 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 });
                 showToast("Ditambahkan ke keranjang");
             };
+
+            // --- RACIKAN HANDLERS ---
+            const openRacikanItem = (item) => {
+                setRacikanModal({
+                    show: true,
+                    item: item,
+                    qty: 1,
+                    selectedUnit: item.unit || 'Pcs',
+                    selectedPrice: item.price || 0,
+                    uangR: ''
+                });
+            };
+
+            const addRacikanItemToForm = () => {
+                const { item, qty, selectedUnit, selectedPrice } = racikanModal;
+                const finalQty = parseInt(qty) || 1;
+                if (!item || finalQty < 1) { showToast("Lengkapi data!", "error"); return; }
+                setRacikanForm(f => {
+                    const existing = f.items.find(i => i.id === item.id && i.selectedUnit === selectedUnit && i.price === selectedPrice);
+                    if (existing) {
+                        return { ...f, items: f.items.map(i => i.id === item.id && i.selectedUnit === selectedUnit && i.price === selectedPrice
+                            ? { ...i, qty: i.qty + finalQty } : i) };
+                    }
+                    return { ...f, items: [...f.items, { ...item, qty: finalQty, selectedUnit, price: selectedPrice }] };
+                });
+                setRacikanModal({ show: false, item: null, qty: 1, selectedUnit: '', selectedPrice: 0, uangR: '' });
+                setRacikanItemSearch('');
+                showToast(`${item.name} ditambahkan`);
+            };
+
+            const addRacikanToCart = () => {
+                const { item, qty, selectedUnit, selectedPrice, uangR } = racikanModal;
+                const finalQty = parseInt(qty) || 1;
+                if (!item || finalQty < 1) { showToast("Lengkapi data!", "error"); return; }
+                setCart(prev => {
+                    const existing = prev.find(c => c.id === item.id && c.selectedUnit === selectedUnit && c.price === selectedPrice && c.isRacikan);
+                    if (existing) {
+                        return prev.map(c => (c.id === item.id && c.selectedUnit === selectedUnit && c.price === selectedPrice && c.isRacikan)
+                            ? { ...c, cartQty: c.cartQty + finalQty } : c);
+                    }
+                    return [...prev, { ...item, cartQty: finalQty, price: selectedPrice, selectedUnit, originalPrice: selectedPrice, discount: null, isRacikan: true, uangR: uangR ? parseInt(uangR) || 0 : 0 }];
+                });
+                setRacikanModal({ show: false, item: null, qty: 1, selectedUnit: '', selectedPrice: 0, uangR: '' });
+                showToast(`${item.name} ditambahkan ke keranjang`);
+            };
+
+            const simpanRacikan = () => {
+                if (racikanForm.items.length === 0) { showToast("Belum ada barang racikan!", "error"); return; }
+                const subtotal = racikanForm.items.reduce((s, i) => s + (i.price * i.qty), 0);
+                const uangR = parseInt(racikanForm.uangR) || 0;
+                const totalPrice = subtotal + uangR;
+                // Gabung semua nama bahan jadi satu label
+                const combinedName = racikanForm.items.map(i => i.name).join(' + ');
+                const racikanLabel = racikanForm.pasien ? `${combinedName} (Racikan - ${racikanForm.pasien})` : `${combinedName} (Racikan)`;
+                const itemCount = racikanForm.items.length;
+
+                if (editingRacikanCartId) {
+                    // Update item racikan yang sudah ada di cart
+                    setCart(prev => prev.map(c =>
+                        c.racikanCartId === editingRacikanCartId
+                        ? { ...c, name: racikanLabel, price: totalPrice, originalPrice: totalPrice,
+                            racikanItems: [...racikanForm.items],
+                            racikanFormData: { ...racikanForm },
+                            racikanInfo: { dokter: racikanForm.dokter, pasien: racikanForm.pasien, signa: racikanForm.signa, catatan: racikanForm.catatan, uangR } }
+                        : c
+                    ));
+                    setEditingRacikanCartId(null);
+                    showToast(`Racikan diperbarui (${itemCount} barang) ✅`);
+                } else {
+                    // Tambahkan satu item gabungan racikan ke cart
+                    const racikanCartId = `racikan_${Date.now()}`;
+                    setCart(prev => [...prev, {
+                        id: racikanCartId,
+                        racikanCartId,
+                        name: racikanLabel,
+                        cartQty: 1,
+                        price: totalPrice,
+                        originalPrice: totalPrice,
+                        selectedUnit: 'racikan',
+                        isRacikan: true,
+                        isRacikanGroup: true,
+                        racikanItems: [...racikanForm.items],
+                        racikanFormData: { ...racikanForm },
+                        racikanInfo: { dokter: racikanForm.dokter, pasien: racikanForm.pasien, signa: racikanForm.signa, catatan: racikanForm.catatan, uangR },
+                        discount: null,
+                        unit: 'racikan'
+                    }]);
+                    showToast(`Racikan (${itemCount} barang) ditambahkan ke keranjang ✅`);
+                }
+                // Reset form
+                setRacikanForm({ dokter: '', pasien: '', signa: '', catatan: '', budD: '', budM: '', budY: '', uangR: '', items: [] });
+                setRacikanItemSearch('');
+                setShowRacikanPage(false);
+            };
+
             const removeFromCart = (id, selectedUnit = null, price = null) => {
                 setCart(prev => prev.filter(c => {
                     if (selectedUnit && price !== null) {
@@ -3486,7 +3697,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                        (c.id === id);
                     if (matchesItem) { 
                         const newQty = c.cartQty + delta; 
-                        if (newQty > c.qty) { showToast("Stok mentok!", "error"); return c; } 
+                        if (!c.isRacikanGroup && newQty > c.qty) { showToast("Stok mentok!", "error"); return c; } 
                         if (newQty < 1) return c; 
                         return { ...c, cartQty: newQty }; 
                     }
@@ -3593,10 +3804,19 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     const batch = window.writeBatch(window.db);
                     
                     // UPDATE STOCK SPECIFIC TO CURRENT STORE
-                    cart.forEach(item => { 
-                        const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id);
+                    cart.forEach(item => {
                         const stockField = `stocks.${currentProfile.id}`;
-                        batch.update(docRef, { [stockField]: window.increment(-item.cartQty), updatedAt: window.serverTimestamp() }); 
+                        if (item.isRacikanGroup) {
+                            // Untuk racikan gabungan: update stok tiap bahan satu per satu
+                            (item.racikanItems || []).forEach(ri => {
+                                const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', ri.id);
+                                batch.update(docRef, { [stockField]: window.increment(-ri.qty), updatedAt: window.serverTimestamp() });
+                            });
+                        } else {
+                            // Item biasa
+                            const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id);
+                            batch.update(docRef, { [stockField]: window.increment(-item.cartQty), updatedAt: window.serverTimestamp() });
+                        }
                     });
 
                     const transactionRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions');
@@ -3985,14 +4205,14 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                             <span className="text-[10px] text-slate-400">• {currentProfile.name}</span>
                         </div>
                         
-                        <div className="flex items-center gap-3 mb-4"><button onClick={handleBack} className="w-10 h-10 rounded-xl bg-white text-slate-400 hover:text-sky-600 hover:border-sky-300 border border-slate-200 flex items-center justify-center shadow-sm transition-colors" title="Kembali & Simpan Sementara"><Icon name="arrow-left" /></button><div className="relative group flex-1"><input autoFocus type="text" placeholder="Ketik nama barang disini..." className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-white border border-slate-200 shadow-soft focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition-all font-bold text-lg text-slate-700 placeholder:font-normal placeholder:text-slate-400" value={search} onChange={e => setSearch(e.target.value)} /><Icon name="magnifying-glass" className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl group-focus-within:text-sky-500" /></div></div>
+                        <div className="flex items-center gap-3 mb-4"><button onClick={handleBack} className="w-10 h-10 rounded-xl bg-white text-slate-400 hover:text-sky-600 hover:border-sky-300 border border-slate-200 flex items-center justify-center shadow-sm transition-colors" title="Kembali & Simpan Sementara"><Icon name="arrow-left" /></button><div className="relative group flex-1"><input autoFocus type="text" placeholder="Ketik nama barang disini..." className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-white border border-slate-200 shadow-soft focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition-all font-bold text-lg text-slate-700 placeholder:font-normal placeholder:text-slate-400" value={search} onChange={e => setSearch(e.target.value)} /><Icon name="magnifying-glass" className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl group-focus-within:text-sky-500" /></div><button onClick={() => { setShowRacikanPage(true); setRacikanSearch(''); }} className="flex-shrink-0 px-4 py-3.5 rounded-2xl bg-teal-600 hover:bg-teal-700 text-white font-black text-sm shadow-lg active:scale-95 transition-all flex items-center gap-1.5" title="Pelayanan Racikan / Resep"><span className="text-base leading-none">R/</span></button></div>
                         <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 pb-2">
                             {search === '' ? (<div className="h-full flex flex-col items-center justify-center text-slate-400 opacity-60"><Icon name="magnifying-glass" className="text-6xl mb-4 text-slate-300" /><p className="font-semibold text-lg">Mulai ketik untuk mencari barang...</p><p className="text-xs mt-1">Stok diambil dari: <b>{currentProfile.name}</b></p></div>) : (<div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">{filteredItems.map(item => { const inCart = cart.find(c => c.id === item.id); const currentStock = safeNumber(item.qty) - (inCart ? inCart.cartQty : 0); const isOOS = currentStock <= 0; return (<button key={item.id} onClick={() => addToCart(item)} disabled={isOOS} className={`text-left p-3 rounded-xl border transition-all relative overflow-hidden group ${isOOS ? 'bg-slate-100 border-slate-200 opacity-70' : 'bg-white border-slate-200 hover:border-sky-300 hover:shadow-md'}`}>{isNewItem(item.createdAt) && !isOOS && <span className="absolute top-0 right-0 bg-rose-500 text-white text-[8px] font-bold px-1.5 rounded-bl-lg">NEW</span>}<h4 className="font-bold text-slate-800 text-xs line-clamp-2 h-8 leading-snug">{item.name}</h4><div className="mt-2 flex justify-between items-end"><div><p className="text-[10px] text-slate-500 font-medium">{item.unit}</p><p className="text-xs font-bold text-sky-600">{formatRupiah(item.price)}</p></div><div className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${isOOS ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-600'}`}>Stok: {currentStock}</div></div>{!isOOS && <div className="absolute inset-0 bg-sky-500/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><Icon name="plus" className="text-sky-600 text-xl" /></div>}</button>)})}{filteredItems.length === 0 && <div className="col-span-full py-10 text-center text-slate-400 text-sm">Barang tidak ditemukan</div>}</div>)}
                         </div>
                     </div>
                     <div className="w-full md:w-80 lg:w-96 flex flex-col bg-white rounded-3xl shadow-soft border border-slate-100 h-fit md:h-full max-h-[calc(100vh-100px)]">
                         <div className="p-4 border-b border-slate-100 bg-slate-50/50 rounded-t-3xl flex justify-between items-center"><h3 className="font-bold text-slate-800 flex items-center gap-2"><Icon name="cart-shopping" className="text-sky-600" /> Keranjang</h3><span className="text-xs font-bold bg-sky-100 text-sky-700 px-2 py-1 rounded-full">{cart.length} Item</span></div>
-                        <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar min-h-[200px]">{cart.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60"><Icon name="basket-shopping" className="text-4xl mb-2" /><p className="text-xs font-medium">Keranjang Kosong</p></div>) : (cart.map(item => (<div key={item.id + (item.selectedUnit || '') + (item.price || '')} onClick={() => editCartItem(item)} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex gap-3 group relative cursor-pointer hover:bg-sky-50 hover:border-sky-300 transition-all"><div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity"><Icon name="pen-to-square" className="text-[10px] text-sky-500" /></div><div className="flex-1 min-w-0"><h4 className="text-xs font-bold text-slate-700 truncate">{item.name}</h4><p className="text-[10px] text-slate-500">{formatRupiah(item.originalPrice || item.price)} {item.selectedUnit ? `per ${item.selectedUnit}` : ''} x {item.cartQty}</p>{item.discount && <p className="text-[9px] text-red-500 font-bold">Diskon: {item.discount.type === '%' ? `${item.discount.value}%` : formatRupiah(item.discount.value)}</p>}</div><div className="flex flex-col items-end gap-1"><p className="text-xs font-bold text-slate-800">{formatRupiah(item.price * item.cartQty)}</p><div className="flex items-center gap-1 bg-white rounded-lg shadow-sm border border-slate-200 p-0.5" onClick={e => e.stopPropagation()}><button onClick={() => updateQty(item.id, -1, item.selectedUnit, item.price)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="minus" /></button><span className="text-xs font-bold w-4 text-center">{item.cartQty}</span><button onClick={() => updateQty(item.id, 1, item.selectedUnit, item.price)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="plus" /></button></div></div></div>)))}</div>
+                        <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar min-h-[200px]">{cart.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60"><Icon name="basket-shopping" className="text-4xl mb-2" /><p className="text-xs font-medium">Keranjang Kosong</p></div>) : (cart.map(item => (<div key={item.id + (item.selectedUnit || '') + (item.price || '')} onClick={() => editCartItem(item)} className={`p-3 rounded-xl border flex gap-3 group relative cursor-pointer transition-all ${item.isRacikan ? 'bg-teal-50 border-teal-100 hover:bg-teal-100 hover:border-teal-300' : 'bg-slate-50 border-slate-100 hover:bg-sky-50 hover:border-sky-300'}`}><div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity"><Icon name="pen-to-square" className="text-[10px] text-sky-500" /></div><div className="flex-1 min-w-0"><div className="flex items-center gap-1.5 flex-wrap"><h4 className={"text-xs font-bold text-slate-700 " + (item.isRacikanGroup ? "line-clamp-2" : "truncate")}>{item.name}</h4>{item.isRacikan && <span className="text-[8px] font-black bg-teal-600 text-white px-1 py-0.5 rounded flex-shrink-0">R/</span>}</div>{item.isRacikanGroup ? (<p className="text-[9px] text-teal-600 font-bold mt-0.5"><Icon name="pen-to-square" className="text-[9px] mr-0.5" />Klik untuk edit racikan</p>) : (<p className="text-[10px] text-slate-500">{formatRupiah(item.originalPrice || item.price)} {item.selectedUnit ? `per ${item.selectedUnit}` : ''} x {item.cartQty}</p>)}{item.discount && <p className="text-[9px] text-red-500 font-bold">Diskon: {item.discount.type === '%' ? `${item.discount.value}%` : formatRupiah(item.discount.value)}</p>}</div><div className="flex flex-col items-end gap-1"><p className="text-xs font-bold text-slate-800">{formatRupiah(item.price * item.cartQty)}</p><div className="flex items-center gap-1 bg-white rounded-lg shadow-sm border border-slate-200 p-0.5" onClick={e => e.stopPropagation()}><button onClick={() => updateQty(item.id, -1, item.selectedUnit, item.price)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="minus" /></button><span className="text-xs font-bold w-4 text-center">{item.cartQty}</span><button onClick={() => updateQty(item.id, 1, item.selectedUnit, item.price)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="plus" /></button></div></div></div>)))}</div>
                         <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-3xl">
                             <div className="flex justify-between items-end mb-4"><span className="text-xs text-slate-500 font-medium">Total Tagihan</span><span className="text-xl font-black text-slate-800">{formatRupiah(grandTotal)}</span></div>
                             <button onClick={() => { if(readOnly){showToast('Akses terbatas — hubungi owner','error');return;} setPaymentAmount(''); setPaymentMethod(''); setCheckoutModal(true); }} disabled={cart.length === 0} className="w-full py-3.5 bg-gradient-to-r from-sky-600 to-sky-500 text-white rounded-xl font-bold shadow-lg shadow-sky-200 active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-2"><Icon name="money-bill-wave" /> Bayar Sekarang</button>
@@ -4094,6 +4314,585 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         ) : null}
                     </div> ) : ( <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 relative flex flex-col items-center text-center pop-in"> <div className="w-24 h-24 relative mb-4"><svg className="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52"><circle className="checkmark__circle" cx="26" cy="26" r="25" fill="none"/><path className="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/></svg></div> <h2 className="text-2xl font-black text-slate-800 mb-1">Transaksi Selesai</h2><p className="text-slate-500 text-sm mb-2">{receiptData.paymentMethod === 'qris' ? '💳 QRIS' : receiptData.paymentMethod === 'transfer' ? '🏦 Transfer Bank' : '💵 Tunai'}</p><p className="text-slate-500 text-sm mb-8">{(receiptData.paymentMethod === 'qris' || receiptData.paymentMethod === 'transfer') ? 'Pembayaran non-tunai' : <>Kembalian: <span className="font-bold text-slate-800">{formatRupiah(receiptData.change)}</span></>}</p> <div className="w-full space-y-3"><button onClick={handlePrintAction} className="w-full py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><Icon name="print" /> Cetak Bluetooth</button><button onClick={handleWA} className="w-full py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2"><Icon name="image" /> Kirim Gambar Struk (WA)</button><button onClick={handleCloseSuccess} className="w-full py-3 rounded-xl border-2 border-slate-100 text-slate-600 font-bold hover:bg-slate-50 active:scale-95 transition-all">Selesaikan Tanpa Struk</button></div> </div> )} </div> )}
                     <ConfirmModal isOpen={cancelModal} title="Batalkan Transaksi?" message="Keranjang akan dikosongkan dan semua item akan dihapus dari sesi ini." onConfirm={confirmCancel} onCancel={() => setCancelModal(false)} confirmText="Ya, Batalkan" confirmColor="red" />
+                    
+                    {/* ===== RACIKAN PAGE OVERLAY ===== */}
+                    {showRacikanPage && (() => {
+                        const racikanFuse = new Fuse(items, { keys: ['name', 'rack'], threshold: 0.3 });
+                        const racikanSearchResults = racikanItemSearch ? racikanFuse.search(racikanItemSearch).map(r => r.item).slice(0, 20) : [];
+                        const racikanSubtotal = racikanForm.items.reduce((s, i) => s + (i.price * i.qty), 0);
+                        const uangRVal = parseInt(racikanForm.uangR) || 0;
+                        const racikanTotal = racikanSubtotal + uangRVal;
+                        return (
+                            <div className="fixed inset-0 z-[90] bg-white flex flex-col fade-in">
+                                {/* Header */}
+                                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white" style={{paddingTop: 'calc(env(safe-area-inset-top, 0px) + 68px)'}}>
+                                    <button onClick={() => { setShowRacikanPage(false); setRacikanItemSearch(''); setEditingRacikanCartId(null); }} className="w-8 h-8 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                        <Icon name="xmark" className="text-xl" />
+                                    </button>
+                                    <span className="text-sm font-bold text-slate-600">#{new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'2-digit',year:'2-digit'}).replace(/\//g,'')+Math.floor(Math.random()*9000+1000)}</span>
+                                    <button onClick={simpanRacikan} className="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm rounded-lg shadow active:scale-95 transition-all">
+                                        Simpan
+                                    </button>
+                                </div>
+
+                                {/* Scrollable body */}
+                                <div className="flex-1 overflow-y-auto">
+                                    {/* Title */}
+                                    <div className="px-5 pt-10 pb-3">
+                                        <h1 className="text-2xl font-black text-slate-800">{editingRacikanCartId ? 'Edit Racikan' : `Racikan ${cart.filter(c=>c.isRacikanGroup).length + 1}`}</h1>
+                                    </div>
+
+                                    {/* Info R/ */}
+                                    <div className="px-5 pb-2">
+                                        <h2 className="text-base font-bold text-slate-800 mb-3">Info R/</h2>
+                                        <div className="divide-y divide-slate-100 border-t border-b border-slate-100">
+                                            <button onClick={() => { setDokterSearch(''); setDokterInput(''); setShowDokterPicker(true); }} className="w-full flex items-center justify-between py-3.5 hover:bg-teal-50 rounded-lg transition-colors px-1 -mx-1">
+                                                <span className="text-sm font-medium text-slate-700">Dokter</span>
+                                                <div className="flex items-center gap-1">
+                                                    {racikanForm.dokter
+                                                        ? <span className="text-sm font-bold text-teal-600">{racikanForm.dokter}</span>
+                                                        : <span className="text-sm text-slate-400">Pilih</span>
+                                                    }
+                                                    <Icon name="chevron-right" className="text-teal-500 text-sm" />
+                                                </div>
+                                            </button>
+                                            <button onClick={() => { setPasienSearch(''); setPasienInput(''); setPasienAge(''); setShowPasienPicker(true); }} className="w-full flex items-center justify-between py-3.5 hover:bg-teal-50 rounded-lg transition-colors px-1 -mx-1">
+                                                <span className="text-sm font-medium text-slate-700">Pasien</span>
+                                                <div className="flex items-center gap-1">
+                                                    {racikanForm.pasien
+                                                        ? <span className="text-sm font-bold text-teal-600">{racikanForm.pasien}</span>
+                                                        : <span className="text-sm text-slate-400">Pilih</span>
+                                                    }
+                                                    <Icon name="chevron-right" className="text-teal-500 text-sm" />
+                                                </div>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Daftar Barang */}
+                                    <div className="px-5 pt-5 pb-2">
+                                        <h2 className="text-base font-bold text-slate-800 mb-3">Daftar Barang</h2>
+
+                                        {/* Search */}
+                                        <div className="relative mb-3">
+                                            <Icon name="magnifying-glass" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
+                                            <input
+                                                type="text"
+                                                placeholder="Cari barang"
+                                                value={racikanItemSearch}
+                                                onChange={e => setRacikanItemSearch(e.target.value)}
+                                                className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-slate-300 focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none text-sm text-slate-700 placeholder:text-slate-400"
+                                            />
+                                            {racikanItemSearch && <button onClick={() => setRacikanItemSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"><Icon name="xmark" /></button>}
+                                        </div>
+
+                                        {/* Search results dropdown */}
+                                        {racikanItemSearch && (
+                                            <div className="mb-3 border border-slate-200 rounded-xl overflow-hidden shadow-lg">
+                                                {racikanSearchResults.length === 0
+                                                    ? <div className="p-4 text-center text-sm text-slate-400">Barang tidak ditemukan</div>
+                                                    : racikanSearchResults.map(item => (
+                                                        <button key={item.id} onClick={() => openRacikanItem(item)}
+                                                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-teal-50 border-b border-slate-100 last:border-0 transition-colors text-left">
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="font-bold text-sm text-slate-800 truncate">{item.name}</p>
+                                                                <p className="text-[11px] text-slate-400">Stok {item.qty} {item.unit} · {formatRupiah(item.price)}</p>
+                                                            </div>
+                                                            <span className="text-xs font-bold text-teal-600 flex-shrink-0">+ Tambah</span>
+                                                        </button>
+                                                    ))
+                                                }
+                                            </div>
+                                        )}
+
+                                        {/* Table header */}
+                                        <div className="flex justify-between px-1 mb-1">
+                                            <span className="text-xs font-bold text-slate-700">Barang</span>
+                                            <span className="text-xs font-bold text-slate-700">Subtotal</span>
+                                        </div>
+                                        <div className="border border-slate-200 rounded-xl overflow-hidden">
+                                            {racikanForm.items.length === 0 ? (
+                                                <div className="py-10 px-4 flex flex-col items-center justify-center gap-2 text-slate-300">
+                                                    <div className="flex gap-2 text-4xl opacity-40">
+                                                        <Icon name="circle-half-stroke" />
+                                                        <Icon name="leaf" />
+                                                    </div>
+                                                    <p className="text-sm font-bold text-slate-400 mt-1">Belum ada barang pada resep ini</p>
+                                                    <button onClick={() => { const el = document.querySelector('.racikan-search-input'); if(el) el.focus(); setRacikanItemSearch(' '); setTimeout(() => setRacikanItemSearch(''), 10); }}
+                                                        className="mt-2 px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm rounded-lg active:scale-95 transition-all flex items-center gap-2">
+                                                        <Icon name="plus" /> Barang
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="divide-y divide-slate-100">
+                                                    {racikanForm.items.map((ri, idx) => (
+                                                        <div key={ri.id + idx} className="flex items-center gap-2 px-3 py-2.5">
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="font-bold text-sm text-slate-800 truncate">{ri.name}</p>
+                                                                <p className="text-[11px] text-slate-400">{formatRupiah(ri.price)} × {ri.qty} {ri.selectedUnit}</p>
+                                                            </div>
+                                                            <span className="text-sm font-bold text-slate-700 flex-shrink-0">{formatRupiah(ri.price * ri.qty)}</span>
+                                                            <button onClick={() => setRacikanForm(f => ({ ...f, items: f.items.filter((_,i) => i !== idx) }))}
+                                                                className="w-6 h-6 flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 rounded flex-shrink-0">
+                                                                <Icon name="xmark" className="text-xs" />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                    <div className="px-3 py-2">
+                                                        <button onClick={() => setRacikanItemSearch(' ')}
+                                                            className="w-full py-2 border border-dashed border-teal-300 text-teal-600 font-bold text-sm rounded-lg hover:bg-teal-50 transition-colors flex items-center justify-center gap-1">
+                                                            <Icon name="plus" /> Barang
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Signa */}
+                                    <div className="px-5 pt-4 pb-2">
+                                        <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+                                            <label className="text-sm font-medium text-slate-700 w-20 flex-shrink-0">Signa</label>
+                                            <input type="text" value={racikanForm.signa}
+                                                onChange={e => setRacikanForm(f => ({...f, signa: e.target.value}))}
+                                                className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-200 text-slate-800 font-medium"
+                                                placeholder=""
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Catatan */}
+                                    <div className="px-5 pt-2 pb-2">
+                                        <div className="flex gap-3 border-b border-slate-100 pb-3">
+                                            <label className="text-sm font-medium text-slate-700 w-20 flex-shrink-0 pt-2">Catatan</label>
+                                            <div className="flex-1">
+                                                <textarea rows={3} value={racikanForm.catatan}
+                                                    onChange={e => setRacikanForm(f => ({...f, catatan: e.target.value.slice(0,100)}))}
+                                                    placeholder="Contoh: obat luar, dikocok dahulu sebelum diminum, dll"
+                                                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-200 text-slate-800 resize-none placeholder:text-slate-400"
+                                                />
+                                                <div className="flex items-center gap-1 mt-1">
+                                                    <Icon name="circle-info" className="text-teal-500 text-xs" />
+                                                    <span className="text-[11px] text-slate-400 flex-1">Keterangan dipakai dalam etiket</span>
+                                                    <span className="text-[11px] text-slate-400">{racikanForm.catatan.length}/100</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* BUD */}
+                                    <div className="px-5 pt-2 pb-2">
+                                        <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+                                            <label className="text-sm font-medium text-slate-700 w-20 flex-shrink-0">BUD</label>
+                                            <div className="flex gap-2 flex-1">
+                                                <input type="text" inputMode="numeric" placeholder="DD" maxLength={2}
+                                                    value={racikanForm.budD} onChange={e => setRacikanForm(f => ({...f, budD: e.target.value.replace(/[^0-9]/g,'')}))}
+                                                    className="w-14 border border-slate-200 rounded-lg px-2 py-2 text-sm outline-none focus:border-teal-500 text-center font-medium text-slate-700"
+                                                />
+                                                <input type="text" inputMode="numeric" placeholder="MM" maxLength={2}
+                                                    value={racikanForm.budM} onChange={e => setRacikanForm(f => ({...f, budM: e.target.value.replace(/[^0-9]/g,'')}))}
+                                                    className="w-14 border border-slate-200 rounded-lg px-2 py-2 text-sm outline-none focus:border-teal-500 text-center font-medium text-slate-700"
+                                                />
+                                                <input type="text" inputMode="numeric" placeholder="YYYY" maxLength={4}
+                                                    value={racikanForm.budY} onChange={e => setRacikanForm(f => ({...f, budY: e.target.value.replace(/[^0-9]/g,'')}))}
+                                                    className="w-20 border border-slate-200 rounded-lg px-2 py-2 text-sm outline-none focus:border-teal-500 text-center font-medium text-slate-700"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Atur pengingat */}
+                                    <div className="px-5 pt-2 pb-2">
+                                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                                            <span className="text-sm font-medium text-slate-700">Atur pengingat obat habis</span>
+                                            <button className="flex items-center gap-1 text-teal-600 font-bold text-sm">
+                                                Atur <Icon name="calendar-days" className="text-sm" />
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Subtotal & Uang R/ & Total */}
+                                    <div className="px-5 pt-2 pb-4 divide-y divide-slate-100">
+                                        <div className="flex items-center justify-between py-3">
+                                            <span className="text-sm font-medium text-slate-700">Subtotal</span>
+                                            <span className="text-sm font-bold text-slate-800">{racikanSubtotal > 0 ? formatRupiah(racikanSubtotal) : '0'}</span>
+                                        </div>
+                                        <div className="flex items-center gap-3 py-3">
+                                            <span className="text-sm font-medium text-slate-700 w-20 flex-shrink-0">Uang R/</span>
+                                            <div className="flex gap-2 flex-1 items-center">
+                                                <div className="flex items-center gap-1 border border-slate-200 rounded-lg px-3 py-2 bg-white">
+                                                    <span className="text-sm font-bold text-slate-600">Rp</span>
+                                                    <Icon name="chevron-down" className="text-slate-400 text-xs" />
+                                                </div>
+                                                <input type="text" inputMode="numeric" value={racikanForm.uangR}
+                                                    onChange={e => setRacikanForm(f => ({...f, uangR: e.target.value.replace(/[^0-9]/g,'')}))}
+                                                    placeholder="0"
+                                                    className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-500 font-bold text-slate-800 text-right"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between py-3">
+                                            <span className="text-sm font-bold text-slate-800">Total</span>
+                                            <span className="text-base font-black text-slate-800">{racikanTotal > 0 ? formatRupiah(racikanTotal) : '0'}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Bottom: Hapus */}
+                                <div className="px-5 py-4 border-t border-slate-100">
+                                    <button onClick={() => {
+                                        if (editingRacikanCartId) {
+                                            // Hapus racikan dari keranjang
+                                            setCart(prev => prev.filter(c => c.racikanCartId !== editingRacikanCartId));
+                                            setEditingRacikanCartId(null);
+                                            showToast("Racikan dihapus dari keranjang", "success");
+                                        }
+                                        setRacikanForm({ dokter:'', pasien:'', signa:'', catatan:'', budD:'', budM:'', budY:'', uangR:'', items:[] });
+                                        setRacikanItemSearch('');
+                                        setShowRacikanPage(false);
+                                    }}
+                                        className="flex items-center gap-2 text-red-500 font-bold text-sm hover:text-red-700 transition-colors">
+                                        <Icon name="trash" /> {editingRacikanCartId ? 'Hapus Racikan dari Keranjang' : 'Bersihkan Form'}
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {/* ===== DOKTER PICKER ===== */}
+                    {showDokterPicker && (
+                        <div className="fixed inset-0 z-[98] bg-white flex flex-col fade-in">
+                            {/* ---- FORM TAMBAH / EDIT DOKTER ---- */}
+                            {showAddDokterForm ? (
+                                <>
+                                    <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 bg-white" style={{paddingTop: 'calc(env(safe-area-inset-top, 0px) + 68px)'}}>
+                                        <button onClick={() => { setShowAddDokterForm(false); setNewDokterName(''); setNewDokterAlamat(''); setNewDokterHp(''); setEditingDokter(null); }} className="w-9 h-9 flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
+                                            <Icon name="arrow-left" className="text-xl" />
+                                        </button>
+                                        <h2 className="font-black text-slate-800 text-lg flex-1">{editingDokter ? 'Edit Dokter' : 'Tambah Dokter'}</h2>
+                                        {editingDokter && (
+                                            <button onClick={async () => { if (window.confirm('Hapus dokter ini?')) { await deleteDokter(editingDokter.id); setShowAddDokterForm(false); setEditingDokter(null); setNewDokterName(''); } }}
+                                                className="w-9 h-9 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                                <Icon name="trash" />
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto px-5 pt-6 pb-8 space-y-5">
+                                        <div>
+                                            <label className="block text-sm font-bold text-slate-700 mb-2">Nama Dokter <span className="text-red-500">*</span></label>
+                                            <input autoFocus type="text" placeholder="cth: dr. Budi Santoso, Sp.PD" value={newDokterName}
+                                                onChange={e => setNewDokterName(e.target.value)}
+                                                className="w-full border-2 border-slate-200 rounded-2xl px-4 py-3.5 text-sm font-medium outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all placeholder:text-slate-400" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-slate-700 mb-2">No. HP / Telepon</label>
+                                            <div className="flex items-center gap-2 border-2 border-slate-200 rounded-2xl px-4 py-3.5 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-100 transition-all">
+                                                <Icon name="phone" className="text-slate-400 text-sm flex-shrink-0" />
+                                                <input type="tel" inputMode="numeric" placeholder="cth: 0812-3456-7890" value={newDokterHp}
+                                                    onChange={e => setNewDokterHp(e.target.value)}
+                                                    className="flex-1 outline-none text-sm font-medium text-slate-700 placeholder:text-slate-400 bg-transparent" />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-slate-700 mb-2">Alamat Praktik</label>
+                                            <textarea rows={3} placeholder="cth: Jl. Mawar No.10, Jakarta Selatan" value={newDokterAlamat}
+                                                onChange={e => setNewDokterAlamat(e.target.value)}
+                                                className="w-full border-2 border-slate-200 rounded-2xl px-4 py-3.5 text-sm font-medium outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all placeholder:text-slate-400 resize-none" />
+                                        </div>
+                                        <button
+                                            disabled={!newDokterName.trim() || savingDokter}
+                                            onClick={async () => {
+                                                setSavingDokter(true);
+                                                await saveDokter(newDokterName, editingDokter?.id || null, newDokterAlamat, newDokterHp);
+                                                setSavingDokter(false);
+                                                setShowAddDokterForm(false);
+                                                setNewDokterName(''); setNewDokterAlamat(''); setNewDokterHp('');
+                                                setEditingDokter(null);
+                                            }}
+                                            className="w-full py-4 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-black text-base rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">
+                                            {savingDokter ? <div className="typing-dot bg-white"></div> : <><Icon name="floppy-disk" /> {editingDokter ? 'Simpan Perubahan' : 'Simpan Dokter'}</>}
+                                        </button>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    {/* ---- LIST DOKTER ---- */}
+                                    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white" style={{paddingTop: 'calc(env(safe-area-inset-top, 0px) + 68px)'}}>
+                                        <button onClick={() => setShowDokterPicker(false)} className="w-9 h-9 flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
+                                            <Icon name="arrow-left" className="text-xl" />
+                                        </button>
+                                        <h2 className="font-black text-slate-800 text-lg">Pilih dokter</h2>
+                                        <button onClick={() => { setNewDokterName(dokterSearch); setShowAddDokterForm(true); }}
+                                            className="flex items-center gap-1.5 border border-teal-400 text-teal-600 font-bold text-sm px-3 py-1.5 rounded-xl hover:bg-teal-50 transition-colors">
+                                            <Icon name="plus" /> Dokter
+                                        </button>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto px-4 pt-4 pb-6">
+                                        <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-2xl px-3 py-2.5 mb-4 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-100">
+                                            <Icon name="magnifying-glass" className="text-teal-500 text-sm flex-shrink-0" />
+                                            <input autoFocus type="text" placeholder="Cari dokter..." value={dokterSearch}
+                                                onChange={e => setDokterSearch(e.target.value)}
+                                                className="flex-1 outline-none text-sm font-medium text-slate-700 placeholder:text-slate-400 bg-transparent" />
+                                            {dokterSearch && <button onClick={() => setDokterSearch('')} className="text-slate-300 hover:text-slate-500"><Icon name="xmark" /></button>}
+                                        </div>
+                                        <div className="mb-2 flex items-center justify-between">
+                                            <span className="text-sm font-bold text-slate-700">Dokter</span>
+                                            <span className="text-xs text-slate-400">{dokterList.length} data</span>
+                                        </div>
+                                        {(() => {
+                                            const filtered = dokterSearch ? dokterList.filter(d => d.name.toLowerCase().includes(dokterSearch.toLowerCase())) : dokterList;
+                                            if (filtered.length === 0) return (
+                                                <div className="border border-slate-200 rounded-2xl p-10 flex flex-col items-center gap-3 mt-2">
+                                                    <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center">
+                                                        <Icon name="user-doctor" className="text-2xl text-slate-400" />
+                                                    </div>
+                                                    <div className="text-center">
+                                                        <p className="font-bold text-slate-600 text-sm">Tidak ada data dokter</p>
+                                                        <p className="text-xs text-slate-400 mt-1">Ganti kata pencarian atau tambahkan dokter terlebih dahulu.</p>
+                                                    </div>
+                                                    <button onClick={() => { setNewDokterName(dokterSearch); setShowAddDokterForm(true); }}
+                                                        className="mt-1 flex items-center gap-2 border border-teal-400 text-teal-600 font-bold text-sm px-4 py-2 rounded-xl hover:bg-teal-50 transition-colors">
+                                                        <Icon name="plus" /> Tambah Dokter
+                                                    </button>
+                                                </div>
+                                            );
+                                            return (
+                                                <div className="divide-y divide-slate-100 border border-slate-100 rounded-2xl overflow-hidden">
+                                                    {filtered.map(d => (
+                                                        <div key={d.id} className="flex items-center justify-between px-4 py-3.5 hover:bg-teal-50 transition-colors group">
+                                                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                                <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center flex-shrink-0">
+                                                                    <Icon name="user-doctor" className="text-teal-600 text-sm" />
+                                                                </div>
+                                                                <div className="min-w-0">
+                                                                    <p className="font-bold text-slate-800 text-sm truncate">{d.name}</p>
+                                                                    {(d.hp || d.alamat) && <p className="text-xs text-slate-400 truncate mt-0.5">{d.hp ? d.hp : ''}{d.hp && d.alamat ? ' · ' : ''}{d.alamat ? d.alamat : ''}</p>}
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 flex-shrink-0">
+                                                                <button onClick={() => { setEditingDokter(d); setNewDokterName(d.name); setNewDokterAlamat(d.alamat||''); setNewDokterHp(d.hp||''); setShowAddDokterForm(true); }}
+                                                                    className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors" title="Edit">
+                                                                    <Icon name="pen-to-square" className="text-sm" />
+                                                                </button>
+                                                                <button onClick={() => { setRacikanForm(f => ({...f, dokter: d.name})); setShowDokterPicker(false); setDokterSearch(''); }}
+                                                                    className="px-4 py-1.5 border border-teal-400 text-teal-600 font-bold text-sm rounded-xl hover:bg-teal-50 active:scale-95 transition-all">Pilih</button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            );
+                                        })()}
+                                        <div className="mt-6 flex items-center gap-3">
+                                            <span className="text-sm text-slate-500 font-medium">Tidak ketemu?</span>
+                                            <button onClick={() => { setNewDokterName(dokterSearch); setShowAddDokterForm(true); }}
+                                                className="flex items-center gap-1.5 border border-teal-400 text-teal-600 font-bold text-sm px-4 py-2 rounded-xl hover:bg-teal-50 transition-colors">
+                                                <Icon name="plus" /> Dokter
+                                            </button>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ===== PASIEN PICKER ===== */}
+                    {showPasienPicker && (
+                        <div className="fixed inset-0 z-[98] bg-white flex flex-col fade-in">
+                            {/* ---- FORM TAMBAH / EDIT PASIEN ---- */}
+                            {showAddPasienForm ? (
+                                <>
+                                    <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 bg-white" style={{paddingTop: 'calc(env(safe-area-inset-top, 0px) + 68px)'}}>
+                                        <button onClick={() => { setShowAddPasienForm(false); setNewPasienName(''); setNewPasienAge(''); setNewPasienAlamat(''); setNewPasienHp(''); setEditingPasien(null); }} className="w-9 h-9 flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
+                                            <Icon name="arrow-left" className="text-xl" />
+                                        </button>
+                                        <h2 className="font-black text-slate-800 text-lg flex-1">{editingPasien ? 'Edit Pasien' : 'Tambah Pasien'}</h2>
+                                        {editingPasien && (
+                                            <button onClick={async () => { if (window.confirm('Hapus pasien ini?')) { await deletePasien(editingPasien.id); setShowAddPasienForm(false); setEditingPasien(null); setNewPasienName(''); setNewPasienAge(''); } }}
+                                                className="w-9 h-9 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                                <Icon name="trash" />
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto px-5 pt-6 pb-8 space-y-5">
+                                        <div>
+                                            <label className="block text-sm font-bold text-slate-700 mb-2">Nama Pasien <span className="text-red-500">*</span></label>
+                                            <input autoFocus type="text" placeholder="cth: Sumini" value={newPasienName}
+                                                onChange={e => setNewPasienName(e.target.value)}
+                                                className="w-full border-2 border-slate-200 rounded-2xl px-4 py-3.5 text-sm font-medium outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all placeholder:text-slate-400" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-slate-700 mb-2">Umur <span className="text-slate-400 font-normal">(opsional)</span></label>
+                                            <input type="text" placeholder="cth: 55 thn 2 bln" value={newPasienAge}
+                                                onChange={e => setNewPasienAge(e.target.value)}
+                                                className="w-full border-2 border-slate-200 rounded-2xl px-4 py-3.5 text-sm font-medium outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all placeholder:text-slate-400" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-slate-700 mb-2">No. HP / Telepon</label>
+                                            <div className="flex items-center gap-2 border-2 border-slate-200 rounded-2xl px-4 py-3.5 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-100 transition-all">
+                                                <Icon name="phone" className="text-slate-400 text-sm flex-shrink-0" />
+                                                <input type="tel" inputMode="numeric" placeholder="cth: 0812-3456-7890" value={newPasienHp}
+                                                    onChange={e => setNewPasienHp(e.target.value)}
+                                                    className="flex-1 outline-none text-sm font-medium text-slate-700 placeholder:text-slate-400 bg-transparent" />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-slate-700 mb-2">Alamat</label>
+                                            <textarea rows={3} placeholder="cth: Jl. Melati No.5, Surabaya" value={newPasienAlamat}
+                                                onChange={e => setNewPasienAlamat(e.target.value)}
+                                                className="w-full border-2 border-slate-200 rounded-2xl px-4 py-3.5 text-sm font-medium outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all placeholder:text-slate-400 resize-none" />
+                                        </div>
+                                        <button
+                                            disabled={!newPasienName.trim() || savingPasien}
+                                            onClick={async () => {
+                                                setSavingPasien(true);
+                                                await savePasien(newPasienName, newPasienAge, editingPasien?.id || null, newPasienAlamat, newPasienHp);
+                                                setSavingPasien(false);
+                                                setShowAddPasienForm(false);
+                                                setNewPasienName(''); setNewPasienAge(''); setNewPasienAlamat(''); setNewPasienHp('');
+                                                setEditingPasien(null);
+                                            }}
+                                            className="w-full py-4 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-black text-base rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">
+                                            {savingPasien ? <div className="typing-dot bg-white"></div> : <><Icon name="floppy-disk" /> {editingPasien ? 'Simpan Perubahan' : 'Simpan Pasien'}</>}
+                                        </button>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    {/* ---- LIST PASIEN ---- */}
+                                    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white" style={{paddingTop: 'calc(env(safe-area-inset-top, 0px) + 68px)'}}>
+                                        <button onClick={() => setShowPasienPicker(false)} className="w-9 h-9 flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
+                                            <Icon name="arrow-left" className="text-xl" />
+                                        </button>
+                                        <h2 className="font-black text-slate-800 text-lg">Pilih pasien</h2>
+                                        <button onClick={() => { setNewPasienName(pasienSearch); setNewPasienAge(''); setShowAddPasienForm(true); }}
+                                            className="flex items-center gap-1.5 border border-teal-400 text-teal-600 font-bold text-sm px-3 py-1.5 rounded-xl hover:bg-teal-50 transition-colors">
+                                            <Icon name="plus" /> Pasien
+                                        </button>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto px-4 pt-4 pb-6">
+                                        <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-2xl px-3 py-2.5 mb-4 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-100">
+                                            <Icon name="magnifying-glass" className="text-teal-500 text-sm flex-shrink-0" />
+                                            <input autoFocus type="text" placeholder="Cari pasien..." value={pasienSearch}
+                                                onChange={e => setPasienSearch(e.target.value)}
+                                                className="flex-1 outline-none text-sm font-medium text-slate-700 placeholder:text-slate-400 bg-transparent" />
+                                            {pasienSearch && <button onClick={() => setPasienSearch('')} className="text-slate-300 hover:text-slate-500"><Icon name="xmark" /></button>}
+                                        </div>
+                                        <div className="mb-2 flex items-center justify-between">
+                                            <span className="text-sm font-bold text-slate-700">Pasien</span>
+                                            <span className="text-xs text-slate-400">{pasienList.length} data</span>
+                                        </div>
+                                        {(() => {
+                                            const filtered = pasienSearch ? pasienList.filter(p => p.name.toLowerCase().includes(pasienSearch.toLowerCase())) : pasienList;
+                                            if (filtered.length === 0) return (
+                                                <div className="border border-slate-200 rounded-2xl p-10 flex flex-col items-center gap-3 mt-2">
+                                                    <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center">
+                                                        <Icon name="person" className="text-2xl text-slate-400" />
+                                                    </div>
+                                                    <div className="text-center">
+                                                        <p className="font-bold text-slate-600 text-sm">Tidak ada data pasien</p>
+                                                        <p className="text-xs text-slate-400 mt-1">Ganti kata pencarian atau tambahkan pasien terlebih dahulu.</p>
+                                                    </div>
+                                                    <button onClick={() => { setNewPasienName(pasienSearch); setNewPasienAge(''); setShowAddPasienForm(true); }}
+                                                        className="mt-1 flex items-center gap-2 border border-teal-400 text-teal-600 font-bold text-sm px-4 py-2 rounded-xl hover:bg-teal-50 transition-colors">
+                                                        <Icon name="plus" /> Tambah Pasien
+                                                    </button>
+                                                </div>
+                                            );
+                                            return (
+                                                <div className="divide-y divide-slate-100 border border-slate-100 rounded-2xl overflow-hidden">
+                                                    {filtered.map(p => (
+                                                        <div key={p.id} className="flex items-center justify-between px-4 py-3.5 hover:bg-teal-50 transition-colors group">
+                                                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                                <div className="w-8 h-8 rounded-full bg-sky-100 flex items-center justify-center flex-shrink-0">
+                                                                    <Icon name="person" className="text-sky-600 text-sm" />
+                                                                </div>
+                                                                <div className="min-w-0">
+                                                                    <p className="font-bold text-slate-800 text-sm truncate">{p.name}{p.age ? `, ${p.age}` : ''}</p>
+                                                                    {(p.hp || p.alamat) && <p className="text-xs text-slate-400 truncate mt-0.5">{p.hp ? p.hp : ''}{p.hp && p.alamat ? ' · ' : ''}{p.alamat ? p.alamat : ''}</p>}
+                                                                </div>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 flex-shrink-0">
+                                                                <button onClick={() => { setEditingPasien(p); setNewPasienName(p.name); setNewPasienAge(p.age||''); setNewPasienAlamat(p.alamat||''); setNewPasienHp(p.hp||''); setShowAddPasienForm(true); }}
+                                                                    className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors" title="Edit">
+                                                                    <Icon name="pen-to-square" className="text-sm" />
+                                                                </button>
+                                                                <button onClick={() => { const label = p.age ? `${p.name}, ${p.age}` : p.name; setRacikanForm(f => ({...f, pasien: label})); setShowPasienPicker(false); setPasienSearch(''); }}
+                                                                    className="px-4 py-1.5 border border-teal-400 text-teal-600 font-bold text-sm rounded-xl hover:bg-teal-50 active:scale-95 transition-all flex-shrink-0">Pilih</button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            );
+                                        })()}
+                                        <div className="mt-6 flex items-center gap-3">
+                                            <span className="text-sm text-slate-500 font-medium">Tidak ketemu?</span>
+                                            <button onClick={() => { setNewPasienName(pasienSearch); setNewPasienAge(''); setShowAddPasienForm(true); }}
+                                                className="flex items-center gap-1.5 border border-teal-400 text-teal-600 font-bold text-sm px-4 py-2 rounded-xl hover:bg-teal-50 transition-colors">
+                                                <Icon name="plus" /> Pasien
+                                            </button>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ===== RACIKAN ITEM DETAIL MODAL ===== */}
+                    {racikanModal.show && racikanModal.item && (
+                        <div className="fixed inset-0 z-[95] flex flex-col bg-white fade-in">
+                            <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200">
+                                <button onClick={() => setRacikanModal({ show: false, item: null, qty: 1, selectedUnit: '', selectedPrice: 0, uangR: '' })} className="text-slate-500 hover:text-slate-700 transition-colors">
+                                    <Icon name="arrow-left" className="text-xl" />
+                                </button>
+                                <h3 className="font-bold text-slate-600 text-sm">#{racikanModal.item.id?.slice(-10) || 'ITEM'}</h3>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-5">
+                                <div className="mb-6 border-b border-slate-100 pb-4">
+                                    <h2 className="text-2xl font-black text-slate-800 mb-1">{racikanModal.item.name}</h2>
+                                    <p className="text-sm text-slate-500">Stok {racikanModal.item.qty} {racikanModal.item.unit}</p>
+                                </div>
+                                <div className="mb-6 text-right">
+                                    <p className="text-sm text-slate-400">{racikanModal.qty || 1} x {formatRupiah(racikanModal.selectedPrice)}</p>
+                                    <p className="text-3xl font-black text-slate-800">{formatRupiah(racikanModal.selectedPrice * (parseInt(racikanModal.qty) || 1))}</p>
+                                </div>
+                                <div className="mb-5">
+                                    <label className="text-sm font-bold text-slate-700 mb-2 block">Jumlah</label>
+                                    <div className="flex gap-3">
+                                        <input type="text" inputMode="numeric" value={racikanModal.qty}
+                                            onChange={e => { const v = e.target.value.replace(/[^0-9]/g,''); setRacikanModal(m => ({...m, qty: v===''?'':Math.max(1,parseInt(v))})); }}
+                                            onBlur={() => setRacikanModal(m => ({...m, qty: parseInt(m.qty)||1}))}
+                                            className="flex-1 p-3 rounded-xl border-2 border-slate-200 focus:border-teal-500 outline-none font-bold text-slate-800 text-center text-xl"
+                                        />
+                                        <div className="relative w-36">
+                                            <select value={`${racikanModal.selectedUnit}|${racikanModal.selectedPrice}`}
+                                                onChange={e => { const [u,p] = e.target.value.split('|'); setRacikanModal(m => ({...m, selectedUnit: u, selectedPrice: parseFloat(p)})); }}
+                                                className="w-full p-3 rounded-xl border-2 border-slate-200 focus:border-teal-500 outline-none appearance-none font-bold text-slate-700 bg-white">
+                                                {racikanModal.item.price > 0 && <option value={`${racikanModal.item.unit}|${racikanModal.item.price}`}>{racikanModal.item.unit}</option>}
+                                            </select>
+                                            <Icon name="chevron-down" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="mb-6">
+                                    <label className="text-sm font-bold text-slate-700 block">Uang R/ <span className="text-slate-400 font-normal">(opsional)</span></label>
+                                    <p className="text-[11px] text-slate-400 mb-2">Disembunyikan pada struk</p>
+                                    <div className="flex gap-3">
+                                        <div className="w-24 p-3 rounded-xl border-2 border-slate-200 font-bold text-slate-500 bg-slate-50 flex items-center justify-between">Rp <Icon name="chevron-down" className="text-slate-300 text-xs" /></div>
+                                        <input type="text" inputMode="numeric" value={racikanModal.uangR}
+                                            onChange={e => setRacikanModal(m => ({...m, uangR: e.target.value.replace(/[^0-9]/g,'')}))}
+                                            placeholder=""
+                                            className="flex-1 p-3 rounded-xl border-2 border-slate-200 focus:border-teal-500 outline-none font-bold text-slate-800"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="px-5 py-4 border-t border-slate-100">
+                                <button onClick={addRacikanItemToForm} className="w-full py-4 bg-teal-600 hover:bg-teal-700 text-white font-black text-base rounded-2xl shadow-lg active:scale-95 transition-all">
+                                    Tambahkan
+                                </button>
+                            </div>
+                        </div>
+                    )}
                     
                     {/* Modal Tambah ke Keranjang (Mirip Screenshot) */}
                     {priceModal.show && priceModal.item && (
@@ -4276,6 +5075,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             const [daysOffset30, setDaysOffset30] = useState(0); // 0 = 30 hari terakhir
 
             const [historySearch, setHistorySearch] = useState('');
+            const [racikanInfoModal, setRacikanInfoModal] = useState(null);
             const [filterStatus, setFilterStatus] = useState('all'); 
             const [filterKasir, setFilterKasir] = useState('all');
             const [filterPayment, setFilterPayment] = useState('all');
@@ -4492,7 +5292,19 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 let data = [...dailyTransactions];
                 if (historySearch) {
                     const lowerQ = historySearch.toLowerCase();
-                    data = data.filter(tx => (tx.id && tx.id.toLowerCase().includes(lowerQ)) || (tx.items && tx.items.some(i => i.name.toLowerCase().includes(lowerQ))) || (tx.cashierName && tx.cashierName.toLowerCase().includes(lowerQ)));
+                    data = data.filter(tx => {
+                        if (tx.id && tx.id.toLowerCase().includes(lowerQ)) return true;
+                        if (tx.cashierName && tx.cashierName.toLowerCase().includes(lowerQ)) return true;
+                        if (tx.items && tx.items.some(i => {
+                            if (i.name.toLowerCase().includes(lowerQ)) return true;
+                            if (i.racikanInfo) {
+                                if (i.racikanInfo.dokter && i.racikanInfo.dokter.toLowerCase().includes(lowerQ)) return true;
+                                if (i.racikanInfo.pasien && i.racikanInfo.pasien.toLowerCase().includes(lowerQ)) return true;
+                            }
+                            return false;
+                        })) return true;
+                        return false;
+                    });
                 }
                 if (filterStatus !== 'all') { data = data.filter(tx => tx.status === filterStatus); }
                 if (filterKasir !== 'all') { data = data.filter(tx => tx.cashierName === filterKasir); }
@@ -4526,9 +5338,19 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     
                     // RETUR KE STOK TOKO YANG MELAKUKAN TRANSAKSI
                     const storeIdToReturn = tx.storeId || 'default';
-                    const invRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id);
                     const stockField = `stocks.${storeIdToReturn}`;
-                    batch.update(invRef, { [stockField]: window.increment(qtyToRetur) });
+
+                    if (item.isRacikanGroup) {
+                        // Racikan gabungan: kembalikan stok tiap bahan satu per satu
+                        (item.racikanItems || []).forEach(ri => {
+                            const invRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', ri.id);
+                            batch.update(invRef, { [stockField]: window.increment(ri.qty * qtyToRetur), updatedAt: window.serverTimestamp() });
+                        });
+                    } else {
+                        // Item biasa
+                        const invRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id);
+                        batch.update(invRef, { [stockField]: window.increment(qtyToRetur) });
+                    }
                     
                     const txRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions', tx.id);
                     const updatedItems = [...tx.items];
@@ -4539,7 +5361,8 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     if (totalReturnedCount === totalItemsCount) newStatus = 'returned'; else if (totalReturnedCount > 0) newStatus = 'partial';
                     batch.update(txRef, { items: updatedItems, status: newStatus, returnedAt: window.serverTimestamp() });
                     await batch.commit();
-                    showToast(`Berhasil meretur ${qtyToRetur} ${item.unit} ke Stok Toko`, "success");
+                    const label = item.isRacikanGroup ? 'Racikan' : `${qtyToRetur} ${item.unit}`;
+                    showToast(`Berhasil meretur ${label} ke Stok Toko`, "success");
                     setReturModal({ show: false, tx: null, item: null, index: -1 }); setSelectedTx(null);
                 } catch (error) { console.error("Retur error", error); showToast("Gagal melakukan retur", "error"); } finally { setProcessingRetur(false); }
             };
@@ -4783,7 +5606,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm"><h4 className="font-bold text-slate-800 text-sm mb-1">Rata-rata penjualan kasir</h4><div className="text-2xl font-black text-slate-800 mt-2">{formatRupiah(stats.avgSale)}</div></div>
                     </div>
                     <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm mb-4 space-y-3">
-                         <div className="relative"><input type="text" placeholder="Cari Ref Transaksi / Nama Barang..." className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none text-sm font-medium" value={historySearch} onChange={(e) => setHistorySearch(e.target.value)} /><Icon name="magnifying-glass" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm" /></div>
+                         <div className="relative"><input type="text" placeholder="Cari transaksi, barang, dokter, pasien..." className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none text-sm font-medium" value={historySearch} onChange={(e) => setHistorySearch(e.target.value)} /><Icon name="magnifying-glass" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm" /></div>
                         <div className="flex gap-2 flex-wrap">
                         <div className="relative flex-1 min-w-[120px]"><select className="w-full appearance-none pl-3 pr-8 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-sky-500" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} ><option value="all">Semua Status</option><option value="success">Sukses</option><option value="partial">Retur Sebagian</option><option value="returned">Retur Full (Batal)</option></select><Icon name="filter" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" /></div>
                         <div className="relative flex-1 min-w-[120px]"><select className="w-full appearance-none pl-3 pr-8 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-sky-500" value={filterPayment} onChange={(e) => setFilterPayment(e.target.value)}><option value="all">Semua Pembayaran</option><option value="tunai">💵 Tunai</option><option value="qris">💳 QRIS</option><option value="transfer">🏦 Transfer</option></select><Icon name="credit-card" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" /></div>
@@ -4793,13 +5616,13 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     </div>
                     </div>
                     <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1">
-                        {loading ? <div className="text-center py-10 text-slate-400"><div className="typing-dot bg-sky-500"></div> Loading...</div> : processedTransactions.length === 0 ? (<div className="text-center py-12 flex flex-col items-center opacity-60"><div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3"><Icon name="calendar-xmark" className="text-2xl text-slate-400" /></div><p className="font-semibold text-slate-500">Tidak ada transaksi</p><p className="text-xs text-slate-400">Sesuai filter pencarian</p></div>) : processedTransactions.map(tx => (<div key={tx.id} onClick={() => setSelectedTx(tx)} className={`p-4 rounded-2xl border shadow-sm cursor-pointer transition-all hover:shadow-md ${tx.status === 'returned' ? 'bg-red-50 border-red-100 opacity-80' : 'bg-white border-slate-100 hover:border-sky-300'}`}><div className="flex justify-between items-start mb-2"><div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{(() => { const d = new Date(tx.date.seconds ? tx.date.toDate() : tx.date); const hari = d.toLocaleDateString('id-ID', {weekday:'short'}); const tgl = d.toLocaleDateString('id-ID', {day:'numeric', month:'short'}); const jam = d.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}); return `${hari}, ${tgl}  •  ${jam} WIB${tx.storeName ? ` • ${tx.storeName}` : ''}`; })()}</p><h4 className={`font-black text-lg ${tx.status === 'returned' ? 'text-red-500 line-through' : 'text-slate-800'}`}>{formatRupiah(tx.total)}</h4></div>{tx.status === 'returned' ? <span className="bg-red-100 text-red-600 text-[10px] font-bold px-2 py-1 rounded-full">BATAL</span> : (tx.status === 'partial' ? <span className="bg-amber-100 text-amber-600 text-[10px] font-bold px-2 py-1 rounded-full">SEBAGIAN</span> : <span className="bg-green-100 text-green-600 text-[10px] font-bold px-2 py-1 rounded-full">SUKSES</span>)}</div><div className="text-xs text-slate-500 truncate">{tx.items.map(i => i.name).join(', ')}</div><div className="mt-3 flex justify-between items-center border-t border-dashed border-slate-200 pt-2"><div className="flex items-center gap-2"><span className="text-[10px] font-bold text-slate-400">{tx.items.length} Barang</span>{tx.cashierName && <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1"><Icon name="user-tie" className="text-[9px]" /> {tx.cashierName}</span>}</div><div className="flex items-center gap-2">{tx.paymentProofImage && <span className="text-[10px] bg-teal-100 text-teal-700 font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1"><Icon name="camera" /> Bukti</span>}{tx.paymentMethod && tx.paymentMethod !== 'tunai' && <span className="text-[10px] bg-sky-100 text-sky-700 font-bold px-1.5 py-0.5 rounded-full">{tx.paymentMethod === 'qris' ? 'QRIS' : 'Transfer'}</span>}<span className="text-[10px] text-sky-600 font-bold flex items-center gap-1">Lihat Detail <Icon name="chevron-right" /></span></div></div></div>))}
+                        {loading ? <div className="text-center py-10 text-slate-400"><div className="typing-dot bg-sky-500"></div> Loading...</div> : processedTransactions.length === 0 ? (<div className="text-center py-12 flex flex-col items-center opacity-60"><div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3"><Icon name="calendar-xmark" className="text-2xl text-slate-400" /></div><p className="font-semibold text-slate-500">Tidak ada transaksi</p><p className="text-xs text-slate-400">Sesuai filter pencarian</p></div>) : processedTransactions.map(tx => (<div key={tx.id} onClick={() => setSelectedTx(tx)} className={`p-4 rounded-2xl border shadow-sm cursor-pointer transition-all hover:shadow-md ${tx.status === 'returned' ? 'bg-red-50 border-red-100 opacity-80' : 'bg-white border-slate-100 hover:border-sky-300'}`}><div className="flex justify-between items-start mb-2"><div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{(() => { const d = new Date(tx.date.seconds ? tx.date.toDate() : tx.date); const hari = d.toLocaleDateString('id-ID', {weekday:'short'}); const tgl = d.toLocaleDateString('id-ID', {day:'numeric', month:'short'}); const jam = d.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}); return `${hari}, ${tgl}  •  ${jam} WIB${tx.storeName ? ` • ${tx.storeName}` : ''}`; })()}</p><h4 className={`font-black text-lg ${tx.status === 'returned' ? 'text-red-500 line-through' : 'text-slate-800'}`}>{formatRupiah(tx.total)}</h4></div>{tx.status === 'returned' ? <span className="bg-red-100 text-red-600 text-[10px] font-bold px-2 py-1 rounded-full">BATAL</span> : (tx.status === 'partial' ? <span className="bg-amber-100 text-amber-600 text-[10px] font-bold px-2 py-1 rounded-full">SEBAGIAN</span> : <span className="bg-green-100 text-green-600 text-[10px] font-bold px-2 py-1 rounded-full">SUKSES</span>)}</div><div className="text-xs text-slate-500 truncate">{tx.items.map(i => i.name).join(', ')}</div><div className="mt-3 flex justify-between items-center border-t border-dashed border-slate-200 pt-2"><div className="flex items-center gap-2 flex-wrap"><span className="text-[10px] font-bold text-slate-400">{tx.items.length} Barang</span>{tx.cashierName && <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1"><Icon name="user-tie" className="text-[9px]" /> {tx.cashierName}</span>}{tx.items.some(i=>i.isRacikanGroup) && (() => { const ri = tx.items.find(i=>i.isRacikanGroup)?.racikanInfo; return (<span className="text-[10px] bg-teal-100 text-teal-700 font-black px-1.5 py-0.5 rounded-full flex items-center gap-1">R/ {ri?.pasien ? ri.pasien.split(',')[0] : ''}</span>); })()}</div><div className="flex items-center gap-2">{tx.paymentProofImage && <span className="text-[10px] bg-teal-100 text-teal-700 font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1"><Icon name="camera" /> Bukti</span>}{tx.paymentMethod && tx.paymentMethod !== 'tunai' && <span className="text-[10px] bg-sky-100 text-sky-700 font-bold px-1.5 py-0.5 rounded-full">{tx.paymentMethod === 'qris' ? 'QRIS' : 'Transfer'}</span>}<span className="text-[10px] text-sky-600 font-bold flex items-center gap-1">Lihat Detail <Icon name="chevron-right" /></span></div></div></div>))}
                     </div>
                     {selectedTx && (
                         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
                             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-0 overflow-hidden flex flex-col max-h-[90vh]">
                                 <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center"><div><h3 className="font-bold text-slate-800">Detail Transaksi</h3><p className="text-[10px] text-slate-500">{selectedTx.id} {selectedTx.storeName ? `(${selectedTx.storeName})` : ''}</p>{selectedTx.cashierName && <div className="flex items-center gap-1 mt-1"><div className="w-4 h-4 rounded-full bg-sky-500 flex items-center justify-center text-white text-[8px] font-black flex-shrink-0">{selectedTx.cashierName.charAt(0).toUpperCase()}</div><span className="text-[10px] font-bold text-sky-700">{selectedTx.cashierName}</span></div>}</div><button onClick={() => setSelectedTx(null)} className="w-8 h-8 rounded-full bg-white text-slate-400 hover:text-slate-600 flex items-center justify-center shadow-sm"><Icon name="xmark" /></button></div>
-                                <div className="p-5 overflow-y-auto flex-1"><div className="space-y-4">{selectedTx.items.map((item, idx) => { const returnedQty = item.returnedQty || 0; const remainingQty = item.cartQty - returnedQty; const isFullyReturned = remainingQty === 0; return (<div key={idx} className={`p-3 rounded-xl border ${isFullyReturned ? 'bg-red-50 border-red-100' : 'bg-slate-50 border-slate-100'}`}><div className="flex justify-between items-start mb-2"><div className="flex-1"><p className={`font-bold text-sm ${isFullyReturned ? 'text-red-600 line-through' : 'text-slate-700'}`}>{item.name}</p><p className="text-[10px] text-slate-500">{item.cartQty} x {formatRupiah(item.price)}</p>{returnedQty > 0 && <span className="text-[9px] font-bold text-red-500 bg-red-100 px-1.5 py-0.5 rounded-sm">Sudah Retur: {returnedQty}</span>}</div><div className="text-right"><p className="font-bold text-slate-800 text-sm">{formatRupiah(item.cartQty * item.price)}</p>{selectedTx.status !== 'returned' && remainingQty > 0 && (<button onClick={() => openReturModal(selectedTx, item, idx)} className="mt-2 bg-white border border-red-200 text-red-500 text-[10px] font-bold px-2 py-1 rounded-lg hover:bg-red-50 transition-colors shadow-sm">Retur Item</button>)}</div></div></div>); })}</div><div className="my-4 border-t border-dashed border-slate-300"></div>{(() => {
+                                <div className="p-5 overflow-y-auto flex-1"><div className="space-y-4">{selectedTx.items.map((item, idx) => { const returnedQty = item.returnedQty || 0; const remainingQty = item.cartQty - returnedQty; const isFullyReturned = remainingQty === 0; const ri = item.racikanInfo; return (<div key={idx} className={`p-3 rounded-xl border ${isFullyReturned ? 'bg-red-50 border-red-100' : item.isRacikanGroup ? 'bg-teal-50 border-teal-100' : 'bg-slate-50 border-slate-100'}`}><div className="flex justify-between items-start mb-2"><div className="flex-1 min-w-0 pr-2"><div className="flex items-center gap-1.5 flex-wrap"><p className={`font-bold text-sm ${isFullyReturned ? 'text-red-600 line-through' : 'text-slate-700'}`}>{item.name}</p>{item.isRacikanGroup && <span className="text-[8px] font-black bg-teal-600 text-white px-1 py-0.5 rounded flex-shrink-0">R/</span>}</div><p className="text-[10px] text-slate-500 mt-0.5">{item.cartQty} x {formatRupiah(item.price)}</p>{returnedQty > 0 && <span className="text-[9px] font-bold text-red-500 bg-red-100 px-1.5 py-0.5 rounded-sm">Sudah Retur: {returnedQty}</span>}{item.isRacikanGroup && ri && (ri.dokter || ri.pasien) && (<button onClick={() => setRacikanInfoModal(item)} className="mt-2 flex items-center gap-1.5 text-teal-600 hover:text-teal-800 text-[10px] font-bold bg-teal-100 hover:bg-teal-200 px-2.5 py-1.5 rounded-lg transition-colors"><Icon name="circle-info" className="text-xs" /> Info Pasien / Dokter</button>)}</div><div className="text-right flex-shrink-0"><p className="font-bold text-slate-800 text-sm">{formatRupiah(item.cartQty * item.price)}</p>{selectedTx.status !== 'returned' && remainingQty > 0 && (<button onClick={() => openReturModal(selectedTx, item, idx)} className="mt-2 bg-white border border-red-200 text-red-500 text-[10px] font-bold px-2 py-1 rounded-lg hover:bg-red-50 transition-colors shadow-sm">Retur Item</button>)}</div></div></div>); })}</div><div className="my-4 border-t border-dashed border-slate-300"></div>{(() => {
   const subtotalTx = selectedTx.items.reduce((acc, item) => acc + ((item.originalPrice || item.price) * (item.cartQty - (item.returnedQty || 0))), 0);
   const diskonTxRp = subtotalTx - selectedTx.total;
   const discountedItems = selectedTx.items.filter(i => i.discount && i.discount.value > 0);
@@ -4874,6 +5697,92 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                             </div>
                         </div>
                     )}
+                    {/* ===== RACIKAN INFO MODAL ===== */}
+                    {racikanInfoModal && (() => {
+                        const item = racikanInfoModal;
+                        const ri = item.racikanInfo || {};
+                        const bahan = item.racikanItems || [];
+                        return (
+                            <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
+                                <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col max-h-[90vh]">
+                                    {/* Header */}
+                                    <div className="px-5 py-4 bg-teal-600 flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center">
+                                                <span className="text-white font-black text-sm">R/</span>
+                                            </div>
+                                            <h3 className="font-black text-white text-base">Info Racikan</h3>
+                                        </div>
+                                        <button onClick={() => setRacikanInfoModal(null)} className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-colors">
+                                            <Icon name="xmark" />
+                                        </button>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto">
+                                        {/* Dokter & Pasien */}
+                                        <div className="px-5 pt-5 pb-3 space-y-3">
+                                            {ri.dokter && (
+                                                <div className="flex items-start gap-3 p-3 bg-sky-50 rounded-xl border border-sky-100">
+                                                    <div className="w-8 h-8 rounded-full bg-sky-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                                        <Icon name="user-doctor" className="text-sky-600 text-sm" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <p className="text-[10px] font-bold text-sky-500 uppercase tracking-wider mb-0.5">Dokter</p>
+                                                        <p className="font-bold text-slate-800 text-sm">{ri.dokter}</p>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {ri.pasien && (
+                                                <div className="flex items-start gap-3 p-3 bg-teal-50 rounded-xl border border-teal-100">
+                                                    <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                                        <Icon name="person" className="text-teal-600 text-sm" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <p className="text-[10px] font-bold text-teal-500 uppercase tracking-wider mb-0.5">Pasien</p>
+                                                        <p className="font-bold text-slate-800 text-sm">{ri.pasien}</p>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {ri.signa && (
+                                                <div className="flex items-start gap-3 p-3 bg-amber-50 rounded-xl border border-amber-100">
+                                                    <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                                        <Icon name="file-prescription" className="text-amber-600 text-sm" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <p className="text-[10px] font-bold text-amber-500 uppercase tracking-wider mb-0.5">Signa</p>
+                                                        <p className="font-bold text-slate-800 text-sm">{ri.signa}</p>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {ri.catatan && (
+                                                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Catatan</p>
+                                                    <p className="text-sm text-slate-700">{ri.catatan}</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {/* Bahan Racikan */}
+                                        {bahan.length > 0 && (
+                                            <div className="px-5 pb-5">
+                                                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Komposisi Bahan ({bahan.length} item)</p>
+                                                <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100">
+                                                    {bahan.map((b, i) => (
+                                                        <div key={i} className="flex items-center justify-between px-3 py-2.5 bg-white">
+                                                            <p className="text-sm font-bold text-slate-700 truncate flex-1 mr-2">{b.name}</p>
+                                                            <span className="text-xs font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full flex-shrink-0">{b.qty} {b.selectedUnit || b.unit}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="px-5 py-4 border-t border-slate-100">
+                                        <button onClick={() => setRacikanInfoModal(null)} className="w-full py-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm active:scale-95 transition-all">Tutup</button>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
+
                     <ConfirmModal isOpen={returModal.show} title="Retur Barang" message={`Berapa banyak "${returModal.item?.name}" yang ingin diretur? Stok akan kembali ke toko asal.`} onConfirm={handleProcessRetur} onCancel={() => setReturModal({ show: false, tx: null, item: null, index: -1 })} confirmText={processingRetur ? "Memproses..." : "Konfirmasi Retur"}> {returModal.item && (<div className="bg-slate-50 p-4 rounded-xl border border-slate-200"><div className="flex items-center justify-between"><button onClick={() => setQtyToRetur(Math.max(1, qtyToRetur - 1))} className="w-10 h-10 bg-white border border-slate-300 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100"><Icon name="minus" /></button><div className="flex flex-col items-center"><span className="text-2xl font-black text-slate-800">{qtyToRetur}</span><span className="text-[10px] text-slate-400 font-bold uppercase">Maks: {returModal.max}</span></div><button onClick={() => setQtyToRetur(Math.min(returModal.max, qtyToRetur + 1))} className="w-10 h-10 bg-white border border-slate-300 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100"><Icon name="plus" /></button></div><div className="mt-3 text-center"><p className="text-xs text-slate-500">Nilai Pengembalian:</p><p className="text-lg font-bold text-red-600">{formatRupiah(qtyToRetur * returModal.item.price)}</p></div></div>)}</ConfirmModal>
                 </div>
             );
@@ -7234,7 +8143,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                      return headers.map((h, i) => <p key={i} className="text-sm text-gray-600">{h}</p>);
                                 })()}
                             </div> 
-                            <div className="border-b-2 border-dashed border-gray-300 my-2"></div> <div className="flex justify-between text-xs mb-1"> <span>Tgl: {new Date(receiptToPrint.date.seconds ? receiptToPrint.date.toDate() : receiptToPrint.date).toLocaleString('id-ID')}</span> </div> <div className="flex justify-between text-xs mb-2"> <span>Ref: {receiptToPrint.id ? receiptToPrint.id.slice(-8).toUpperCase() : '-'}</span> <span>Kasir: {receiptToPrint.cashierName || 'Admin'}</span> </div> <div className="border-b-2 border-dashed border-gray-300 my-2"></div> <div className="space-y-2 mb-4"> {receiptToPrint.items.map((item, idx) => { const validQty = item.cartQty - (item.returnedQty || 0); if (validQty <= 0) return null; return ( <div key={idx} className="text-sm"> <div className="font-bold">{item.name}</div> <div className="flex justify-between"> <span>{validQty} x {formatRupiah(item.price)}</span> <span>{formatRupiah(validQty * item.price)}</span> </div> </div> ); })} </div> <div className="border-b-2 border-dashed border-gray-300 my-2"></div> {(() => {
+                            <div className="border-b-2 border-dashed border-gray-300 my-2"></div> <div className="flex justify-between text-xs mb-1"> <span>Tgl: {new Date(receiptToPrint.date.seconds ? receiptToPrint.date.toDate() : receiptToPrint.date).toLocaleString('id-ID')}</span> </div> <div className="flex justify-between text-xs mb-2"> <span>Ref: {receiptToPrint.id ? receiptToPrint.id.slice(-8).toUpperCase() : '-'}</span> <span>Kasir: {receiptToPrint.cashierName || 'Admin'}</span> </div> <div className="border-b-2 border-dashed border-gray-300 my-2"></div> <div className="space-y-2 mb-4"> {(() => { let rcIdx = 0; return receiptToPrint.items.map((item, idx) => { const validQty = item.cartQty - (item.returnedQty || 0); if (validQty <= 0) return null; let displayName = item.name; if (item.isRacikanGroup) { rcIdx++; displayName = `Racikan ${rcIdx}`; } return ( <div key={idx} className="text-sm"> <div className="font-bold">{displayName}</div> <div className="flex justify-between"> <span>{validQty} x {formatRupiah(item.price)}</span> <span>{formatRupiah(validQty * item.price)}</span> </div> </div> ); }); })()} </div> <div className="border-b-2 border-dashed border-gray-300 my-2"></div> {(() => {
   const subtotalR = receiptToPrint.items.reduce((acc, item) => acc + ((item.originalPrice || item.price) * (item.cartQty - (item.returnedQty || 0))), 0);
   const diskonR = subtotalR - receiptToPrint.total;
   const discountedR = receiptToPrint.items.filter(i => i.discount && i.discount.value > 0);
