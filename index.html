@@ -892,6 +892,7 @@
                 { key: 'showMenuCatatan', label: 'Catatan', icon: 'thumbtack', desc: 'Tampilkan catatan' },
                 { key: 'showMenuAdd', label: 'Input Manual', icon: 'pen-to-square', desc: 'Tampilkan input manual' },
                 { key: 'showMenuImport', label: 'Import Masal', icon: 'file-import', desc: 'Tampilkan import masal' },
+                { key: 'showMenuRekamMedis', label: 'Rekam Medis', icon: 'stethoscope', desc: 'Tampilkan rekam medis (dokter & pasien)' },
             ];
 
             const filteredUsers = users.filter(u =>
@@ -7810,7 +7811,201 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
         };
         // ==================== END AUTH SCREEN ====================
 
-        const App = () => {
+        // ==================== REKAM MEDIS VIEW ====================
+        const RekamMedisView = ({ user, showToast, readOnly }) => {
+            const [activeTab, setActiveTab] = React.useState('dokter');
+            const [dokterList, setDokterList] = React.useState([]);
+            const [pasienList, setPasienList] = React.useState([]);
+            const [search, setSearch] = React.useState('');
+            const [showForm, setShowForm] = React.useState(false);
+            const [editingItem, setEditingItem] = React.useState(null);
+            const [saving, setSaving] = React.useState(false);
+            const [deleting, setDeleting] = React.useState(null);
+            const [form, setForm] = React.useState({ name: '', age: '', hp: '', alamat: '' });
+
+            React.useEffect(() => {
+                if (!user) return;
+                const unsubD = window.onSnapshot(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'dokter_list'), snap => setDokterList(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+                const unsubP = window.onSnapshot(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pasien_list'), snap => setPasienList(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+                return () => { unsubD(); unsubP(); };
+            }, [user]);
+
+            const isDokter = activeTab === 'dokter';
+            const colPath = isDokter ? 'dokter_list' : 'pasien_list';
+            const list = isDokter ? dokterList : pasienList;
+            const filtered = search ? list.filter(item => item.name.toLowerCase().includes(search.toLowerCase()) || (item.alamat || '').toLowerCase().includes(search.toLowerCase()) || (item.hp || '').includes(search)) : list;
+
+            const openAdd = () => { setEditingItem(null); setForm({ name: '', age: '', hp: '', alamat: '' }); setShowForm(true); };
+            const openEdit = (item) => { setEditingItem(item); setForm({ name: item.name || '', age: item.age || '', hp: item.hp || '', alamat: item.alamat || '' }); setShowForm(true); };
+
+            const handleSave = async () => {
+                if (!form.name.trim()) { showToast('Nama wajib diisi', 'error'); return; }
+                setSaving(true);
+                try {
+                    const data = isDokter
+                        ? { name: form.name.trim(), hp: form.hp.trim(), alamat: form.alamat.trim() }
+                        : { name: form.name.trim(), age: form.age.trim(), hp: form.hp.trim(), alamat: form.alamat.trim() };
+                    if (editingItem) {
+                        await window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', colPath, editingItem.id), data);
+                        showToast('Data diperbarui');
+                    } else {
+                        await window.addDoc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', colPath), { ...data, createdAt: window.serverTimestamp() });
+                        showToast('Data disimpan');
+                    }
+                    setShowForm(false);
+                } catch(e) { showToast('Gagal menyimpan', 'error'); }
+                setSaving(false);
+            };
+
+            const handleDelete = async (item) => {
+                if (!window.confirm(`Hapus ${isDokter ? 'dokter' : 'pasien'} "${item.name}"?`)) return;
+                setDeleting(item.id);
+                try {
+                    await window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', colPath, item.id));
+                    showToast('Data dihapus');
+                } catch(e) { showToast('Gagal menghapus', 'error'); }
+                setDeleting(null);
+            };
+
+            return (
+                <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                    {/* Header */}
+                    <div className="px-5 pt-5 pb-4 border-b border-slate-100 bg-white">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h2 className="font-black text-xl text-slate-800">Rekam Medis</h2>
+                                <p className="text-xs text-slate-400 mt-0.5">Kelola data dokter & pasien</p>
+                            </div>
+                            {!readOnly && (
+                                <button onClick={openAdd} className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm px-4 py-2.5 rounded-xl shadow-lg shadow-teal-100 active:scale-95 transition-all">
+                                    <Icon name="plus" /> Tambah
+                                </button>
+                            )}
+                        </div>
+                        {/* Sub-tab */}
+                        <div className="flex gap-2">
+                            {[{ id: 'dokter', label: 'Dokter', icon: 'user-doctor', count: dokterList.length }, { id: 'pasien', label: 'Pasien', icon: 'person', count: pasienList.length }].map(tab => (
+                                <button key={tab.id} onClick={() => { setActiveTab(tab.id); setSearch(''); setShowForm(false); }}
+                                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === tab.id ? 'bg-teal-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                                    <Icon name={tab.icon} />
+                                    {tab.label}
+                                    <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-500'}`}>{tab.count}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Search */}
+                    <div className="px-5 py-3 bg-white border-b border-slate-100">
+                        <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus-within:border-teal-400 focus-within:ring-2 focus-within:ring-teal-100 transition-all">
+                            <Icon name="magnifying-glass" className="text-slate-400 text-sm flex-shrink-0" />
+                            <input type="text" placeholder={`Cari ${isDokter ? 'dokter' : 'pasien'}...`} value={search} onChange={e => setSearch(e.target.value)}
+                                className="flex-1 outline-none text-sm font-medium text-slate-700 placeholder:text-slate-400 bg-transparent" />
+                            {search && <button onClick={() => setSearch('')} className="text-slate-300 hover:text-slate-500"><Icon name="xmark" /></button>}
+                        </div>
+                    </div>
+
+                    {/* List */}
+                    <div className="flex-1 overflow-y-auto custom-scrollbar px-5 py-4 space-y-3">
+                        {filtered.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-20 opacity-60">
+                                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3">
+                                    <Icon name={isDokter ? 'user-doctor' : 'person'} className="text-2xl text-slate-400" />
+                                </div>
+                                <p className="font-semibold text-slate-500">{search ? 'Tidak ditemukan' : `Belum ada data ${isDokter ? 'dokter' : 'pasien'}`}</p>
+                                {!search && !readOnly && <button onClick={openAdd} className="mt-3 text-teal-600 font-bold text-sm hover:underline">+ Tambah sekarang</button>}
+                            </div>
+                        ) : filtered.map(item => (
+                            <div key={item.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-start gap-3 hover:border-teal-200 transition-all group">
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 ${isDokter ? 'bg-sky-100 text-sky-600' : 'bg-teal-100 text-teal-600'}`}>
+                                    <Icon name={isDokter ? 'user-doctor' : 'person'} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-black text-slate-800 text-sm">{item.name}{!isDokter && item.age ? <span className="font-normal text-slate-400 ml-1.5 text-xs">{item.age}</span> : ''}</p>
+                                    <div className="mt-1 space-y-0.5">
+                                        {item.hp && <p className="text-xs text-slate-500 flex items-center gap-1.5"><Icon name="phone" className="text-[10px] text-slate-300" />{item.hp}</p>}
+                                        {item.alamat && <p className="text-xs text-slate-500 flex items-center gap-1.5"><Icon name="location-dot" className="text-[10px] text-slate-300" />{item.alamat}</p>}
+                                    </div>
+                                </div>
+                                {!readOnly && (
+                                    <div className="flex gap-1 flex-shrink-0">
+                                        <button onClick={() => openEdit(item)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-sky-600 hover:bg-sky-50 rounded-lg transition-colors">
+                                            <Icon name="pen-to-square" className="text-sm" />
+                                        </button>
+                                        <button onClick={() => handleDelete(item)} disabled={deleting === item.id} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50">
+                                            {deleting === item.id ? <div className="typing-dot bg-red-400" style={{width:8,height:8}}></div> : <Icon name="trash" className="text-sm" />}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Form Drawer */}
+                    {showForm && (
+                        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-900/50 backdrop-blur-sm fade-in" onClick={e => { if (e.target === e.currentTarget) setShowForm(false); }}>
+                            <div className="bg-white w-full max-w-lg rounded-t-3xl shadow-2xl overflow-hidden" style={{maxHeight: '90vh'}}>
+                                {/* Drawer header */}
+                                <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
+                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${isDokter ? 'bg-sky-100 text-sky-600' : 'bg-teal-100 text-teal-600'}`}>
+                                        <Icon name={isDokter ? 'user-doctor' : 'person'} />
+                                    </div>
+                                    <h3 className="font-black text-slate-800 text-base flex-1">{editingItem ? `Edit ${isDokter ? 'Dokter' : 'Pasien'}` : `Tambah ${isDokter ? 'Dokter' : 'Pasien'}`}</h3>
+                                    <button onClick={() => setShowForm(false)} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 transition-colors">
+                                        <Icon name="xmark" />
+                                    </button>
+                                </div>
+                                {/* Form body */}
+                                <div className="overflow-y-auto px-5 py-5 space-y-4" style={{maxHeight: 'calc(90vh - 80px)'}}>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-600 mb-1.5">Nama {isDokter ? 'Dokter' : 'Pasien'} <span className="text-red-500">*</span></label>
+                                        <input autoFocus type="text" placeholder={isDokter ? 'cth: dr. Budi Santoso, Sp.PD' : 'cth: Sumini'} value={form.name}
+                                            onChange={e => setForm(f => ({...f, name: e.target.value}))}
+                                            className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all placeholder:text-slate-400" />
+                                    </div>
+                                    {!isDokter && (
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-600 mb-1.5">Umur <span className="text-slate-400 font-normal">(opsional)</span></label>
+                                            <input type="text" placeholder="cth: 55 thn 2 bln" value={form.age}
+                                                onChange={e => setForm(f => ({...f, age: e.target.value}))}
+                                                className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all placeholder:text-slate-400" />
+                                        </div>
+                                    )}
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-600 mb-1.5">No. HP / Telepon</label>
+                                        <div className="flex items-center gap-2 border-2 border-slate-200 rounded-xl px-4 py-3 focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-100 transition-all">
+                                            <Icon name="phone" className="text-slate-400 text-sm flex-shrink-0" />
+                                            <input type="tel" inputMode="numeric" placeholder="cth: 0812-3456-7890" value={form.hp}
+                                                onChange={e => setForm(f => ({...f, hp: e.target.value}))}
+                                                className="flex-1 outline-none text-sm font-medium text-slate-700 placeholder:text-slate-400 bg-transparent" />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-600 mb-1.5">Alamat {isDokter ? 'Praktik' : ''}</label>
+                                        <textarea rows={3} placeholder={isDokter ? 'cth: Jl. Mawar No.10, Jakarta Selatan' : 'cth: Jl. Melati No.5, Surabaya'} value={form.alamat}
+                                            onChange={e => setForm(f => ({...f, alamat: e.target.value}))}
+                                            className="w-full border-2 border-slate-200 rounded-xl px-4 py-3 text-sm font-medium outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all placeholder:text-slate-400 resize-none" />
+                                    </div>
+                                    <div className="flex gap-3 pt-2 pb-2">
+                                        {editingItem && (
+                                            <button onClick={() => handleDelete(editingItem).then(() => setShowForm(false))} className="flex items-center gap-2 px-4 py-3 border border-red-200 text-red-500 font-bold text-sm rounded-xl hover:bg-red-50 transition-colors">
+                                                <Icon name="trash" /> Hapus
+                                            </button>
+                                        )}
+                                        <button disabled={!form.name.trim() || saving} onClick={handleSave}
+                                            className="flex-1 py-3 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white font-black text-sm rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">
+                                            {saving ? <div className="typing-dot bg-white"></div> : <><Icon name="floppy-disk" /> {editingItem ? 'Simpan Perubahan' : 'Simpan'}</>}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+                const App = () => {
             const [inventoryData, setInventoryData] = useState([]);
             const [rawInventory, setRawInventory] = useState([]); // Store original data from DB
             const [settingsData, setSettingsData] = useState(DEFAULT_SETTINGS); 
@@ -8115,6 +8310,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 { id: 'catatan',     label: 'Catatan',           icon: 'thumbtack',           enabled: isOwner || showMenu('showMenuCatatan', settingsData.showMenuCatatan),    readOnly: !isOwner && !menuOn('enableCatatan', settingsData.enableCatatan) },
                 { id: 'add',         label: 'Input Manual',      icon: 'pen-to-square',       enabled: isOwner || showMenu('showMenuAdd', settingsData.showMenuAdd),            readOnly: !isOwner && !menuOn('enableInputManual', settingsData.enableInputManual) }, 
                 { id: 'import',      label: 'Import Masal',      icon: 'file-import',         enabled: isOwner || showMenu('showMenuImport', settingsData.showMenuImport),      readOnly: !isOwner && !menuOn('enableImport', settingsData.enableImport) }, 
+                { id: 'rekam_medis', label: 'Rekam Medis',       icon: 'stethoscope',         enabled: isOwner || showMenu('showMenuRekamMedis', settingsData.showMenuRekamMedis), readOnly: !isOwner && !menuOn('enableRekamMedis', settingsData.enableRekamMedis) },
                 { id: 'settings',    label: 'Pengaturan',        icon: 'gears',               enabled: true, readOnly: false },
             ];
             const visibleMenuItems = menuItems.filter(m => m.enabled);
@@ -8239,6 +8435,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         {activeTab === 'add' && (<FormView formData={formData} setFormData={setFormData} onSubmit={handleSubmit} isEditing={!!editingItem} submitting={submitting} onCancel={() => { setEditingItem(null); setFormData({name:'', qty:'', unit:'Pcs', exp:'', rack:'', price:'', costPrice:'', minStock: ''}); setActiveTab('list'); }} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='add')?.readOnly} />)}
                         {activeTab === 'import' && (<BulkImportView user={user} onImportComplete={(count) => { showToast(`${count} Barang berhasil diimport`); setActiveTab('list'); }} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='import')?.readOnly} />)}
                         {activeTab === 'stock_opname' && (<StockOpnameView items={inventoryData} user={user} showToast={showToast} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='stock_opname')?.readOnly} />)}
+                        {activeTab === 'rekam_medis' && (<RekamMedisView user={user} showToast={showToast} readOnly={menuItems.find(m=>m.id==='rekam_medis')?.readOnly} />)}
                         {activeTab === 'settings' && (<SettingsView settings={settingsData} onSave={handleSaveSettings} loading={submitting} authSession={authSession} />)}
                         {activeTab === 'catatan' && (<PapanCatatan user={user} readOnly={menuItems.find(m=>m.id==='catatan')?.readOnly} />)}
                     </main>
