@@ -243,6 +243,81 @@
     <script type="text/babel">
         const { useState, useEffect, useRef, useMemo, useCallback } = React;
         const APP_NAME = "Toko Husna";
+
+        // --- CHANGELOG / NOTIFIKASI UPDATE ---
+        const CHANGELOG = [
+            {
+                id: 'v47_10',
+                version: 'v47.10',
+                date: '06 Mar 2025',
+                title: 'Sidebar Dipadatkan & Scrollable',
+                tag: 'Perbaikan UI',
+                tagColor: 'bg-sky-100 text-sky-700',
+                icon: 'sidebar',
+                items: [
+                    'Sidebar lebih padat, menu item lebih ringkas',
+                    'Nav menu bisa di-scroll jika penuh',
+                    'Tombol Logout selalu terlihat di bawah sidebar',
+                ]
+            },
+            {
+                id: 'v47_9',
+                version: 'v47.9',
+                date: '01 Mar 2025',
+                title: 'Lonceng Notifikasi Update',
+                tag: 'Fitur Baru',
+                tagColor: 'bg-green-100 text-green-700',
+                icon: 'bell',
+                items: [
+                    'Tambah ikon lonceng di header mobile',
+                    'Panel notifikasi berisi riwayat update sistem',
+                    'Badge angka menunjukkan jumlah update belum dibaca',
+                ]
+            },
+            {
+                id: 'v47_8',
+                version: 'v47.8',
+                date: '20 Feb 2025',
+                title: 'Faktur Pembelian Per Toko',
+                tag: 'Fitur Baru',
+                tagColor: 'bg-green-100 text-green-700',
+                icon: 'file-invoice',
+                items: [
+                    'Faktur pembelian kini dipisahkan per toko',
+                    'Filter toko pada halaman pembelian',
+                    'Export faktur per toko ke Excel',
+                ]
+            },
+            {
+                id: 'v47_7',
+                version: 'v47.7',
+                date: '10 Feb 2025',
+                title: 'Perbaikan Sinkronisasi Firebase',
+                tag: 'Bug Fix',
+                tagColor: 'bg-amber-100 text-amber-700',
+                icon: 'rotate',
+                items: [
+                    'Fix data tidak tersinkron saat banyak pengguna aktif',
+                    'Optimasi query Firestore untuk performa lebih baik',
+                    'Perbaikan error snapshot listener pada kondisi offline',
+                ]
+            },
+            {
+                id: 'v47_6',
+                version: 'v47.6',
+                date: '01 Feb 2025',
+                title: 'Rekam Medis & Catatan',
+                tag: 'Fitur Baru',
+                tagColor: 'bg-green-100 text-green-700',
+                icon: 'notes-medical',
+                items: [
+                    'Tambah modul Rekam Medis pelanggan',
+                    'Papan Catatan digital untuk memo internal',
+                    'Akses menu bisa dikontrol per pengguna',
+                ]
+            },
+        ];
+        const CHANGELOG_STORAGE_KEY = 'husna_read_changelogs';
         
         // --- DEFAULT SETTINGS ---
         const DEFAULT_SETTINGS = {
@@ -8029,6 +8104,17 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             const [notifCounts, setNotifCounts] = useState({ pendingCarts: 0, activeCarts: 0 });
             const [authSession, setAuthSession] = useState(() => getStoredSession());
             const [personalMenuAccess, setPersonalMenuAccess] = useState(null); // null = follow global
+            const [showNotifPanel, setShowNotifPanel] = useState(false);
+            const [readChangelogs, setReadChangelogs] = useState(() => {
+                try { return JSON.parse(localStorage.getItem(CHANGELOG_STORAGE_KEY) || '[]'); } catch { return []; }
+            });
+            const unreadCount = CHANGELOG.filter(c => !readChangelogs.includes(c.id)).length;
+            const handleOpenNotif = () => {
+                setShowNotifPanel(true);
+                const allIds = CHANGELOG.map(c => c.id);
+                setReadChangelogs(allIds);
+                try { localStorage.setItem(CHANGELOG_STORAGE_KEY, JSON.stringify(allIds)); } catch {}
+            };
 
             // Listen to current user's doc for live menuAccess updates
             useEffect(() => {
@@ -8400,7 +8486,20 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                         )}
                                     </div>
                                 </div>
-                                <button onClick={() => setIsSidebarOpen(false)} className="md:hidden text-slate-400 hover:text-slate-600 p-2"><Icon name="xmark" className="text-xl" /></button>
+                                <div className="flex items-center gap-1">
+                                    {/* Bell - tampil di sidebar (desktop & mobile drawer) */}
+                                    <div className="relative">
+                                        <button onClick={handleOpenNotif} className="relative w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all">
+                                            <Icon name="bell" className="text-base" />
+                                            {unreadCount > 0 && (
+                                                <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center leading-none shadow animate-pulse">
+                                                    {unreadCount > 9 ? '9+' : unreadCount}
+                                                </span>
+                                            )}
+                                        </button>
+                                    </div>
+                                    <button onClick={() => setIsSidebarOpen(false)} className="md:hidden w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"><Icon name="xmark" className="text-xl" /></button>
+                                </div>
                             </div>
                             <nav className="space-y-0.5 flex-1 overflow-y-auto min-h-0 pr-1">{visibleMenuItems.map(menu => (<button key={menu.id} onClick={(e) => handleNavClick(menu.id, e)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 relative overflow-hidden group ${activeTab === menu.id ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}><div className="relative w-5 flex-shrink-0"><Icon name={menu.icon} className={`text-base ${activeTab === menu.id ? 'text-white' : 'text-slate-400'}`} />{menu.badge > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center leading-none shadow-sm animate-pulse">{menu.badge > 9 ? '9+' : menu.badge}</span>}</div><span className="flex-1 text-left">{menu.label}</span>{menu.readOnly && activeTab !== menu.id && <Icon name="eye" className="text-[9px] text-slate-300 flex-shrink-0" title="Lihat saja" />}{menu.badge > 0 && activeTab !== menu.id && <span className="text-[9px] bg-red-100 text-red-600 font-black px-1.5 py-0.5 rounded-full border border-red-200">{menu.badge} baru</span>}</button>))}</nav>
                             <div className="pt-4 border-t border-slate-100 flex-shrink-0">
@@ -8425,7 +8524,72 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         </div>
                     </aside>
                     <main className="flex-1 md:ml-0 p-4 md:p-8 max-w-7xl mx-auto w-full mb-0">
-                        <div className="md:hidden mb-6 flex items-center justify-between gap-4 relative z-30"><div className="flex items-center gap-2"><div className={`w-9 h-9 rounded-lg flex items-center justify-center text-white ${activeStoreId === 'all_stores' ? 'bg-indigo-600' : 'bg-sky-600'} shadow-md`}><Icon name="shop" /></div><h1 className="font-bold text-slate-800 text-lg">{currentProfile.name}</h1></div><button onClick={() => setIsSidebarOpen(true)} className="bg-white/90 backdrop-blur-md px-4 py-2.5 rounded-xl text-slate-700 font-bold text-sm shadow-sm border border-slate-200 active:scale-95 transition-all flex items-center gap-2"><Icon name="bars" className="text-sky-600" /> Menu</button></div>
+                        <div className="md:hidden mb-6 flex items-center justify-between gap-4 relative z-30">
+                            <div className="flex items-center gap-2">
+                                <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-white ${activeStoreId === 'all_stores' ? 'bg-indigo-600' : 'bg-sky-600'} shadow-md`}><Icon name="shop" /></div>
+                                <h1 className="font-bold text-slate-800 text-lg">{currentProfile.name}</h1>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {/* Bell - mobile header */}
+                                <button onClick={handleOpenNotif} className="relative bg-white/90 backdrop-blur-md w-10 h-10 rounded-xl text-slate-600 shadow-sm border border-slate-200 active:scale-95 transition-all flex items-center justify-center">
+                                    <Icon name="bell" className="text-base" />
+                                    {unreadCount > 0 && (
+                                        <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center leading-none shadow animate-pulse">
+                                            {unreadCount > 9 ? '9+' : unreadCount}
+                                        </span>
+                                    )}
+                                </button>
+                                <button onClick={() => setIsSidebarOpen(true)} className="bg-white/90 backdrop-blur-md px-4 py-2.5 rounded-xl text-slate-700 font-bold text-sm shadow-sm border border-slate-200 active:scale-95 transition-all flex items-center gap-2"><Icon name="bars" className="text-sky-600" /> Menu</button>
+                            </div>
+                        </div>
+                        {/* Notification Panel - Fixed Modal (works for both mobile & desktop) */}
+                        {showNotifPanel && (
+                            <>
+                                <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-[70]" onClick={() => setShowNotifPanel(false)} />
+                                <div className="fixed top-1/2 left-1/2 z-[80] w-[92vw] max-w-sm bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden" style={{transform:'translate(-50%,-50%)', maxHeight:'80vh'}}>
+                                    <div className="bg-gradient-to-r from-sky-600 to-sky-500 px-4 py-3 flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Icon name="bell" className="text-white text-sm" />
+                                            <span className="text-white font-black text-sm">Update Sistem</span>
+                                        </div>
+                                        <button onClick={() => setShowNotifPanel(false)} className="w-7 h-7 rounded-lg bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-colors">
+                                            <Icon name="xmark" className="text-sm" />
+                                        </button>
+                                    </div>
+                                    <div className="overflow-y-auto" style={{maxHeight:'calc(80vh - 52px)'}}>
+                                        {CHANGELOG.map((log, idx) => (
+                                            <div key={log.id} className={`p-4 ${idx < CHANGELOG.length - 1 ? 'border-b border-slate-100' : ''}`}>
+                                                <div className="flex items-start gap-3">
+                                                    <div className="w-8 h-8 rounded-xl bg-sky-50 border border-sky-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                                                        <Icon name={log.icon} className="text-sky-500 text-xs" />
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${log.tagColor}`}>{log.tag}</span>
+                                                            <span className="text-[10px] font-bold text-slate-400">{log.version}</span>
+                                                            <span className="text-[10px] text-slate-300">•</span>
+                                                            <span className="text-[10px] text-slate-400">{log.date}</span>
+                                                        </div>
+                                                        <p className="text-sm font-black text-slate-800 mb-2">{log.title}</p>
+                                                        <ul className="space-y-1">
+                                                            {log.items.map((item, i) => (
+                                                                <li key={i} className="flex items-start gap-1.5 text-xs text-slate-500">
+                                                                    <span className="text-sky-400 mt-0.5 flex-shrink-0">•</span>
+                                                                    <span>{item}</span>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        <div className="px-4 py-3 bg-slate-50 border-t border-slate-100">
+                                            <p className="text-[10px] text-center text-slate-400 font-bold">Sistem Kasir Toko Husna • Selalu diperbarui 🚀</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </>
+                        )}
                         {activeTab === 'home' && (<DashboardView items={inventoryData} settings={settingsData} onShowLowStock={() => { setActiveTab('list'); setShowOnlyLowStock(true); }} />)}
                         {activeTab === 'cashier' && (<CashierView items={inventoryData} user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='cashier')?.readOnly} authSession={authSession} />)}
                         {activeTab === 'history' && (<HistoryView user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} items={inventoryData} readOnly={menuItems.find(m=>m.id==='history')?.readOnly} />)}
