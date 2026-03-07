@@ -8200,6 +8200,8 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             const [feedbackType, setFeedbackType] = useState('bug'); // 'bug' | 'masukkan' | 'request'
             const [feedbackText, setFeedbackText] = useState('');
             const [feedbackSending, setFeedbackSending] = useState(false);
+            const [feedbackPhoto, setFeedbackPhoto] = useState(null); // base64 preview
+            const [lightboxSrc, setLightboxSrc] = useState(null);    // lightbox image src
             const [myMessages, setMyMessages] = useState([]);
             const [adminUnread, setAdminUnread] = useState(0);
 
@@ -8298,7 +8300,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             };
 
             const sendFeedback = async () => {
-                if (!feedbackText.trim() || feedbackSending || !_feedbackId || !window.db) return;
+                if ((!feedbackText.trim() && !feedbackPhoto) || feedbackSending || !_feedbackId || !window.db) return;
                 setFeedbackSending(true);
                 try {
                     const AID = window.appId || 'default-app-id';
@@ -8308,21 +8310,23 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         role: 'user',
                         type: feedbackType,
                         text: feedbackText.trim(),
+                        ...(feedbackPhoto ? { photo: feedbackPhoto } : {}),
                         time: new Date().toISOString(),
                         readByAdmin: false,
                     };
                     const updMsgs = [...myMessages, newMsg];
                     await window.setDoc(fbRef, {
-                        accountId: _feedbackId,                        // kunci permanen per akun
+                        accountId: _feedbackId,
                         username: authSession.username || 'guest',
                         namaLengkap: authSession.namaLengkap || 'Tamu',
                         role: authSession.role || 'viewer',
                         messages: updMsgs,
-                        lastMessage: feedbackText.trim(),
+                        lastMessage: feedbackPhoto ? (feedbackText.trim() || '📷 Foto') : feedbackText.trim(),
                         lastTime: new Date().toISOString(),
                         adminUnread: myMessages.filter(m => m.role === 'user' && !m.readByAdmin).length + 1,
                     }, { merge: true });
                     setFeedbackText('');
+                    setFeedbackPhoto(null);
                 } catch(e) { console.error(e); }
                 setFeedbackSending(false);
             };
@@ -8830,7 +8834,16 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                                                 </div>
                                                             )}
                                                             {msg.role==='admin' && <div className="text-[9px] font-black text-sky-600 mb-0.5">👨‍💻 Admin</div>}
-                                                            <p className="text-xs leading-relaxed">{msg.text}</p>
+                                                            {msg.photo && (
+                                                                <img
+                                                                    src={msg.photo}
+                                                                    alt="foto"
+                                                                    onClick={() => setLightboxSrc(msg.photo)}
+                                                                    className="rounded-xl mb-1.5 max-w-full cursor-zoom-in object-cover"
+                                                                    style={{maxHeight:'160px', width:'100%', objectFit:'cover'}}
+                                                                />
+                                                            )}
+                                                            {msg.text && <p className="text-xs leading-relaxed">{msg.text}</p>}
                                                             <p className={`text-[9px] mt-0.5 ${msg.role==='user' ? 'text-sky-200 text-right' : 'text-slate-400'}`}>{msg.time ? new Date(msg.time).toLocaleString('id-ID',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : ''}</p>
                                                         </div>
                                                     </div>
@@ -8843,9 +8856,39 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                                         <button key={t.v} onClick={()=>setFeedbackType(t.v)} className={`flex-1 py-1 rounded-lg text-[10px] font-black transition-all ${feedbackType===t.v ? 'bg-sky-500 text-white shadow' : 'bg-white text-slate-500 border border-slate-200'}`}>{t.label}</button>
                                                     ))}
                                                 </div>
-                                                <div className="flex gap-2">
+                                                {/* Foto preview */}
+                                                {feedbackPhoto && (
+                                                    <div className="relative mb-2 inline-block">
+                                                        <img src={feedbackPhoto} alt="preview" onClick={() => setLightboxSrc(feedbackPhoto)} className="rounded-xl cursor-zoom-in object-cover border border-slate-200" style={{maxHeight:'100px', maxWidth:'100%'}} />
+                                                        <button onClick={() => setFeedbackPhoto(null)} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center shadow text-[9px] font-black leading-none hover:bg-red-600">✕</button>
+                                                    </div>
+                                                )}
+                                                <div className="flex gap-2 items-end">
+                                                    {/* Hidden file input */}
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        id="fbPhotoInput"
+                                                        style={{display:'none'}}
+                                                        onChange={e => {
+                                                            const file = e.target.files?.[0];
+                                                            if (!file) return;
+                                                            const reader = new FileReader();
+                                                            reader.onload = ev => setFeedbackPhoto(ev.target.result);
+                                                            reader.readAsDataURL(file);
+                                                            e.target.value = '';
+                                                        }}
+                                                    />
+                                                    {/* Tombol foto */}
+                                                    <button
+                                                        onClick={() => document.getElementById('fbPhotoInput').click()}
+                                                        title="Lampirkan foto"
+                                                        className="w-9 h-9 bg-white border border-slate-200 hover:border-sky-400 hover:bg-sky-50 text-slate-400 hover:text-sky-500 rounded-xl flex items-center justify-center flex-shrink-0 transition-all"
+                                                    >
+                                                        <Icon name="camera" className="text-sm" />
+                                                    </button>
                                                     <textarea value={feedbackText} onChange={e=>setFeedbackText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendFeedback();}}} placeholder="Tulis pesan..." rows={2} className="flex-1 text-xs border border-slate-200 rounded-xl px-3 py-2 outline-none focus:border-sky-400 resize-none font-medium text-slate-700 placeholder:text-slate-300" style={{fontSize:'12px'}} />
-                                                    <button onClick={sendFeedback} disabled={!feedbackText.trim()||feedbackSending} className="w-9 bg-sky-500 hover:bg-sky-600 disabled:opacity-40 text-white rounded-xl flex items-center justify-center flex-shrink-0 transition-all active:scale-95">
+                                                    <button onClick={sendFeedback} disabled={(!feedbackText.trim()&&!feedbackPhoto)||feedbackSending} className="w-9 h-9 bg-sky-500 hover:bg-sky-600 disabled:opacity-40 text-white rounded-xl flex items-center justify-center flex-shrink-0 transition-all active:scale-95">
                                                         {feedbackSending ? <Icon name="spinner" className="text-xs animate-spin" /> : <Icon name="paper-plane" className="text-xs" />}
                                                     </button>
                                                 </div>
@@ -8854,6 +8897,21 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                     )}
                                 </div>
                             </>
+                        )}
+                        {/* Lightbox foto */}
+                        {lightboxSrc && (
+                            <div
+                                onClick={() => setLightboxSrc(null)}
+                                style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.85)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px'}}
+                            >
+                                <div style={{position:'relative',maxWidth:'95vw',maxHeight:'90vh'}} onClick={e=>e.stopPropagation()}>
+                                    <img src={lightboxSrc} alt="foto besar" style={{maxWidth:'92vw',maxHeight:'85vh',borderRadius:'16px',objectFit:'contain',boxShadow:'0 8px 40px rgba(0,0,0,0.6)'}} />
+                                    <button
+                                        onClick={() => setLightboxSrc(null)}
+                                        style={{position:'absolute',top:'-12px',right:'-12px',width:'32px',height:'32px',background:'#ef4444',border:'none',borderRadius:'50%',color:'#fff',fontWeight:900,fontSize:'14px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 2px 8px rgba(0,0,0,0.4)'}}
+                                    >✕</button>
+                                </div>
+                            </div>
                         )}
                         {activeTab === 'home' && (<DashboardView items={inventoryData} settings={settingsData} onShowLowStock={() => { setActiveTab('list'); setShowOnlyLowStock(true); }} />)}
                         {activeTab === 'cashier' && (<CashierView items={inventoryData} user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='cashier')?.readOnly} authSession={authSession} />)}
