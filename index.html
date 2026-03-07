@@ -247,6 +247,23 @@
         // --- CHANGELOG / NOTIFIKASI UPDATE ---
         const CHANGELOG = [
             {
+                id: 'v48_1',
+                version: 'v48.1',
+                date: '07 Mar 2025',
+                title: 'Kirim Pesan & Laporan ke Admin',
+                tag: 'Fitur Baru',
+                tagColor: 'bg-green-100 text-green-700',
+                icon: 'comments',
+                isNew: true,
+                items: [
+                    '💬 Kini kamu bisa kirim pesan langsung ke admin lewat lonceng notifikasi',
+                    '🐛 Lapor bug atau masalah teknis yang kamu temui',
+                    '💡 Kirim masukkan & saran untuk pengembangan sistem',
+                    '✨ Request fitur baru yang kamu butuhkan',
+                    '📩 Admin akan membalas pesanmu langsung di panel yang sama',
+                ]
+            },
+            {
                 id: 'v47_10',
                 version: 'v47.10',
                 date: '06 Mar 2025',
@@ -4958,18 +4975,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                         </div>
                                     </div>
                                 </div>
-                                <div className="mb-6">
-                                    <label className="text-sm font-bold text-slate-700 block">Uang R/ <span className="text-slate-400 font-normal">(opsional)</span></label>
-                                    <p className="text-[11px] text-slate-400 mb-2">Disembunyikan pada struk</p>
-                                    <div className="flex gap-3">
-                                        <div className="w-24 p-3 rounded-xl border-2 border-slate-200 font-bold text-slate-500 bg-slate-50 flex items-center justify-between">Rp <Icon name="chevron-down" className="text-slate-300 text-xs" /></div>
-                                        <input type="text" inputMode="numeric" value={racikanModal.uangR}
-                                            onChange={e => setRacikanModal(m => ({...m, uangR: e.target.value.replace(/[^0-9]/g,'')}))}
-                                            placeholder=""
-                                            className="flex-1 p-3 rounded-xl border-2 border-slate-200 focus:border-teal-500 outline-none font-bold text-slate-800"
-                                        />
-                                    </div>
-                                </div>
+
                             </div>
                             <div className="px-5 py-4 border-t border-slate-100">
                                 <button onClick={addRacikanItemToForm} className="w-full py-4 bg-teal-600 hover:bg-teal-700 text-white font-black text-base rounded-2xl shadow-lg active:scale-95 transition-all">
@@ -8126,11 +8132,52 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 const collRef = window.collection(window.db, ...COLL);
                 const q = window.query(collRef, window.orderBy('position', 'asc'));
                 let unsub;
-                // Coba dengan orderBy, fallback tanpa index
+                let _synced = false; // hanya sync sekali per session
+
+                // ── Auto-upsert: push entri CHANGELOG baru ke Firebase ──
+                // Jika versi di CHANGELOG (hardcode) belum ada di Firebase, tambahkan otomatis.
+                // Admin panel akan langsung menerima update tanpa perlu ubah HTML admin.
+                async function autoSyncChangelogToFirebase(firestoreDocs) {
+                    if (_synced) return;
+                    _synced = true;
+                    try {
+                        const existingIds = new Set(firestoreDocs.map(d => d.id));
+                        const newEntries = CHANGELOG.filter(c => !existingIds.has(c.id));
+                        if (newEntries.length === 0) return;
+                        // Hitung posisi awal: letakkan entri baru di urutan terdepan (posisi terkecil)
+                        const minPos = firestoreDocs.length > 0
+                            ? Math.min(...firestoreDocs.map(d => d.data?.()?.position ?? d.position ?? 99))
+                            : 0;
+                        const batch = window.writeBatch(window.db);
+                        newEntries.forEach((entry, i) => {
+                            const ref = window.doc(window.db, ...COLL, entry.id);
+                            batch.set(ref, {
+                                id: entry.id,
+                                version: entry.version,
+                                date: entry.date,
+                                title: entry.title,
+                                tag: entry.tag,
+                                icon: entry.icon,
+                                items: entry.items,
+                                position: minPos - (newEntries.length - i), // urutan di atas yg lama
+                            }, { merge: false });
+                        });
+                        await batch.commit();
+                        console.log(`✅ ${newEntries.length} entri changelog baru di-sync ke Firebase`);
+                    } catch(e) {
+                        console.warn('Auto-sync changelog gagal:', e);
+                    }
+                }
+
                 try {
                     unsub = window.onSnapshot(q, snap => {
                         if (!snap.empty) {
-                            setLiveChangelog(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                            const sorted = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                            setLiveChangelog(sorted);
+                            autoSyncChangelogToFirebase(snap.docs);
+                        } else {
+                            // Firebase kosong → seed dari CHANGELOG hardcode
+                            autoSyncChangelogToFirebase([]);
                         }
                     }, () => {
                         // fallback tanpa orderBy
@@ -8139,6 +8186,9 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                 const sorted = snap.docs.map(d => ({ id: d.id, ...d.data() }))
                                     .sort((a, b) => (a.position ?? 99) - (b.position ?? 99));
                                 setLiveChangelog(sorted);
+                                autoSyncChangelogToFirebase(snap.docs);
+                            } else {
+                                autoSyncChangelogToFirebase([]);
                             }
                         });
                     });
@@ -8737,6 +8787,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                                         <div className="flex-1 min-w-0">
                                                             <div className="flex items-center gap-1.5 flex-wrap mb-1">
                                                                 <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${log.tagColor||'bg-sky-100 text-sky-700'}`}>{log.tag}</span>
+                                                                {log.isNew && <span style={{background:'linear-gradient(135deg,#f97316,#ef4444)',animation:'pulse 2s ease-in-out infinite'}} className="text-[8px] font-black px-1.5 py-0.5 rounded-full text-white tracking-wide shadow-sm">⚡ NEW</span>}
                                                                 <span className="text-[9px] font-bold text-slate-400">{log.version}</span>
                                                                 <span className="text-[9px] text-slate-300">•</span>
                                                                 <span className="text-[9px] text-slate-400">{log.date}</span>
@@ -8749,7 +8800,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                                                     </div>
                                                 </div>
                                             ))}
-                                            <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400 font-bold">Sistem Kasir Toko Husna • Selalu diperbarui 🚀</p></div>
+                                            <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100"><p className="text-[10px] text-center text-slate-400 font-bold">Sistem Kasir Toko Husna • Selalu diperbarui 🚀</p><p className="text-[10px] text-center text-sky-400 font-bold mt-0.5">💬 Ada masukkan? Gunakan tab <b>Pesan &amp; Lapor</b> untuk hubungi admin!</p></div>
                                         </div>
                                     )}
 
