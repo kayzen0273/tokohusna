@@ -459,16 +459,7 @@
 
         const Icon = React.memo(({ name, type = "solid", className = "" }) => <i className={`fa-${type} fa-${name} ${className}`}></i>);
 
-        const ReadOnlyBanner = () => (
-            <div className="flex items-center gap-2.5 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-2xl mb-3 fade-in flex-shrink-0">
-                <div className="w-7 h-7 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0"><Icon name="eye" className="text-amber-600 text-xs" /></div>
-                <div className="flex-1 min-w-0">
-                    <p className="text-xs font-black text-amber-800 leading-tight">Mode Lihat Saja</p>
-                    <p className="text-[10px] text-amber-600 leading-tight">Kamu tidak punya akses edit. Hubungi owner untuk mengaktifkan akses.</p>
-                </div>
-                <Icon name="lock" className="text-amber-400 text-sm flex-shrink-0" />
-            </div>
-        );
+
 
         // --- DEKORASI RAMADHAN ---
         const RamadhanDecor = () => (
@@ -990,6 +981,7 @@
                 { key: 'enableCatatan', label: 'Catatan', icon: 'thumbtack', desc: 'Papan catatan' },
                 { key: 'enableInputManual', label: 'Input Manual', icon: 'pen-to-square', desc: 'Tambah/edit barang' },
                 { key: 'enableImport', label: 'Import Masal', icon: 'file-import', desc: 'Import data Excel' },
+                { key: 'enableJadwalShift', label: 'Jadwal Shift', icon: 'calendar-days', desc: 'Jadwal shift karyawan' },
             ];
             const settingsAccessList = [
                 { key: 'enableSettingsToko', label: 'Profil & Cabang Toko', icon: 'shop', desc: 'Edit nama, alamat toko' },
@@ -1011,6 +1003,7 @@
                 { key: 'showMenuAdd', label: 'Input Manual', icon: 'pen-to-square', desc: 'Tampilkan input manual' },
                 { key: 'showMenuImport', label: 'Import Masal', icon: 'file-import', desc: 'Tampilkan import masal' },
                 { key: 'showMenuRekamMedis', label: 'Rekam Medis', icon: 'stethoscope', desc: 'Tampilkan rekam medis (dokter & pasien)' },
+                { key: 'showMenuJadwalShift', label: 'Jadwal Shift', icon: 'calendar-days', desc: 'Tampilkan jadwal shift karyawan' },
             ];
 
             const filteredUsers = users.filter(u =>
@@ -2316,7 +2309,7 @@
             return (
                 <>
                 <div className="fade-in pb-20 md:pb-0 h-full flex flex-col relative z-10">
-                     {readOnly && <ReadOnlyBanner />}
+                     
                      <header className="mb-6 flex items-center justify-between"><div><h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Faktur Pembelian</h2><p className="text-slate-500 text-xs mt-1">{isAllStores ? 'Semua toko — lihat saja' : 'Kelola tagihan supplier'}</p></div><div className="flex gap-2"><button className="hidden md:flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-slate-600 font-bold text-xs hover:bg-slate-50 transition-all shadow-sm"><Icon name="download" /> Unduh Laporan</button>{!readOnly && !isAllStores && <button onClick={() => setSupplierModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-xl font-bold text-xs hover:bg-teal-700 transition-all shadow-lg shadow-teal-200 active:scale-95"><Icon name="plus" /> Catat Faktur</button>}</div></header>
                     {isAllStores && <div className="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-xs text-indigo-700 font-medium flex items-center gap-2"><Icon name="circle-info" /> Mode Semua Toko — data dari semua toko ditampilkan. Untuk input faktur baru, pilih toko spesifik.</div>}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
@@ -3185,7 +3178,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
 
             return (
                 <div className="max-w-4xl mx-auto space-y-4">
-                    {readOnly && <ReadOnlyBanner />}
+                    
                     <div><h1 className="text-lg font-bold text-slate-800">Buku Kas</h1><p className="text-[10px] text-slate-500 font-bold">{currentProfile.name}</p></div>
                     
                     <div className="flex bg-white p-1.5 rounded-xl shadow-sm border border-slate-100">
@@ -3759,8 +3752,8 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     selectedPrice: defaultPrice,
                     selectedUnit: defaultUnit,
                     qty: 1,
-                    discountType: '%',
-                    discountValue: 0
+                    discountType: item.defaultDiscountType || '%',
+                    discountValue: item.defaultDiscount || 0
                 });
             };
             
@@ -4484,7 +4477,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             return (
                 <div className="fade-in h-full flex flex-col md:flex-row gap-4 pb-20 md:pb-0 relative z-10">
                     <div className="flex-1 flex flex-col h-full min-h-0">
-                        {readOnly && <ReadOnlyBanner />}
+                        
                         {/* Slim kasir indicator */}
                         <div className="flex items-center gap-2 mb-3 px-1">
                             <div className="w-6 h-6 bg-sky-500 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm">{cashierName.charAt(0).toUpperCase()}</div>
@@ -5778,7 +5771,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
 
             return (
                 <div className="fade-in pb-20 md:pb-0 h-full flex flex-col relative z-10">
-                    {readOnly && <ReadOnlyBanner />}
+                    
                     <header className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                         <div>
                             <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">Riwayat {currentProfile.name}</h2>
@@ -6438,7 +6431,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
 
             return (
                 <div className="space-y-4 fade-in h-full flex flex-col relative z-10">
-                    {readOnly && <ReadOnlyBanner />}
+                    
                     <header className="flex flex-col gap-3">
                         <div className="flex items-start justify-between gap-3">
                             <div>
@@ -6550,7 +6543,42 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Nama Produk</label><input className="w-full p-3.5 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white outline-none transition-all font-semibold text-sm text-slate-700 focus:border-slate-400" placeholder="Contoh: Paracetamol 500mg" value={formData.name || ''} onChange={e=>setFormData({...formData, name: e.target.value})} required /></div>
                             <div className="grid grid-cols-2 gap-3"><div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Harga Jual (Rp)</label><input type="number" className="w-full p-3.5 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white outline-none transition-all font-bold text-sm text-slate-700 focus:border-slate-400" placeholder="0" value={formData.price || ''} onChange={e=>setFormData({...formData, price: e.target.value})} /></div><div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Lokasi Rak</label><input className="w-full p-3.5 rounded-xl bg-slate-50 border border-slate-200 outline-none font-medium text-sm transition-all focus:bg-white focus:border-slate-400" placeholder="Ex: A-01" value={formData.rack || ''} onChange={e=>setFormData({...formData, rack: e.target.value})} /></div></div>
                             <div className="space-y-1.5"><label className="text-[10px] font-bold text-orange-500 uppercase tracking-wider ml-1 flex items-center gap-1"><Icon name="tag" className="text-[10px]" /> Harga Beli (Rp) <span className="text-[9px] font-normal lowercase text-slate-400">— modal / harga pokok</span></label><input type="number" className="w-full p-3.5 rounded-xl bg-orange-50 border border-orange-200 focus:bg-white outline-none transition-all font-bold text-sm text-orange-700 focus:border-orange-400" placeholder="0" value={formData.costPrice || ''} onChange={e=>setFormData({...formData, costPrice: e.target.value})} />{formData.costPrice && formData.price && safeNumber(formData.costPrice) > 0 && safeNumber(formData.price) > 0 && (<p className="text-[10px] text-green-600 font-bold ml-1 mt-0.5">Margin: {formatRupiah(safeNumber(formData.price) - safeNumber(formData.costPrice))} ({((safeNumber(formData.price) - safeNumber(formData.costPrice)) / safeNumber(formData.price) * 100).toFixed(1)}%)</p>)}</div>
-                            
+
+                            <div className="space-y-1.5 bg-purple-50 p-3 rounded-xl border border-purple-200">
+                                <label className="text-[10px] font-bold text-purple-600 uppercase tracking-wider ml-1 flex items-center gap-1">
+                                    <Icon name="percent" className="text-[10px]" /> Diskon Default <span className="text-[9px] font-normal lowercase text-slate-400">— otomatis diterapkan saat barang ditambah ke kasir</span>
+                                </label>
+                                <div className="flex gap-2">
+                                    <select
+                                        className="p-2.5 rounded-lg bg-white border border-purple-200 outline-none font-bold text-sm text-purple-700 focus:border-purple-400 flex-shrink-0"
+                                        value={formData.defaultDiscountType || '%'}
+                                        onChange={e => setFormData({...formData, defaultDiscountType: e.target.value, defaultDiscount: ''})}
+                                    >
+                                        <option value="%">%</option>
+                                        <option value="Rp">Rp</option>
+                                    </select>
+                                    <input
+                                        type="number"
+                                        className="flex-1 p-2.5 rounded-lg bg-white border border-purple-200 focus:border-purple-400 outline-none font-bold text-sm text-purple-700"
+                                        placeholder={(formData.defaultDiscountType || '%') === '%' ? 'Contoh: 10 (artinya 10%)' : 'Contoh: 5000 (artinya Rp 5.000)'}
+                                        value={formData.defaultDiscount || ''}
+                                        onChange={e => {
+                                            const maxVal = (formData.defaultDiscountType || '%') === '%' ? 100 : safeNumber(formData.price);
+                                            const num = parseFloat(e.target.value) || 0;
+                                            setFormData({...formData, defaultDiscount: num <= 0 ? '' : String(Math.min(num, maxVal > 0 ? maxVal : 999999999))});
+                                        }}
+                                    />
+                                </div>
+                                {formData.defaultDiscount && safeNumber(formData.defaultDiscount) > 0 && formData.price && safeNumber(formData.price) > 0 && (
+                                    <p className="text-[10px] text-purple-600 font-bold ml-1 mt-0.5">
+                                        Harga setelah diskon: {formatRupiah(
+                                            (formData.defaultDiscountType || '%') === '%'
+                                                ? safeNumber(formData.price) - (safeNumber(formData.price) * safeNumber(formData.defaultDiscount) / 100)
+                                                : safeNumber(formData.price) - safeNumber(formData.defaultDiscount)
+                                        )}
+                                    </p>
+                                )}
+                            </div>
 
                             <div className="grid grid-cols-5 gap-3"><div className="col-span-3 space-y-1.5"><label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Jumlah</label><div className="relative"><input type="number" step="any" className="w-full p-3.5 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white outline-none transition-all font-bold text-slate-700 text-sm focus:border-slate-400" value={formData.qty || ''} onChange={e=>setFormData({...formData, qty: e.target.value})} placeholder="0" /><div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-0.5"><button type="button" onClick={() => setFormData({...formData, qty: safeNumber(formData.qty)+1})} className="w-4 h-4 bg-white rounded shadow text-[8px] text-slate-500 hover:text-brand-600"><Icon name="chevron-up" /></button><button type="button" onClick={() => setFormData({...formData, qty: Math.max(0, safeNumber(formData.qty)-1)})} className="w-4 h-4 bg-white rounded shadow text-[8px] text-slate-500 hover:text-red-600"><Icon name="chevron-down" /></button></div></div></div><div className="col-span-2 space-y-1.5"><label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Satuan</label><select className="w-full p-3.5 rounded-xl bg-slate-50 border border-slate-200 outline-none appearance-none font-medium text-sm text-slate-600 focus:border-slate-400" value={formData.unit || 'Pcs'} onChange={e=>setFormData({...formData, unit: e.target.value})}>{unitOptions.map(u => <option key={u} value={u}>{u}</option>)}</select></div></div>
                             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Kadaluarsa</label><input type="date" className="w-full p-3.5 rounded-xl bg-slate-50 border border-slate-200 outline-none font-medium text-sm transition-all focus:bg-white text-slate-600 focus:border-slate-400" value={formData.exp || ''} onChange={e=>setFormData({...formData, exp: e.target.value})} /></div>
@@ -6878,7 +6906,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
 
             return (
                 <div className="flex flex-col" style={{ height: '100%', padding: '16px', overflow: 'hidden', boxSizing: 'border-box' }}>
-                    {readOnly && <ReadOnlyBanner />}
+                    
                     {/* Info Banner */}
                     {showInfoBanner && (
                         <div className="mb-3 rounded-2xl flex-shrink-0 overflow-hidden"
@@ -7601,7 +7629,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
 
             return (
                 <div className="fade-in space-y-6">
-                    {readOnly && <ReadOnlyBanner />}
+                    
                     <div className="flex items-center justify-between flex-wrap gap-3">
                         <div>
                             <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2"><Icon name="clipboard-check" className="text-sky-500" /> Stock Opname</h2>
@@ -7740,7 +7768,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
 
         // ==================== AUTH UTILITIES ====================
         const INVITATION_CODE = "12345670";
-        const OWNER_EMAILS = ["kayzen796@gmail.com", "hayatifadhilah11199@gmail.com"];
+        const OWNER_EMAILS = ["kayzen796@gmail.com", "husna123456@gmail.com"];
         const OWNER_EMAIL = OWNER_EMAILS[0]; // email utama untuk tampilan pesan
         const isOwnerEmail = (email) => OWNER_EMAILS.includes((email || '').toLowerCase());
 
@@ -8280,6 +8308,465 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             );
         };
 
+        // =================== JADWAL SHIFT VIEW (v2 - Pagi/Siang per Lokasi) ===================
+        const JadwalShiftView = ({ user, showToast, readOnly, currentProfile, settings }) => {
+            const HARI = ['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Minggu'];
+            const SHIFTS = [
+                { id: 'pagi',  label: 'Pagi',  jam: '08:00 – 14:00', bg: '#FFF176', text: '#5D4037', border: '#F9A825' },
+                { id: 'siang', label: 'Siang', jam: '14:00 – 21:00', bg: '#80DEEA', text: '#006064', border: '#00ACC1' },
+                { id: 'libur', label: 'Libur', jam: '—',             bg: '#F8FAFC', text: '#94a3b8', border: '#e2e8f0' },
+            ];
+
+            const [weekOffset, setWeekOffset]   = useState(0);
+            const [jadwal, setJadwal]            = useState({});
+            const [karyawanList, setKaryawanList]= useState([]);
+            const [lokasiList, setLokasiList]    = useState([]);
+            const [loadingData, setLoadingData]  = useState(true);
+            const [pickerTarget, setPickerTarget]= useState(null); // {dayIdx, shiftId, lokasiId}
+            const [pickerSearch, setPickerSearch]= useState('');
+            // Modals karyawan
+            const [modalKaryawan, setModalKaryawan] = useState(false);
+            const [editKaryawan, setEditKaryawan]   = useState(null); // null | {id,nama,jabatan}
+            const [delKaryawan, setDelKaryawan]     = useState(null);
+            const [newKNama, setNewKNama]           = useState('');
+            const [newKJabatan, setNewKJabatan]     = useState('');
+            // Modals lokasi
+            const [modalLokasi, setModalLokasi]     = useState(false);
+            const [newLNama, setNewLNama]            = useState('');
+            const [editLokasi, setEditLokasi]        = useState(null);
+            const [delLokasi, setDelLokasi]          = useState(null);
+            // Rekap
+            const [activeView, setActiveView]        = useState('jadwal'); // 'jadwal' | 'rekap'
+            // Print title
+            const storeName = currentProfile?.name || settings?.storeName || 'Apotek';
+
+            /* ---------- Helpers tanggal ---------- */
+            const getMondayOfWeek = (offset = 0) => {
+                const today = new Date();
+                const day   = today.getDay();
+                const diff  = (day === 0 ? -6 : 1 - day);
+                const mon   = new Date(today);
+                mon.setDate(today.getDate() + diff + offset * 7);
+                mon.setHours(0, 0, 0, 0);
+                return mon;
+            };
+            const weekStart  = getMondayOfWeek(weekOffset);
+            const getWeekKey = (mon) => {
+                const jan1     = new Date(mon.getFullYear(), 0, 1);
+                const weekNum  = Math.ceil(((mon - jan1) / 86400000 + jan1.getDay() + 1) / 7);
+                return `${mon.getFullYear()}-W${String(weekNum).padStart(2,'0')}`;
+            };
+            const weekKey    = getWeekKey(weekStart);
+            const dayDates   = Array.from({length:7}, (_,i) => { const d = new Date(weekStart); d.setDate(weekStart.getDate()+i); return d; });
+            const fmtTgl     = (d) => d.toLocaleDateString('id-ID',{day:'2-digit',month:'2-digit',year:'numeric'});
+            const fmtShort   = (d) => d.toLocaleDateString('id-ID',{day:'2-digit',month:'short'});
+            const weekLabel  = weekOffset===0?'Pekan Ini':weekOffset===1?'Pekan Depan':weekOffset===-1?'Pekan Lalu':`${weekOffset>0?'+':''}${weekOffset} Pekan`;
+
+            /* ---------- Firestore ---------- */
+            const colKaryawan = () => window.collection(window.db,'artifacts',window.appId,'public','data','shift_karyawan');
+            const colLokasi   = () => window.collection(window.db,'artifacts',window.appId,'public','data','shift_lokasi');
+            const colJadwal   = () => window.collection(window.db,'artifacts',window.appId,'public','data','shift_jadwal');
+
+            useEffect(() => {
+                if (!user) return;
+                const q = window.query(colKaryawan(), window.orderBy('createdAt','asc'));
+                return window.onSnapshot(q, snap => { setKaryawanList(snap.docs.map(d=>({id:d.id,...d.data()}))); setLoadingData(false); });
+            }, [user]);
+
+            useEffect(() => {
+                if (!user) return;
+                const q = window.query(colLokasi(), window.orderBy('createdAt','asc'));
+                return window.onSnapshot(q, snap => setLokasiList(snap.docs.map(d=>({id:d.id,...d.data()}))));
+            }, [user]);
+
+            useEffect(() => {
+                if (!user) return;
+                const ref = window.doc(colJadwal(), weekKey);
+                return window.onSnapshot(ref, snap => {
+                    setJadwal(prev => ({...prev, [weekKey]: snap.exists() ? snap.data() : {}}));
+                });
+            }, [user, weekKey]);
+
+            const weekJadwal = jadwal[weekKey] || {};
+            const cellKey    = (dayIdx, shiftId, lokasiId) => `${dayIdx}_${shiftId}_${lokasiId}`;
+            const getCell    = (dayIdx, shiftId, lokasiId) => weekJadwal[cellKey(dayIdx,shiftId,lokasiId)] || null;
+            const getKaryawan= (id) => karyawanList.find(k=>k.id===id);
+
+            const setCell = async (dayIdx, shiftId, lokasiId, karyawanId) => {
+                if (readOnly) { showToast('Tidak ada akses edit','error'); return; }
+                const ref = window.doc(colJadwal(), weekKey);
+                const k   = cellKey(dayIdx, shiftId, lokasiId);
+                try {
+                    await window.setDoc(ref, { [k]: karyawanId || null, updatedAt: window.serverTimestamp() }, {merge:true});
+                } catch(e) { showToast('Gagal menyimpan','error'); }
+                setPickerTarget(null);
+            };
+
+            /* ---------- CRUD Karyawan ---------- */
+            const addKaryawan = async () => {
+                if (!newKNama.trim()) return;
+                await window.addDoc(colKaryawan(), {nama:newKNama.trim(), jabatan:newKJabatan.trim()||'Karyawan', createdAt:window.serverTimestamp()});
+                setNewKNama(''); setNewKJabatan(''); showToast('Karyawan ditambahkan');
+            };
+            const saveEditKaryawan = async () => {
+                if (!editKaryawan?.nama.trim()) return;
+                await window.updateDoc(window.doc(colKaryawan(),editKaryawan.id),{nama:editKaryawan.nama,jabatan:editKaryawan.jabatan});
+                setEditKaryawan(null); showToast('Data diperbarui');
+            };
+            const doDelKaryawan = async (id) => {
+                await window.deleteDoc(window.doc(colKaryawan(),id)); setDelKaryawan(null); showToast('Karyawan dihapus');
+            };
+
+            /* ---------- CRUD Lokasi ---------- */
+            const addLokasi = async () => {
+                if (!newLNama.trim()) return;
+                await window.addDoc(colLokasi(), {nama:newLNama.trim(), createdAt:window.serverTimestamp()});
+                setNewLNama(''); showToast('Lokasi ditambahkan');
+            };
+            const saveEditLokasi = async () => {
+                if (!editLokasi?.nama.trim()) return;
+                await window.updateDoc(window.doc(colLokasi(),editLokasi.id),{nama:editLokasi.nama});
+                setEditLokasi(null); showToast('Lokasi diperbarui');
+            };
+            const doDelLokasi = async (id) => {
+                await window.deleteDoc(window.doc(colLokasi(),id)); setDelLokasi(null); showToast('Lokasi dihapus');
+            };
+
+            /* ---------- Rekap ---------- */
+            const getRekapKaryawan = (k) => {
+                const counts = {pagi:0, siang:0, libur:0, total:0};
+                for (let d=0; d<7; d++) {
+                    lokasiList.forEach(loc => {
+                        SHIFTS.forEach(s => {
+                            if (getCell(d,s.id,loc.id) === k.id) {
+                                counts[s.id]++;
+                                if (s.id !== 'libur') counts.total++;
+                            }
+                        });
+                    });
+                }
+                return counts;
+            };
+
+            /* ---------- Print ---------- */
+            const handlePrint = () => {
+                const el = document.getElementById('shift-print-area');
+                if (!el) return;
+                const win = window.open('','_blank');
+                win.document.write(`<html><head><title>Jadwal Shift</title><style>
+                    body{font-family:Arial,sans-serif;font-size:12px;margin:0;padding:16px;}
+                    table{border-collapse:collapse;width:100%;}
+                    th,td{border:2px solid #000;padding:6px 10px;text-align:center;}
+                    .pagi{background:#FFF176;} .siang{background:#80DEEA;}
+                    h2,h3{text-align:center;margin:2px 0;}
+                    @media print{@page{size:landscape;}}
+                </style></head><body>${el.innerHTML}</body></html>`);
+                win.document.close();
+                setTimeout(()=>{ win.print(); }, 400);
+            };
+
+            const isOpen = pickerTarget !== null;
+
+            return (
+                <div className="p-3 md:p-4 max-w-full fade-in">
+                    {/* HEADER */}
+                    <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 text-white flex items-center justify-center shadow text-sm">
+                                <Icon name="calendar-days" />
+                            </div>
+                            <div>
+                                <h2 className="font-extrabold text-slate-800 text-base leading-tight">Jadwal Shift</h2>
+                                <p className="text-[10px] text-slate-400">Pagi & Siang per lokasi toko</p>
+                            </div>
+                        </div>
+                        <div className="flex gap-1.5 flex-wrap">
+                            {!readOnly && (
+                                <>
+                                    <button onClick={() => setModalLokasi(true)} className="flex items-center gap-1 px-2.5 py-1.5 bg-sky-500 hover:bg-sky-600 text-white text-[11px] font-bold rounded-lg shadow transition-all active:scale-95">
+                                        <Icon name="shop" /> Lokasi
+                                    </button>
+                                    <button onClick={() => setModalKaryawan(true)} className="flex items-center gap-1 px-2.5 py-1.5 bg-violet-500 hover:bg-violet-600 text-white text-[11px] font-bold rounded-lg shadow transition-all active:scale-95">
+                                        <Icon name="users" /> Karyawan
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* NAVIGASI PEKAN */}
+                    <div className="flex items-center justify-between mb-3 bg-white rounded-xl border border-slate-200 px-3 py-2 shadow-sm">
+                        <button onClick={()=>setWeekOffset(w=>w-1)} className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-all active:scale-95 text-xs">
+                            <Icon name="chevron-left" />
+                        </button>
+                        <div className="text-center">
+                            <p className="font-extrabold text-xs text-slate-700">{weekLabel}</p>
+                            <p className="text-[10px] text-slate-400">{fmtShort(dayDates[0])} – {fmtShort(dayDates[6])}</p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                            {weekOffset!==0 && (
+                                <button onClick={()=>setWeekOffset(0)} className="px-2 py-0.5 text-[10px] font-bold text-violet-600 bg-violet-50 rounded-md border border-violet-200 hover:bg-violet-100 mr-1">Hari ini</button>
+                            )}
+                            <button onClick={()=>setWeekOffset(w=>w+1)} className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-all active:scale-95 text-xs">
+                                <Icon name="chevron-right" />
+                            </button>
+                        </div>
+                    </div>
+
+                    {loadingData ? (
+                        <div className="flex flex-col items-center justify-center py-20 gap-3">
+                            <div className="w-10 h-10 border-4 border-violet-200 border-t-violet-500 rounded-full animate-spin"></div>
+                            <p className="text-sm text-slate-400">Memuat data...</p>
+                        </div>
+                    ) : (
+                        /* ===== TABEL JADWAL UTAMA ===== */
+                        <>
+                        {/* EMPTY STATE */}
+                        {(lokasiList.length === 0 || karyawanList.length === 0) && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4 text-xs text-amber-800 font-medium flex gap-2 items-start">
+                                <Icon name="circle-info" className="text-amber-500 mt-0.5 flex-shrink-0" />
+                                <div>
+                                    {lokasiList.length === 0 && <p>⚠️ Tambahkan <strong>Lokasi</strong> (contoh: Rafa 1, Rafa 2) terlebih dahulu.</p>}
+                                    {karyawanList.length === 0 && <p>⚠️ Tambahkan <strong>Karyawan</strong> yang akan dijadwalkan.</p>}
+                                </div>
+                            </div>
+                        )}
+                        {/* TABEL */}
+                        <div id="shift-print-area">
+                            {/* Print header */}
+                            <div className="text-center mb-3 hidden-screen" style={{display:'none'}} id="shift-print-header">
+                                <h2 style={{fontWeight:'bold',fontSize:'16px',textTransform:'uppercase'}}>JADWAL SHIFT {storeName.toUpperCase()}</h2>
+                                <h3 style={{fontSize:'13px'}}>Lokasi Kerja</h3>
+                            </div>
+                            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-xs border-collapse" style={{minWidth: `${160 + lokasiList.length * 90}px`}}>
+                                        {/* HEADER */}
+                                        <thead>
+                                            <tr style={{background:'#1e293b',color:'white'}}>
+                                                <th className="py-2 px-2 text-left font-bold border border-slate-600 w-20" style={{fontSize:'11px'}}>Hari/tgl</th>
+                                                <th className="py-2 px-2 text-center font-bold border border-slate-600 w-16" style={{fontSize:'11px'}}>Shift</th>
+                                                {lokasiList.map(loc => (
+                                                    <th key={loc.id} className="py-2 px-2 text-center font-bold border border-slate-600 min-w-[80px]" style={{fontSize:'11px'}}>
+                                                        {loc.nama}
+                                                    </th>
+                                                ))}
+                                                {lokasiList.length === 0 && (
+                                                    <th className="py-2 px-2 text-center text-slate-400 border border-slate-600">— tambah lokasi —</th>
+                                                )}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {HARI.map((hari, dayIdx) => {
+                                                const isWeekend = dayIdx >= 5;
+                                                return SHIFTS.map((shift, si) => (
+                                                    <tr key={`${dayIdx}_${shift.id}`} className={si === 0 ? 'border-t-2 border-slate-300' : ''}>
+                                                        {/* HARI (merged 3 baris via rowspan) */}
+                                                        {si === 0 && (
+                                                            <td rowSpan={3} className={`px-1.5 py-1 font-extrabold text-center border border-slate-200 align-middle ${isWeekend ? 'bg-orange-50 text-orange-700' : 'bg-slate-50 text-slate-800'}`}>
+                                                                <div style={{fontSize:'11px'}} className="font-extrabold">{hari.toUpperCase()}</div>
+                                                                <div style={{fontSize:'9px'}} className="font-normal text-slate-400 mt-0.5 leading-tight">{fmtTgl(dayDates[dayIdx])}</div>
+                                                            </td>
+                                                        )}
+                                                        {/* SHIFT LABEL */}
+                                                        <td className="px-1.5 py-1 text-center font-extrabold border border-slate-200" style={{background: shift.id==='libur' ? '#f1f5f9' : shift.bg, color: shift.id==='libur' ? '#94a3b8' : shift.text, fontSize:'10px'}}>
+                                                            {shift.label}
+                                                        </td>
+                                                        {/* LOKASI CELLS */}
+                                                        {lokasiList.map(loc => {
+                                                            const kId  = getCell(dayIdx, shift.id, loc.id);
+                                                            const k    = kId ? getKaryawan(kId) : null;
+                                                            const isT  = pickerTarget?.dayIdx===dayIdx && pickerTarget?.shiftId===shift.id && pickerTarget?.lokasiId===loc.id;
+                                                            const isLibur = shift.id === 'libur';
+                                                            return (
+                                                                <td key={loc.id} className="px-1 py-0.5 text-center border border-slate-200 relative" style={{background: isLibur ? '#f8fafc' : shift.bg + '60'}}>
+                                                                    <button
+                                                                        disabled={readOnly}
+                                                                        onClick={()=>{ setPickerTarget(isT?null:{dayIdx,shiftId:shift.id,lokasiId:loc.id}); setPickerSearch(''); }}
+                                                                        className={`w-full rounded-md py-1 px-1 font-bold transition-all ${!readOnly ? 'cursor-pointer hover:ring-2 ring-violet-400' : ''} ${isT ? 'ring-2 ring-violet-500 ring-offset-1' : ''}`}
+                                                                        style={{
+                                                                            fontSize: '11px',
+                                                                            color: k ? (isLibur ? '#dc2626' : shift.text) : '#d1d5db',
+                                                                            background: k ? (isLibur ? '#fee2e2' : shift.bg) : 'transparent',
+                                                                            minHeight:'24px'
+                                                                        }}
+                                                                    >
+                                                                        {k ? `${k.nama}${isLibur ? ' (L)' : ''}` : <span style={{color:'#e2e8f0'}}>—</span>}
+                                                                    </button>
+                                                                    {/* PICKER DROPDOWN */}
+                                                                    {isT && (
+                                                                        <div className="absolute z-40 top-full left-0 mt-1 bg-white border border-slate-200 rounded-2xl shadow-2xl p-2 w-48" onClick={e=>e.stopPropagation()}>
+                                                                            <input
+                                                                                autoFocus
+                                                                                value={pickerSearch}
+                                                                                onChange={e=>setPickerSearch(e.target.value)}
+                                                                                placeholder="Cari karyawan..."
+                                                                                className="w-full border border-slate-200 rounded-xl px-2.5 py-1.5 text-[11px] outline-none focus:border-violet-400 mb-1.5"
+                                                                            />
+                                                                            <div className="max-h-44 overflow-y-auto">
+                                                                                {karyawanList
+                                                                                    .filter(k => !pickerSearch || k.nama.toLowerCase().includes(pickerSearch.toLowerCase()))
+                                                                                    .map(k => (
+                                                                                    <button key={k.id} onClick={()=>setCell(dayIdx,shift.id,loc.id,k.id)}
+                                                                                        className="w-full text-left px-2.5 py-1.5 rounded-xl mb-0.5 text-[12px] font-bold hover:bg-violet-50 hover:text-violet-700 transition-all">
+                                                                                        {k.nama}
+                                                                                        <span className="text-[9px] text-slate-400 font-normal block">{k.jabatan}</span>
+                                                                                    </button>
+                                                                                ))}
+                                                                                {karyawanList.filter(k=>!pickerSearch||k.nama.toLowerCase().includes(pickerSearch.toLowerCase())).length===0 && (
+                                                                                    <p className="text-xs text-slate-400 text-center py-2">Tidak ditemukan</p>
+                                                                                )}
+                                                                            </div>
+                                                                            <div className="border-t border-slate-100 mt-1 pt-1">
+                                                                                <button onClick={()=>setCell(dayIdx,shift.id,loc.id,null)}
+                                                                                    className="w-full text-center px-2.5 py-1.5 rounded-xl text-[11px] text-red-400 font-bold hover:bg-red-50 transition-all">
+                                                                                    <Icon name="eraser" className="mr-1" /> Kosongkan
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                </td>
+                                                            );
+                                                        })}
+                                                        {lokasiList.length === 0 && (
+                                                            <td className="px-2 py-1 text-center text-slate-300 border border-slate-200">—</td>
+                                                        )}
+                                                    </tr>
+                                                ));
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        </>
+                    )}
+
+                    {/* OVERLAY tutup picker */}
+                    {isOpen && <div className="fixed inset-0 z-30" onClick={()=>setPickerTarget(null)} />}
+
+                    {/* ===== MODAL KELOLA KARYAWAN ===== */}
+                    {modalKaryawan && (
+                        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4" style={{background:'rgba(0,0,0,0.5)'}}>
+                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-5 slide-up max-h-[85vh] flex flex-col">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="w-9 h-9 rounded-2xl bg-violet-500 text-white flex items-center justify-center"><Icon name="users" /></div>
+                                    <p className="font-extrabold text-slate-800 flex-1">Kelola Karyawan</p>
+                                    <button onClick={()=>setModalKaryawan(false)} className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center"><Icon name="xmark" /></button>
+                                </div>
+                                {/* Form tambah */}
+                                <div className="flex gap-2 mb-3 flex-shrink-0">
+                                    <input value={newKNama} onChange={e=>setNewKNama(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addKaryawan()} placeholder="Nama karyawan..." className="flex-1 border-2 border-slate-200 focus:border-violet-400 rounded-xl px-3 py-2 text-sm outline-none" />
+                                    <input value={newKJabatan} onChange={e=>setNewKJabatan(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addKaryawan()} placeholder="Jabatan..." className="w-24 border-2 border-slate-200 focus:border-violet-400 rounded-xl px-3 py-2 text-sm outline-none" />
+                                    <button onClick={addKaryawan} disabled={!newKNama.trim()} className="w-10 h-10 bg-violet-500 hover:bg-violet-600 disabled:opacity-40 text-white rounded-xl flex items-center justify-center text-sm transition-all active:scale-95 flex-shrink-0">
+                                        <Icon name="plus" />
+                                    </button>
+                                </div>
+                                {/* Daftar */}
+                                <div className="overflow-y-auto flex-1 space-y-2 pr-1">
+                                    {karyawanList.length===0 && <p className="text-xs text-slate-400 text-center py-6">Belum ada karyawan</p>}
+                                    {karyawanList.map(k=>(
+                                        <div key={k.id} className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2">
+                                            {editKaryawan?.id===k.id ? (
+                                                <>
+                                                    <input value={editKaryawan.nama} onChange={e=>setEditKaryawan({...editKaryawan,nama:e.target.value})} className="flex-1 border border-violet-300 rounded-lg px-2 py-1 text-xs outline-none" autoFocus />
+                                                    <input value={editKaryawan.jabatan} onChange={e=>setEditKaryawan({...editKaryawan,jabatan:e.target.value})} className="w-20 border border-violet-300 rounded-lg px-2 py-1 text-xs outline-none" />
+                                                    <button onClick={saveEditKaryawan} className="w-7 h-7 bg-green-500 text-white rounded-lg flex items-center justify-center text-xs"><Icon name="check" /></button>
+                                                    <button onClick={()=>setEditKaryawan(null)} className="w-7 h-7 bg-slate-300 text-slate-600 rounded-lg flex items-center justify-center text-xs"><Icon name="xmark" /></button>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 text-white flex items-center justify-center font-extrabold text-[10px] flex-shrink-0">{k.nama.charAt(0)}</div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="font-bold text-slate-700 text-xs truncate">{k.nama}</p>
+                                                        <p className="text-[10px] text-slate-400">{k.jabatan}</p>
+                                                    </div>
+                                                    <button onClick={()=>setEditKaryawan({...k})} className="w-7 h-7 bg-sky-50 hover:bg-sky-100 text-sky-500 rounded-lg flex items-center justify-center text-xs"><Icon name="pen" /></button>
+                                                    <button onClick={()=>setDelKaryawan(k)} className="w-7 h-7 bg-red-50 hover:bg-red-100 text-red-400 rounded-lg flex items-center justify-center text-xs"><Icon name="trash" /></button>
+                                                </>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ===== MODAL KELOLA LOKASI ===== */}
+                    {modalLokasi && (
+                        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4" style={{background:'rgba(0,0,0,0.5)'}}>
+                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-5 slide-up max-h-[80vh] flex flex-col">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="w-9 h-9 rounded-2xl bg-sky-500 text-white flex items-center justify-center"><Icon name="shop" /></div>
+                                    <p className="font-extrabold text-slate-800 flex-1">Kelola Lokasi</p>
+                                    <button onClick={()=>setModalLokasi(false)} className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center"><Icon name="xmark" /></button>
+                                </div>
+                                <div className="flex gap-2 mb-3 flex-shrink-0">
+                                    <input value={newLNama} onChange={e=>setNewLNama(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addLokasi()} placeholder="Nama lokasi (cth: Rafa 1)..." className="flex-1 border-2 border-slate-200 focus:border-sky-400 rounded-xl px-3 py-2 text-sm outline-none" autoFocus />
+                                    <button onClick={addLokasi} disabled={!newLNama.trim()} className="w-10 h-10 bg-sky-500 hover:bg-sky-600 disabled:opacity-40 text-white rounded-xl flex items-center justify-center text-sm transition-all active:scale-95 flex-shrink-0">
+                                        <Icon name="plus" />
+                                    </button>
+                                </div>
+                                <div className="overflow-y-auto flex-1 space-y-2">
+                                    {lokasiList.length===0 && <p className="text-xs text-slate-400 text-center py-6">Belum ada lokasi</p>}
+                                    {lokasiList.map(loc=>(
+                                        <div key={loc.id} className="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2.5">
+                                            {editLokasi?.id===loc.id ? (
+                                                <>
+                                                    <input value={editLokasi.nama} onChange={e=>setEditLokasi({...editLokasi,nama:e.target.value})} className="flex-1 border border-sky-300 rounded-lg px-2 py-1 text-xs outline-none" autoFocus />
+                                                    <button onClick={saveEditLokasi} className="w-7 h-7 bg-green-500 text-white rounded-lg flex items-center justify-center text-xs"><Icon name="check" /></button>
+                                                    <button onClick={()=>setEditLokasi(null)} className="w-7 h-7 bg-slate-300 text-slate-600 rounded-lg flex items-center justify-center text-xs"><Icon name="xmark" /></button>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Icon name="shop" className="text-sky-400 text-sm flex-shrink-0" />
+                                                    <p className="flex-1 font-bold text-slate-700 text-sm">{loc.nama}</p>
+                                                    <button onClick={()=>setEditLokasi({...loc})} className="w-7 h-7 bg-sky-50 hover:bg-sky-100 text-sky-500 rounded-lg flex items-center justify-center text-xs"><Icon name="pen" /></button>
+                                                    <button onClick={()=>setDelLokasi(loc)} className="w-7 h-7 bg-red-50 hover:bg-red-100 text-red-400 rounded-lg flex items-center justify-center text-xs"><Icon name="trash" /></button>
+                                                </>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* KONFIRMASI HAPUS KARYAWAN */}
+                    {delKaryawan && (
+                        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.5)'}}>
+                            <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-xs text-center slide-up">
+                                <div className="w-12 h-12 bg-red-100 rounded-2xl text-red-500 flex items-center justify-center mx-auto mb-3 text-xl"><Icon name="triangle-exclamation" /></div>
+                                <p className="font-extrabold text-slate-800 mb-1">Hapus Karyawan?</p>
+                                <p className="text-xs text-slate-500 mb-4">"{delKaryawan.nama}" akan dihapus permanen dari daftar.</p>
+                                <div className="flex gap-2">
+                                    <button onClick={()=>setDelKaryawan(null)} className="flex-1 py-2.5 border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-600">Batal</button>
+                                    <button onClick={()=>doDelKaryawan(delKaryawan.id)} className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-bold">Hapus</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    {/* KONFIRMASI HAPUS LOKASI */}
+                    {delLokasi && (
+                        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.5)'}}>
+                            <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-xs text-center slide-up">
+                                <div className="w-12 h-12 bg-red-100 rounded-2xl text-red-500 flex items-center justify-center mx-auto mb-3 text-xl"><Icon name="triangle-exclamation" /></div>
+                                <p className="font-extrabold text-slate-800 mb-1">Hapus Lokasi?</p>
+                                <p className="text-xs text-slate-500 mb-4">"{delLokasi.nama}" akan dihapus permanen.</p>
+                                <div className="flex gap-2">
+                                    <button onClick={()=>setDelLokasi(null)} className="flex-1 py-2.5 border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-600">Batal</button>
+                                    <button onClick={()=>doDelLokasi(delLokasi.id)} className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-bold">Hapus</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+        // =================== END JADWAL SHIFT VIEW ===================
+
+
+
                 const App = () => {
             const [inventoryData, setInventoryData] = useState([]);
             const [rawInventory, setRawInventory] = useState([]); // Store original data from DB
@@ -8289,7 +8776,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             const [searchQuery, setSearchQuery] = useState('');
             const [showOnlyLowStock, setShowOnlyLowStock] = useState(false);
             const [selectedRacks, setSelectedRacks] = useState([]);
-            const [formData, setFormData] = useState({ name: '', qty: '', unit: 'Pcs', exp: '', rack: '', price: '', costPrice: '', minStock: '' });
+            const [formData, setFormData] = useState({ name: '', qty: '', unit: 'Pcs', exp: '', rack: '', price: '', costPrice: '', minStock: '', defaultDiscount: '', defaultDiscountType: '%' });
             const [editingItem, setEditingItem] = useState(null); 
             const [deleteModal, setDeleteModal] = useState({ show: false, item: null });
             const [deleteRackModal, setDeleteRackModal] = useState({ show: false, rackName: null });
@@ -8702,6 +9189,8 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                     const baseData = {
                         name: formData.name, unit: formData.unit || 'Pcs', rack: formData.rack || '-', exp: formData.exp || '',
                         price: safeNumber(formData.price), costPrice: safeNumber(formData.costPrice), minStock: formData.minStock ? safeNumber(formData.minStock) : null,
+                        defaultDiscount: formData.defaultDiscount ? safeNumber(formData.defaultDiscount) : 0,
+                        defaultDiscountType: formData.defaultDiscountType || '%',
                         updatedAt: window.serverTimestamp()
                     };
                     const stockUpdate = { [`stocks.${activeStoreId}`]: newQty };
@@ -8753,7 +9242,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         }
                     }
 
-                    setEditingItem(null); setFormData({ name: '', qty: '', unit: 'Pcs', exp: '', rack: '', price: '', costPrice: '', minStock: '' }); setActiveTab('list');
+                    setEditingItem(null); setFormData({ name: '', qty: '', unit: 'Pcs', exp: '', rack: '', price: '', costPrice: '', minStock: '', defaultDiscount: '', defaultDiscountType: '%' }); setActiveTab('list');
                 } catch (error) { console.error("Error saving:", error); showToast("Gagal menyimpan ke database", "error"); } finally { setSubmitting(false); }
             };
 
@@ -8797,6 +9286,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                 { id: 'add',         label: 'Input Manual',      icon: 'pen-to-square',       enabled: isOwner || showMenu('showMenuAdd', settingsData.showMenuAdd),            readOnly: !isOwner && !menuOn('enableInputManual', settingsData.enableInputManual) }, 
                 { id: 'import',      label: 'Import Masal',      icon: 'file-import',         enabled: isOwner || showMenu('showMenuImport', settingsData.showMenuImport),      readOnly: !isOwner && !menuOn('enableImport', settingsData.enableImport) }, 
                 { id: 'rekam_medis', label: 'Rekam Medis',       icon: 'stethoscope',         enabled: isOwner || showMenu('showMenuRekamMedis', settingsData.showMenuRekamMedis), readOnly: !isOwner && !menuOn('enableRekamMedis', settingsData.enableRekamMedis) },
+                { id: 'jadwal_shift', label: 'Jadwal Shift',     icon: 'calendar-days',       enabled: isOwner || showMenu('showMenuJadwalShift', settingsData.showMenuJadwalShift), readOnly: !isOwner && !menuOn('enableJadwalShift', settingsData.enableJadwalShift) },
                 { id: 'settings',    label: 'Pengaturan',        icon: 'gears',               enabled: true, readOnly: false },
             ];
             const visibleMenuItems = menuItems.filter(m => m.enabled);
@@ -9104,12 +9594,13 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         {activeTab === 'purchases' && (<PurchaseView user={user} showToast={showToast} items={inventoryData} currentProfile={currentProfile} settings={settingsData} readOnly={menuItems.find(m=>m.id==='purchases')?.readOnly} />)}
                         {activeTab === 'cashbook' && (<CashBookView user={user} currentProfile={currentProfile} showToast={showToast} readOnly={menuItems.find(m=>m.id==='cashbook')?.readOnly} />)}
                         {activeTab === 'list' && (<ListView items={inventoryData} loading={loading} settings={settingsData} searchQuery={searchQuery} setSearchQuery={setSearchQuery} showOnlyLowStock={showOnlyLowStock} setShowOnlyLowStock={setShowOnlyLowStock} selectedRacks={selectedRacks} setSelectedRacks={setSelectedRacks} uniqueRacksData={uniqueRacksData} onCopySuccess={showToast} onEdit={(item) => { setFormData({...item}); setEditingItem(item); setActiveTab('add'); }} onDelete={(item) => setDeleteModal({ show: true, item: item })} onDeleteRack={(rackName) => setDeleteRackModal({ show: true, rackName })} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='list')?.readOnly} />)}
-                        {activeTab === 'add' && (<FormView formData={formData} setFormData={setFormData} onSubmit={handleSubmit} isEditing={!!editingItem} submitting={submitting} onCancel={() => { setEditingItem(null); setFormData({name:'', qty:'', unit:'Pcs', exp:'', rack:'', price:'', costPrice:'', minStock: ''}); setActiveTab('list'); }} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='add')?.readOnly} />)}
+                        {activeTab === 'add' && (<FormView formData={formData} setFormData={setFormData} onSubmit={handleSubmit} isEditing={!!editingItem} submitting={submitting} onCancel={() => { setEditingItem(null); setFormData({name:'', qty:'', unit:'Pcs', exp:'', rack:'', price:'', costPrice:'', minStock: '', defaultDiscount: '', defaultDiscountType: '%'}); setActiveTab('list'); }} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='add')?.readOnly} />)}
                         {activeTab === 'import' && (<BulkImportView user={user} onImportComplete={(count) => { showToast(`${count} Barang berhasil diimport`); setActiveTab('list'); }} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='import')?.readOnly} />)}
                         {activeTab === 'stock_opname' && (<StockOpnameView items={inventoryData} user={user} showToast={showToast} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='stock_opname')?.readOnly} />)}
                         {activeTab === 'rekam_medis' && (<RekamMedisView user={user} showToast={showToast} readOnly={menuItems.find(m=>m.id==='rekam_medis')?.readOnly} />)}
                         {activeTab === 'settings' && (<SettingsView settings={settingsData} onSave={handleSaveSettings} loading={submitting} authSession={authSession} />)}
                         {activeTab === 'catatan' && (<PapanCatatan user={user} readOnly={menuItems.find(m=>m.id==='catatan')?.readOnly} />)}
+                        {activeTab === 'jadwal_shift' && (<JadwalShiftView user={user} showToast={showToast} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='jadwal_shift')?.readOnly} />)}
                     </main>
                     <ConfirmModal isOpen={deleteModal.show} title="Hapus Barang?" message={`Yakin ingin menghapus permanen "${deleteModal.item?.name}"? Barang ini akan hilang dari SEMUA toko.`} onConfirm={handleDelete} onCancel={() => setDeleteModal({ show: false, item: null })} />
                     <ConfirmModal isOpen={deleteRackModal.show} title="Hapus Rak?" message={`Yakin ingin menghapus rak "${deleteRackModal.rackName}"? Semua barang di rak ini akan menjadi 'No Rack' (-).`} onConfirm={handleConfirmDeleteRack} onCancel={() => setDeleteRackModal({ show: false, rackName: null })} confirmText="Ya, Hapus Rak" />
