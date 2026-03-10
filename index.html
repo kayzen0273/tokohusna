@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistem Kasir Toko Husna (V44 - Faktur Pembelian Per Toko)</title>
+    <title>Sistem Kasir Toko Husna (V45 - Toggle WA & Excel di Panel Owner)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -399,6 +399,9 @@
             enableSettingsStruk: true,
             enableSettingsPembayaran: true,
             enableSettingsWhatsapp: true,
+            // Fitur Daftar Barang
+            enableCopyWA: true,
+            enableExportExcel: true,
         };
 
         // --- BLUETOOTH PRINTER HELPERS ---
@@ -525,6 +528,7 @@
             return (new Date() - date) < (24 * 60 * 60 * 1000);
         };
         const formatDateIndo = (dateStr) => { if (!dateStr) return "-"; return new Date(dateStr).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: '2-digit' }); };
+        const formatDateFull = (dateStr) => { if (!dateStr) return "-"; return new Date(dateStr + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); };
         const getDaysRemaining = (dateStr) => { if (!dateStr) return null; const today = new Date(); today.setHours(0,0,0,0); const exp = new Date(dateStr); exp.setHours(0,0,0,0); return Math.ceil((exp - today) / (1000 * 60 * 60 * 24)); };
 
         const Toast = ({ message, show, onClose, type = "success" }) => {
@@ -982,6 +986,8 @@
                 { key: 'enableInputManual', label: 'Input Manual', icon: 'pen-to-square', desc: 'Tambah/edit barang' },
                 { key: 'enableImport', label: 'Import Masal', icon: 'file-import', desc: 'Import data Excel' },
                 { key: 'enableJadwalShift', label: 'Jadwal Shift', icon: 'calendar-days', desc: 'Jadwal shift karyawan' },
+                { key: 'enableCopyWA', label: 'Salin WhatsApp', icon: 'whatsapp', desc: 'Tombol salin daftar barang ke WA' },
+                { key: 'enableExportExcel', label: 'Export Excel', icon: 'file-excel', desc: 'Tombol export daftar barang ke Excel' },
             ];
             const settingsAccessList = [
                 { key: 'enableSettingsToko', label: 'Profil & Cabang Toko', icon: 'shop', desc: 'Edit nama, alamat toko' },
@@ -3141,30 +3147,27 @@
                 const income = safeNumber(log.totalRevenue);
                 const totalExp = safeNumber(log.expenseAmount);
                 const deposited = safeNumber(log.deposited);
-                
-                // Hitungan Total (Uang Tersedia sebelum setor)
-                const netBalance = (prev + income) - totalExp;
-                
-                // Build expense breakdown
-                let expenseText = '';
+                const remaining = safeNumber(log.remaining);
+                const storeName = currentProfile.name;
+
+                // Format tanggal: "Senin, 9 Mar 2026"
+                const dateObj = new Date(log.date + 'T00:00:00');
+                const dateLabel = dateObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+
+                // Build expense lines
+                let expenseLines = '';
                 if (log.expenses && log.expenses.length > 0) {
-                    expenseText = log.expenses.map((exp, i) => `  ${i+1}. ${exp.name}: ${formatRupiah(exp.amount)}`).join('\n');
+                    expenseLines = log.expenses.map((exp, i) => `${i+1}. ${exp.name} : ${formatRupiah(exp.amount)}`).join('\n');
                 } else if (totalExp > 0) {
-                    expenseText = `  - ${log.expenseNote || 'Tanpa Keterangan'}`;
+                    expenseLines = `1. ${log.expenseNote || 'Pengeluaran'} : ${formatRupiah(totalExp)}`;
                 }
 
-                const text = `*LAPORAN SETORAN ${formatDateFull(log.date).toUpperCase()}*
+                // Total = Sisa kemarin + Pendapatan - Pengeluaran
+                const total = prev + income - totalExp;
 
-📦 *Sisa Kemarin:* ${formatRupiah(prev)}
-📈 *Pendapatan Hari Ini:* ${formatRupiah(income)}
-━━━━━━━━━━━━━━━━━
-💰 *Total:* ${formatRupiah(prev + income)}
+                const expSection = expenseLines ? '\n' + expenseLines : '-';
 
-${totalExp > 0 ? `📉 *Pengeluaran:* ${formatRupiah(totalExp)}\n${expenseText}\n━━━━━━━━━━━━━━━━━` : ''}
-
-${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : ''}🏦 *Disetor ke Owner:* ${formatRupiah(deposited)}
-━━━━━━━━━━━━━━━━━
-🔖 *Sisa di Laci:* ${formatRupiah(log.remaining)}`;
+                const text = `*LAPORAN SETORAN HARIAN*\n${storeName} \u2013 ${dateLabel}\n\nSisa kemarin : ${formatRupiah(prev)}\nPendapatan : ${formatRupiah(income)}\nPengeluaran : ${expSection}\n---------------------------------------------\n*Total :  ${formatRupiah(total)}*\nSetor : ${formatRupiah(deposited)} \u2705\nSisa : ${formatRupiah(remaining)}`;
 
                 navigator.clipboard.writeText(text);
                 showToast("Salin teks untuk WA!");
@@ -6268,7 +6271,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
             );
         };
 
-        const ListView = ({ items, searchQuery, setSearchQuery, onEdit, onDelete, onDeleteRack, showOnlyLowStock, setShowOnlyLowStock, selectedRacks, setSelectedRacks, uniqueRacksData, onCopySuccess, loading, settings, currentProfile, readOnly }) => {
+        const ListView = ({ items, searchQuery, setSearchQuery, onEdit, onDelete, onDeleteRack, showOnlyLowStock, setShowOnlyLowStock, selectedRacks, setSelectedRacks, uniqueRacksData, onCopySuccess, loading, settings, currentProfile, readOnly, isOwner }) => {
             const [isRackDropdownOpen, setIsRackDropdownOpen] = useState(false);
             const [rackSearch, setRackSearch] = useState('');
             const dropdownRef = useRef(null);
@@ -6442,15 +6445,19 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         
                         {/* Row Tombol - Responsive Grid */}
                         <div className="grid grid-cols-2 sm:grid-cols-4 lg:flex lg:flex-wrap gap-2">
+                            {(isOwner || settings.enableCopyWA !== false) && (
                             <button onClick={handleCopyToWA} className="py-2.5 px-3.5 rounded-xl font-bold text-[10px] sm:text-xs flex items-center justify-center gap-2 transition-all bg-[#25D366] hover:bg-[#128C7E] text-white shadow-md active:scale-95 whitespace-nowrap">
                                 <Icon name="whatsapp" type="brands" className="text-sm" />
                                 Salin WhatsApp
                             </button>
+                            )}
                             
+                            {(isOwner || settings.enableExportExcel !== false) && (
                             <button onClick={handleExportExcel} className="py-2.5 px-3.5 rounded-xl font-bold text-[10px] sm:text-xs flex items-center justify-center gap-2 transition-all bg-emerald-600 hover:bg-emerald-700 text-white shadow-md active:scale-95 whitespace-nowrap">
                                 <Icon name="file-excel" className="text-sm" />
                                 Export Excel
                             </button>
+                            )}
                             
                             <button onClick={() => setShowOnlyLowStock(!showOnlyLowStock)} className={`py-2.5 px-3.5 rounded-xl font-bold text-[10px] sm:text-xs flex items-center justify-center gap-2 transition-all border shadow-sm whitespace-nowrap ${showOnlyLowStock ? 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                                 <Icon name="filter" className="text-sm" />
@@ -9593,7 +9600,7 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         {activeTab === 'history' && (<HistoryView user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} items={inventoryData} readOnly={menuItems.find(m=>m.id==='history')?.readOnly} />)}
                         {activeTab === 'purchases' && (<PurchaseView user={user} showToast={showToast} items={inventoryData} currentProfile={currentProfile} settings={settingsData} readOnly={menuItems.find(m=>m.id==='purchases')?.readOnly} />)}
                         {activeTab === 'cashbook' && (<CashBookView user={user} currentProfile={currentProfile} showToast={showToast} readOnly={menuItems.find(m=>m.id==='cashbook')?.readOnly} />)}
-                        {activeTab === 'list' && (<ListView items={inventoryData} loading={loading} settings={settingsData} searchQuery={searchQuery} setSearchQuery={setSearchQuery} showOnlyLowStock={showOnlyLowStock} setShowOnlyLowStock={setShowOnlyLowStock} selectedRacks={selectedRacks} setSelectedRacks={setSelectedRacks} uniqueRacksData={uniqueRacksData} onCopySuccess={showToast} onEdit={(item) => { setFormData({...item}); setEditingItem(item); setActiveTab('add'); }} onDelete={(item) => setDeleteModal({ show: true, item: item })} onDeleteRack={(rackName) => setDeleteRackModal({ show: true, rackName })} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='list')?.readOnly} />)}
+                        {activeTab === 'list' && (<ListView items={inventoryData} loading={loading} settings={settingsData} searchQuery={searchQuery} setSearchQuery={setSearchQuery} showOnlyLowStock={showOnlyLowStock} setShowOnlyLowStock={setShowOnlyLowStock} selectedRacks={selectedRacks} setSelectedRacks={setSelectedRacks} uniqueRacksData={uniqueRacksData} onCopySuccess={showToast} onEdit={(item) => { setFormData({...item}); setEditingItem(item); setActiveTab('add'); }} onDelete={(item) => setDeleteModal({ show: true, item: item })} onDeleteRack={(rackName) => setDeleteRackModal({ show: true, rackName })} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='list')?.readOnly} isOwner={isOwner} />)}
                         {activeTab === 'add' && (<FormView formData={formData} setFormData={setFormData} onSubmit={handleSubmit} isEditing={!!editingItem} submitting={submitting} onCancel={() => { setEditingItem(null); setFormData({name:'', qty:'', unit:'Pcs', exp:'', rack:'', price:'', costPrice:'', minStock: '', defaultDiscount: '', defaultDiscountType: '%'}); setActiveTab('list'); }} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='add')?.readOnly} />)}
                         {activeTab === 'import' && (<BulkImportView user={user} onImportComplete={(count) => { showToast(`${count} Barang berhasil diimport`); setActiveTab('list'); }} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='import')?.readOnly} />)}
                         {activeTab === 'stock_opname' && (<StockOpnameView items={inventoryData} user={user} showToast={showToast} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='stock_opname')?.readOnly} />)}
