@@ -399,9 +399,6 @@
             enableSettingsStruk: true,
             enableSettingsPembayaran: true,
             enableSettingsWhatsapp: true,
-            // Tombol aksi di halaman Stok
-            enableCopyWA: true,
-            enableExportExcel: true,
         };
 
         // --- BLUETOOTH PRINTER HELPERS ---
@@ -985,8 +982,6 @@
                 { key: 'enableInputManual', label: 'Input Manual', icon: 'pen-to-square', desc: 'Tambah/edit barang' },
                 { key: 'enableImport', label: 'Import Masal', icon: 'file-import', desc: 'Import data Excel' },
                 { key: 'enableJadwalShift', label: 'Jadwal Shift', icon: 'calendar-days', desc: 'Jadwal shift karyawan' },
-                { key: 'enableCopyWA', label: 'Tombol Salin WhatsApp', icon: 'whatsapp', desc: 'Tombol salin stok ke WA di halaman Stok' },
-                { key: 'enableExportExcel', label: 'Tombol Export Excel', icon: 'file-excel', desc: 'Tombol export stok ke Excel di halaman Stok' },
             ];
             const settingsAccessList = [
                 { key: 'enableSettingsToko', label: 'Profil & Cabang Toko', icon: 'shop', desc: 'Edit nama, alamat toko' },
@@ -6447,19 +6442,15 @@ ${totalExp > 0 ? `💵 *Sisa Setelah Expense:* ${formatRupiah(netBalance)}\n` : 
                         
                         {/* Row Tombol - Responsive Grid */}
                         <div className="grid grid-cols-2 sm:grid-cols-4 lg:flex lg:flex-wrap gap-2">
-                            {settings?.enableCopyWA !== false && (
                             <button onClick={handleCopyToWA} className="py-2.5 px-3.5 rounded-xl font-bold text-[10px] sm:text-xs flex items-center justify-center gap-2 transition-all bg-[#25D366] hover:bg-[#128C7E] text-white shadow-md active:scale-95 whitespace-nowrap">
                                 <Icon name="whatsapp" type="brands" className="text-sm" />
                                 Salin WhatsApp
                             </button>
-                            )}
                             
-                            {settings?.enableExportExcel !== false && (
                             <button onClick={handleExportExcel} className="py-2.5 px-3.5 rounded-xl font-bold text-[10px] sm:text-xs flex items-center justify-center gap-2 transition-all bg-emerald-600 hover:bg-emerald-700 text-white shadow-md active:scale-95 whitespace-nowrap">
                                 <Icon name="file-excel" className="text-sm" />
                                 Export Excel
                             </button>
-                            )}
                             
                             <button onClick={() => setShowOnlyLowStock(!showOnlyLowStock)} className={`py-2.5 px-3.5 rounded-xl font-bold text-[10px] sm:text-xs flex items-center justify-center gap-2 transition-all border shadow-sm whitespace-nowrap ${showOnlyLowStock ? 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-100' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                                 <Icon name="filter" className="text-sm" />
