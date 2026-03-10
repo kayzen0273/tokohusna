@@ -1688,6 +1688,8 @@
             const [itemQty, setItemQty] = useState('');
             const [itemPrice, setItemPrice] = useState('');
             const [itemBuyPrice, setItemBuyPrice] = useState('');
+            const [itemDiscountBeli, setItemDiscountBeli] = useState('');
+            const [itemDiscountBeliType, setItemDiscountBeliType] = useState('%');
             const [editingItemIndex, setEditingItemIndex] = useState(null); // index item yang sedang diedit
             const [originalItemsSnapshot, setOriginalItemsSnapshot] = useState({}); // qty asli sebelum diedit { itemId: qty }
             // State untuk tambah barang baru via faktur (belum disimpan ke Firestore)
@@ -1713,7 +1715,15 @@
 
             // Auto calculate total dari items
             useEffect(() => {
-                const subtotal = invoiceData.items.reduce((sum, item) => sum + (item.qty * (item.buyPrice || 0)), 0);
+                const subtotal = invoiceData.items.reduce((sum, item) => {
+                    const bp = item.buyPrice || 0;
+                    let effPrice = bp;
+                    if (item.discountBeli && item.discountBeli > 0) {
+                        if (item.discountBeliType === 'Rp') { effPrice = Math.max(0, bp - item.discountBeli); }
+                        else { effPrice = bp * (1 - item.discountBeli / 100); }
+                    }
+                    return sum + (item.qty * effPrice);
+                }, 0);
                 setInvoiceData(prev => ({ ...prev, total: subtotal.toString() }));
             }, [invoiceData.items]);
 
@@ -1741,6 +1751,8 @@
                             qty: qty,
                             price: price,
                             buyPrice: itemBuyPrice ? parseFloat(itemBuyPrice) : 0,
+                            discountBeli: itemDiscountBeli ? parseFloat(itemDiscountBeli) : 0,
+                            discountBeliType: itemDiscountBeliType,
                         };
                         return { ...prev, items: updatedItems };
                     });
@@ -1750,6 +1762,8 @@
                     setItemQty('');
                     setItemPrice('');
                     setItemBuyPrice('');
+                    setItemDiscountBeli('');
+                    setItemDiscountBeliType('%');
                     showToast("✅ Barang diperbarui");
                     return;
                 }
@@ -1766,6 +1780,8 @@
                     qty: qty,
                     price: price,
                     buyPrice: itemBuyPrice ? parseFloat(itemBuyPrice) : 0,
+                    discountBeli: itemDiscountBeli ? parseFloat(itemDiscountBeli) : 0,
+                    discountBeliType: itemDiscountBeliType,
                     currentStock: selectedItem.qty || 0
                 };
                 
@@ -1782,6 +1798,8 @@
                 setItemQty('');
                 setItemPrice('');
                 setItemBuyPrice('');
+                setItemDiscountBeli('');
+                setItemDiscountBeliType('%');
                 showToast("Barang ditambahkan");
             };
 
@@ -1794,6 +1812,8 @@
                 setItemQty(item.qty.toString());
                 setItemPrice(item.price.toString());
                 setItemBuyPrice(item.buyPrice ? item.buyPrice.toString() : '');
+                setItemDiscountBeli(item.discountBeli ? item.discountBeli.toString() : '');
+                setItemDiscountBeliType(item.discountBeliType || '%');
             };
 
             // Fungsi untuk batal edit item
@@ -1804,6 +1824,8 @@
                 setItemQty('');
                 setItemPrice('');
                 setItemBuyPrice('');
+                setItemDiscountBeli('');
+                setItemDiscountBeliType('%');
             };
 
             // Tambah barang BARU ke daftar faktur — hanya di memori, belum ke Firestore.
@@ -1838,6 +1860,8 @@
                         qty: qty,
                         price: price,
                         buyPrice: itemBuyPrice ? parseFloat(itemBuyPrice) : 0,
+                        discountBeli: itemDiscountBeli ? parseFloat(itemDiscountBeli) : 0,
+                        discountBeliType: itemDiscountBeliType,
                         currentStock: 0,
                         _pendingNew: true,           // flag: belum ada di Firestore
                         _newItemMeta: {              // data untuk createDoc saat simpan faktur
@@ -1857,6 +1881,8 @@
                 setItemQty('');
                 setItemPrice('');
                 setItemBuyPrice('');
+                setItemDiscountBeli('');
+                setItemDiscountBeliType('%');
                 showToast(`"${newItemData.name.trim()}" ditambahkan — akan dibuat saat faktur disimpan`);
             };
             
@@ -2021,7 +2047,7 @@
                         dueDate: invoiceData.dueDate ? new Date(invoiceData.dueDate).toISOString() : null, 
                         isPaid: invoiceData.isPaid, 
                         isConsignment: invoiceData.isConsignment || false,
-                        items: finalItems.map(item => ({ id: item.id, name: item.name, qty: item.qty, price: item.price, buyPrice: item.buyPrice || 0 })),
+                        items: finalItems.map(item => ({ id: item.id, name: item.name, qty: item.qty, price: item.price, buyPrice: item.buyPrice || 0, discountBeli: item.discountBeli || 0, discountBeliType: item.discountBeliType || '%' })),
                         updatedAt: window.serverTimestamp(),
                         ...(attachmentData ? { attachmentData, attachmentType, attachmentName } : {})
                     };
@@ -2625,6 +2651,31 @@
                                                     <input type="number" className="w-full h-8 px-2 border border-amber-300 rounded text-xs bg-white outline-none focus:border-teal-500" placeholder="0" value={itemPrice} onChange={e => setItemPrice(e.target.value)} />
                                                 </div>
                                             </div>
+                                            {/* Diskon Harga Beli untuk barang baru */}
+                                            <div className="flex gap-2 mb-2 items-end">
+                                                <div className="flex-1">
+                                                    <label className="block text-[10px] text-orange-500 font-semibold mb-1">🏷️ Diskon Harga Beli</label>
+                                                    <div className="flex gap-1">
+                                                        <select value={itemDiscountBeliType} onChange={e => setItemDiscountBeliType(e.target.value)} className="h-8 px-1 border border-orange-200 rounded text-xs bg-white outline-none" style={{width:'46px'}}>
+                                                            <option value="%">%</option>
+                                                            <option value="Rp">Rp</option>
+                                                        </select>
+                                                        <input type="number" className="flex-1 h-8 px-2 border border-orange-200 rounded text-xs bg-white outline-none focus:border-orange-400" placeholder="0" value={itemDiscountBeli} onChange={e => setItemDiscountBeli(e.target.value)} min="0" />
+                                                    </div>
+                                                </div>
+                                                {itemBuyPrice && itemDiscountBeli && parseFloat(itemDiscountBeli) > 0 && (
+                                                    <div className="text-right pb-1">
+                                                        <span className="text-[10px] text-slate-400">Harga efektif:</span>
+                                                        <p className="text-xs font-bold text-teal-700">
+                                                            {formatRupiah(
+                                                                itemDiscountBeliType === 'Rp'
+                                                                    ? Math.max(0, parseFloat(itemBuyPrice||0) - parseFloat(itemDiscountBeli||0))
+                                                                    : parseFloat(itemBuyPrice||0) * (1 - parseFloat(itemDiscountBeli||0)/100)
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
                                             <div className="mb-3">
                                                 <label className="block text-[10px] text-gray-500 mb-1">Kadaluarsa <span className="text-slate-300">(opsional)</span></label>
                                                 <input type="date" className="w-full h-8 px-2 border border-gray-300 rounded text-xs bg-white outline-none focus:border-teal-500" value={newItemData.exp} onChange={e => setNewItemData(p => ({ ...p, exp: e.target.value }))} />
@@ -2666,6 +2717,31 @@
                                                     <input type="number" className="w-full h-8 px-2 border border-gray-300 rounded text-xs bg-white outline-none focus:border-teal-500" placeholder="0" value={itemPrice} onChange={e => setItemPrice(e.target.value)} />
                                                 </div>
                                             </div>
+                                            {/* Diskon per barang */}
+                                            <div className="flex gap-2 mb-2 items-end">
+                                                <div className="flex-1">
+                                                    <label className="block text-[10px] text-orange-500 font-semibold mb-1">🏷️ Diskon Harga Beli</label>
+                                                    <div className="flex gap-1">
+                                                        <select value={itemDiscountBeliType} onChange={e => setItemDiscountBeliType(e.target.value)} className="h-8 px-1 border border-orange-200 rounded text-xs bg-white outline-none focus:border-orange-400" style={{width:'46px'}}>
+                                                            <option value="%">%</option>
+                                                            <option value="Rp">Rp</option>
+                                                        </select>
+                                                        <input type="number" className="flex-1 h-8 px-2 border border-orange-200 rounded text-xs bg-white outline-none focus:border-orange-400" placeholder="0" value={itemDiscountBeli} onChange={e => setItemDiscountBeli(e.target.value)} min="0" />
+                                                    </div>
+                                                </div>
+                                                {itemBuyPrice && itemDiscountBeli && parseFloat(itemDiscountBeli) > 0 && (
+                                                    <div className="text-right pb-1">
+                                                        <span className="text-[10px] text-slate-400">Harga beli efektif:</span>
+                                                        <p className="text-xs font-bold text-teal-700">
+                                                            {formatRupiah(
+                                                                itemDiscountBeliType === 'Rp'
+                                                                    ? Math.max(0, parseFloat(itemBuyPrice||0) - parseFloat(itemDiscountBeli||0))
+                                                                    : parseFloat(itemBuyPrice||0) * (1 - parseFloat(itemDiscountBeli||0)/100)
+                                                            )}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
                                             <div className="flex gap-2">
                                                 {editingItemIndex !== null && (
                                                     <button type="button" onClick={cancelEditItem} className="flex-1 py-1.5 bg-white border border-gray-300 text-gray-600 rounded text-xs font-bold hover:bg-gray-50 active:scale-95 transition-all">
@@ -2699,8 +2775,18 @@
                                                             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                                                 <span className="text-[11px] text-slate-500">Qty: <b>{item.qty}</b></span>
                                                                 {item.buyPrice > 0 && <span className="text-[11px] text-orange-500 font-bold">Beli: {formatRupiah(item.buyPrice)}</span>}
+                                                                {item.discountBeli > 0 && (
+                                                                    <span className="text-[10px] text-red-500 font-bold bg-red-50 px-1.5 py-0.5 rounded">
+                                                                        Disc: {item.discountBeliType === 'Rp' ? `-${formatRupiah(item.discountBeli)}` : `-${item.discountBeli}%`}
+                                                                    </span>
+                                                                )}
+                                                                {item.discountBeli > 0 && item.buyPrice > 0 && (
+                                                                    <span className="text-[11px] text-teal-600 font-bold">
+                                                                        Efektif: {formatRupiah(item.discountBeliType === 'Rp' ? Math.max(0, item.buyPrice - item.discountBeli) : item.buyPrice * (1 - item.discountBeli/100))}
+                                                                    </span>
+                                                                )}
                                                                 <span className="text-[11px] text-slate-500">Jual: {formatRupiah(item.price)}</span>
-                                                                <span className="text-[11px] text-teal-600 font-bold">= {formatRupiah(item.qty * (item.buyPrice || 0))}</span>
+                                                                <span className="text-[11px] text-teal-600 font-bold">= {formatRupiah(item.qty * (item.discountBeli > 0 ? (item.discountBeliType === 'Rp' ? Math.max(0, item.buyPrice - item.discountBeli) : item.buyPrice * (1 - item.discountBeli/100)) : (item.buyPrice || 0)))}</span>
                                                             </div>
                                                         </div>
                                                         <button type="button" onClick={() => { if(editingItemIndex === index) cancelEditItem(); removeItemFromInvoice(index); }} className="ml-3 text-red-400 hover:text-red-600 p-1 flex-shrink-0"><Icon name="trash" /></button>
@@ -2720,7 +2806,15 @@
                                 {/* SECTION: Summary */}
                                 <div className="space-y-2">
                                     {(() => {
-                                        const subtotal = invoiceData.items.reduce((s, it) => s + it.qty * (it.buyPrice || 0), 0);
+                                        const subtotal = invoiceData.items.reduce((s, it) => {
+                                            const bp = it.buyPrice || 0;
+                                            let eff = bp;
+                                            if (it.discountBeli && it.discountBeli > 0) {
+                                                if (it.discountBeliType === 'Rp') { eff = Math.max(0, bp - it.discountBeli); }
+                                                else { eff = bp * (1 - it.discountBeli / 100); }
+                                            }
+                                            return s + it.qty * eff;
+                                        }, 0);
                                         const numDiskon = parseInt((diskon || '0').replace(/\D/g,'')) || 0;
                                         const diskonNom = diskonType === 'percent' ? Math.floor(subtotal * numDiskon / 100) : numDiskon;
                                         const dpp = subtotal - diskonNom;
@@ -2849,9 +2943,15 @@
                                                         <div>
                                                             <p className="text-xs font-bold text-slate-800">{item.name}</p>
                                                             <p className="text-[10px] text-orange-500 font-bold mt-0.5">{item.qty} × Beli {formatRupiah(item.buyPrice || 0)}</p>
+                                                            {item.discountBeli > 0 && (
+                                                                <p className="text-[10px] text-red-500 font-bold mt-0.5">
+                                                                    Disc Beli: {item.discountBeliType === 'Rp' ? `-${formatRupiah(item.discountBeli)}` : `-${item.discountBeli}%`}
+                                                                    {' '}→ Efektif: {formatRupiah(item.discountBeliType === 'Rp' ? Math.max(0, (item.buyPrice||0) - item.discountBeli) : (item.buyPrice||0) * (1 - item.discountBeli/100))}
+                                                                </p>
+                                                            )}
                                                             <p className="text-[10px] text-slate-400 mt-0.5">Harga Jual Toko: {formatRupiah(item.price)}</p>
                                                         </div>
-                                                        <span className="text-xs font-bold text-teal-700">{formatRupiah(item.qty * (item.buyPrice || 0))}</span>
+                                                        <span className="text-xs font-bold text-teal-700">{formatRupiah(item.qty * (item.discountBeli > 0 ? (item.discountBeliType === 'Rp' ? Math.max(0, (item.buyPrice||0) - item.discountBeli) : (item.buyPrice||0) * (1 - item.discountBeli/100)) : (item.buyPrice || 0)))}</span>
                                                     </div>
                                                 ))}
                                             </div>
@@ -5324,7 +5424,7 @@
         };
 
         // --- UPDATED: HISTORY VIEW ---
-        const HistoryView = ({ user, showToast, settings, onGenerateImage, currentProfile, items, readOnly }) => {
+        const HistoryView = ({ user, showToast, settings, onGenerateImage, currentProfile, items, readOnly, isOwner }) => {
             const [transactions, setTransactions] = useState([]);
             const [loading, setLoading] = useState(true);
             const [selectedTx, setSelectedTx] = useState(null);
@@ -5864,11 +5964,13 @@
                                     </div>
                                 )}
                             </div>
+                        {isOwner && (
                         <button onClick={handleExportHistoryExcel} className="py-2 px-3.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all bg-emerald-600 hover:bg-emerald-700 text-white shadow-md active:scale-95 whitespace-nowrap h-10">
                             <Icon name="file-excel" className="text-sm" />
                             <span className="hidden sm:inline">Unduh Excel</span>
                             <span className="sm:hidden">Excel</span>
                         </button>
+                        )}
                         </div>
                     </header>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -9597,7 +9699,7 @@
                         )}
                         {activeTab === 'home' && (<DashboardView items={inventoryData} settings={settingsData} onShowLowStock={() => { setActiveTab('list'); setShowOnlyLowStock(true); }} />)}
                         {activeTab === 'cashier' && (<CashierView items={inventoryData} user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='cashier')?.readOnly} authSession={authSession} />)}
-                        {activeTab === 'history' && (<HistoryView user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} items={inventoryData} readOnly={menuItems.find(m=>m.id==='history')?.readOnly} />)}
+                        {activeTab === 'history' && (<HistoryView user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} items={inventoryData} readOnly={menuItems.find(m=>m.id==='history')?.readOnly} isOwner={isOwner} />)}
                         {activeTab === 'purchases' && (<PurchaseView user={user} showToast={showToast} items={inventoryData} currentProfile={currentProfile} settings={settingsData} readOnly={menuItems.find(m=>m.id==='purchases')?.readOnly} />)}
                         {activeTab === 'cashbook' && (<CashBookView user={user} currentProfile={currentProfile} showToast={showToast} readOnly={menuItems.find(m=>m.id==='cashbook')?.readOnly} />)}
                         {activeTab === 'list' && (<ListView items={inventoryData} loading={loading} settings={settingsData} searchQuery={searchQuery} setSearchQuery={setSearchQuery} showOnlyLowStock={showOnlyLowStock} setShowOnlyLowStock={setShowOnlyLowStock} selectedRacks={selectedRacks} setSelectedRacks={setSelectedRacks} uniqueRacksData={uniqueRacksData} onCopySuccess={showToast} onEdit={(item) => { setFormData({...item}); setEditingItem(item); setActiveTab('add'); }} onDelete={(item) => setDeleteModal({ show: true, item: item })} onDeleteRack={(rackName) => setDeleteRackModal({ show: true, rackName })} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='list')?.readOnly} isOwner={isOwner} />)}
