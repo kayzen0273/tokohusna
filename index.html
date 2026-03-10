@@ -8879,7 +8879,7 @@
         // =================== END JADWAL SHIFT VIEW ===================
 
         // =================== TRANSFER BARANG VIEW ===================
-        const TransferBarangView = ({ user, showToast, rawInventory, settings, currentProfile, readOnly }) => {
+        const TransferBarangView = ({ user, showToast, rawInventory, settings, currentProfile, readOnly, authSession }) => {
             const [fromStore, setFromStore] = useState('');
             const [toStore, setToStore] = useState('');
             const [search, setSearch] = useState('');
@@ -8999,7 +8999,7 @@
                             toStoreId: toStore,
                             toStoreName,
                             catatan: catatan.trim(),
-                            transferBy: user.namaLengkap || user.username || 'Unknown',
+                            transferBy: authSession?.namaLengkap || authSession?.username || user.namaLengkap || user.username || 'Unknown',
                             createdAt: window.serverTimestamp(),
                             status: 'completed',
                             totalItems: cart.length,
@@ -10140,7 +10140,7 @@
                         {activeTab === 'settings' && (<SettingsView settings={settingsData} onSave={handleSaveSettings} loading={submitting} authSession={authSession} />)}
                         {activeTab === 'catatan' && (<PapanCatatan user={user} readOnly={menuItems.find(m=>m.id==='catatan')?.readOnly} />)}
                         {activeTab === 'jadwal_shift' && (<JadwalShiftView user={user} showToast={showToast} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='jadwal_shift')?.readOnly} />)}
-                        {activeTab === 'transfer_barang' && (<TransferBarangView user={user} showToast={showToast} rawInventory={rawInventory} settings={settingsData} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='transfer_barang')?.readOnly} />)}
+                        {activeTab === 'transfer_barang' && (<TransferBarangView user={user} showToast={showToast} rawInventory={rawInventory} settings={settingsData} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='transfer_barang')?.readOnly} authSession={authSession} />)}
                     </main>
                     <ConfirmModal isOpen={deleteModal.show} title="Hapus Barang?" message={`Yakin ingin menghapus permanen "${deleteModal.item?.name}"? Barang ini akan hilang dari SEMUA toko.`} onConfirm={handleDelete} onCancel={() => setDeleteModal({ show: false, item: null })} />
                     <ConfirmModal isOpen={deleteRackModal.show} title="Hapus Rak?" message={`Yakin ingin menghapus rak "${deleteRackModal.rackName}"? Semua barang di rak ini akan menjadi 'No Rack' (-).`} onConfirm={handleConfirmDeleteRack} onCancel={() => setDeleteRackModal({ show: false, rackName: null })} confirmText="Ya, Hapus Rak" />
