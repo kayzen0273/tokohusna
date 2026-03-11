@@ -8054,7 +8054,6 @@
                 
                 setLoading(true); setError('');
                 try {
-                    const otpRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'otp_reset');
                     const usersRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'users');
                     const snap = await window.getDocs(window.query(usersRef, window.where('email', '==', otpEmail)));
                     if (snap.empty) { setErrTimeout('Terjadi kesalahan'); setLoading(false); return; }
