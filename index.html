@@ -1322,7 +1322,768 @@
         };
         // ==================== END OWNER PANEL ====================
 
-        const SettingsView = ({ settings, onSave, loading, authSession, inOwnerPanel }) => {
+        // ==================== PROFIL AKUN VIEW ====================
+        const ProfilAkunView = ({ authSession, onUpdateSession, onBack, c }) => {
+            const [form, setForm] = React.useState({ namaLengkap: authSession?.namaLengkap || '', username: authSession?.username || '', email: authSession?.email || '', whatsapp: authSession?.whatsapp || '' });
+            const [photoPreview, setPhotoPreview] = React.useState(authSession?.profilePhoto || null);
+            const [newPhotoData, setNewPhotoData] = React.useState(null);
+            const [saving, setSaving] = React.useState(false);
+            const [msg, setMsg] = React.useState({ type: '', text: '' });
+            const [section, setSection] = React.useState('profil'); // 'profil' | 'password'
+            const [passForm, setPassForm] = React.useState({ current: '', newPass: '', confirm: '' });
+            const [showCurrent, setShowCurrent] = React.useState(false);
+            const [showNew, setShowNew] = React.useState(false);
+            const photoRef = React.useRef(null);
+
+            const showMsg = (type, text) => { setMsg({ type, text }); setTimeout(() => setMsg({ type: '', text: '' }), 3500); };
+
+            const handlePhotoChange = (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const img = new window.Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        const MAX = 300;
+                        let w = img.width, h = img.height;
+                        if (w > h) { h = Math.round(h * MAX / w); w = MAX; } else { w = Math.round(w * MAX / h); h = MAX; }
+                        if (img.width < MAX && img.height < MAX) { w = img.width; h = img.height; }
+                        canvas.width = w; canvas.height = h;
+                        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                        const data = canvas.toDataURL('image/jpeg', 0.85);
+                        setPhotoPreview(data);
+                        setNewPhotoData(data);
+                    };
+                    img.src = ev.target.result;
+                };
+                reader.readAsDataURL(file);
+                e.target.value = '';
+            };
+
+            const handleSaveProfil = async () => {
+                if (!form.namaLengkap.trim() || !form.username.trim() || !form.email.trim()) { showMsg('error', 'Nama, username, dan email wajib diisi'); return; }
+                if (!/^[a-zA-Z0-9_]+$/.test(form.username)) { showMsg('error', 'Username hanya boleh huruf, angka, underscore'); return; }
+                setSaving(true);
+                try {
+                    const uid = authSession.id;
+                    const ref = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'users', uid);
+                    
+                    // Cek duplikat username (jika berubah)
+                    if (form.username.toLowerCase() !== authSession.username) {
+                        const usersRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'users');
+                        const snapUname = await window.getDocs(window.query(usersRef, window.where('username', '==', form.username.toLowerCase())));
+                        if (!snapUname.empty) { showMsg('error', 'Username sudah dipakai akun lain'); setSaving(false); return; }
+                    }
+                    // Cek duplikat email (jika berubah)
+                    if (form.email.toLowerCase() !== authSession.email) {
+                        const usersRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'users');
+                        const snapEmail = await window.getDocs(window.query(usersRef, window.where('email', '==', form.email.toLowerCase())));
+                        if (!snapEmail.empty) { showMsg('error', 'Email sudah dipakai akun lain'); setSaving(false); return; }
+                    }
+
+                    const updateData = { namaLengkap: form.namaLengkap.trim(), username: form.username.toLowerCase(), email: form.email.toLowerCase(), whatsapp: form.whatsapp.trim() };
+                    if (newPhotoData === 'REMOVE') { updateData.profilePhoto = ''; }
+                    else if (newPhotoData) { updateData.profilePhoto = newPhotoData; }
+                    await window.updateDoc(ref, updateData);
+
+                    const resolvedPhoto = newPhotoData === 'REMOVE' ? null : (newPhotoData || authSession.profilePhoto || null);
+                    const newSession = { ...authSession, namaLengkap: form.namaLengkap.trim(), username: form.username.toLowerCase(), email: form.email.toLowerCase(), whatsapp: form.whatsapp.trim(), profilePhoto: resolvedPhoto };
+                    localStorage.setItem('husna_auth_session', JSON.stringify(newSession));
+                    if (onUpdateSession) onUpdateSession(newSession);
+                    showMsg('success', 'Profil berhasil disimpan!');
+                    setNewPhotoData(null);
+                } catch (e) { console.error(e); showMsg('error', 'Gagal menyimpan profil'); }
+                setSaving(false);
+            };
+
+            const handleChangePassword = async () => {
+                const { current, newPass, confirm } = passForm;
+                if (!current || !newPass || !confirm) { showMsg('error', 'Isi semua field password'); return; }
+                if (newPass.length < 6) { showMsg('error', 'Password baru minimal 6 karakter'); return; }
+                if (newPass !== confirm) { showMsg('error', 'Konfirmasi password tidak cocok'); return; }
+                setSaving(true);
+                try {
+                    const uid = authSession.id;
+                    const ref = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'users', uid);
+                    const snap = await window.getDoc(ref);
+                    if (!snap.exists()) { showMsg('error', 'Data akun tidak ditemukan'); setSaving(false); return; }
+                    const userData = snap.data();
+                    const hashedCurrent = await hashPassword(current);
+                    if (userData.password !== hashedCurrent) { showMsg('error', 'Kata sandi saat ini salah'); setSaving(false); return; }
+                    const hashedNew = await hashPassword(newPass);
+                    await window.updateDoc(ref, { password: hashedNew });
+                    setPassForm({ current: '', newPass: '', confirm: '' });
+                    showMsg('success', 'Kata sandi berhasil diubah!');
+                } catch (e) { console.error(e); showMsg('error', 'Gagal mengubah kata sandi'); }
+                setSaving(false);
+            };
+
+            const inputCls = "w-full p-2.5 rounded-xl border border-slate-200 bg-white focus:border-purple-400 focus:ring-2 focus:ring-purple-100 outline-none text-sm font-medium text-slate-800 transition-all";
+
+            return (
+                <div className={`bg-white/90 backdrop-blur-sm rounded-[30px] shadow-soft border border-purple-200 overflow-hidden fade-in`}>
+                    {/* Header */}
+                    <div className="p-5 border-b border-purple-100 flex items-center gap-3 bg-gradient-to-r from-purple-50 to-violet-50">
+                        <button onClick={onBack} className="w-9 h-9 rounded-xl bg-white border border-purple-200 flex items-center justify-center text-purple-400 hover:text-purple-700 shadow-sm active:scale-95 transition-all flex-shrink-0"><Icon name="arrow-left" /></button>
+                        <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center flex-shrink-0"><Icon name="user-pen" /></div>
+                        <div><p className="font-bold text-sm text-purple-900">Edit Profil Akun</p><p className="text-[10px] text-purple-500">Foto, nama, username, dan kata sandi</p></div>
+                    </div>
+
+                    {/* Toast message */}
+                    {msg.text && (
+                        <div className={`mx-5 mt-4 px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 fade-in ${msg.type === 'success' ? 'bg-green-50 border border-green-200 text-green-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+                            <Icon name={msg.type === 'success' ? 'circle-check' : 'circle-xmark'} />{msg.text}
+                        </div>
+                    )}
+
+                    {/* Section Tabs */}
+                    <div className="flex gap-2 px-5 pt-4">
+                        <button onClick={() => setSection('profil')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${section==='profil' ? 'bg-purple-600 text-white shadow-md' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'}`}><Icon name="user" className="mr-1.5" />Data Profil</button>
+                        <button onClick={() => setSection('password')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${section==='password' ? 'bg-purple-600 text-white shadow-md' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'}`}><Icon name="lock" className="mr-1.5" />Ganti Kata Sandi</button>
+                    </div>
+
+                    {/* === SECTION: PROFIL === */}
+                    {section === 'profil' && (
+                        <div className="p-5 space-y-5">
+                            {/* Foto Profil */}
+                            <div className="flex flex-col items-center gap-3 py-4 bg-gradient-to-b from-purple-50 to-white rounded-2xl border border-purple-100">
+                                <div className="relative">
+                                    <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-white shadow-lg bg-purple-100 flex items-center justify-center">
+                                        {photoPreview ? (
+                                            <img src={photoPreview} alt="Foto Profil" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <span className="text-4xl font-black text-purple-400">{(form.namaLengkap || 'U').charAt(0).toUpperCase()}</span>
+                                        )}
+                                    </div>
+                                    <button onClick={() => photoRef.current?.click()} className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center shadow-md hover:bg-purple-700 active:scale-95 transition-all border-2 border-white">
+                                        <Icon name="camera" className="text-xs" />
+                                    </button>
+                                </div>
+                                <input ref={photoRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+                                <div className="text-center">
+                                    <p className="text-xs font-bold text-slate-700">{form.namaLengkap || 'Nama Belum Diisi'}</p>
+                                    <p className="text-[10px] text-slate-400">@{form.username || '-'}</p>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={() => photoRef.current?.click()} className="px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-xs font-bold hover:bg-purple-200 transition-all flex items-center gap-1.5 active:scale-95">
+                                        <Icon name="arrow-up-from-bracket" /> {photoPreview ? 'Ganti Foto' : 'Upload Foto'}
+                                    </button>
+                                    {photoPreview && (
+                                        <button onClick={() => { setPhotoPreview(null); setNewPhotoData('REMOVE'); }} className="px-3 py-1.5 bg-red-100 text-red-600 rounded-lg text-xs font-bold hover:bg-red-200 transition-all flex items-center gap-1.5 active:scale-95">
+                                            <Icon name="trash" /> Hapus Foto
+                                        </button>
+                                    )}
+                                </div>
+                                <p className="text-[10px] text-slate-400">Foto akan dikompresi otomatis. Maks 300px.</p>
+                            </div>
+
+                            {/* Form Fields */}
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 block mb-1.5">Nama Lengkap <span className="text-red-400">*</span></label>
+                                    <input type="text" value={form.namaLengkap} onChange={e => setForm(p => ({...p, namaLengkap: e.target.value}))} className={inputCls} placeholder="Nama lengkap kamu" />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 block mb-1.5">Username <span className="text-red-400">*</span></label>
+                                    <div className="relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">@</span>
+                                        <input type="text" value={form.username} onChange={e => setForm(p => ({...p, username: e.target.value}))} className={inputCls + " pl-8"} placeholder="username_kamu" />
+                                    </div>
+                                    <p className="text-[10px] text-slate-400 mt-1">Hanya huruf, angka, dan underscore (_)</p>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 block mb-1.5">Email <span className="text-red-400">*</span></label>
+                                    <input type="email" value={form.email} onChange={e => setForm(p => ({...p, email: e.target.value}))} className={inputCls} placeholder="email@contoh.com" />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 block mb-1.5">No. WhatsApp</label>
+                                    <div className="relative">
+                                        <Icon name="whatsapp" type="brands" className="absolute left-3 top-1/2 -translate-y-1/2 text-green-500 text-sm" />
+                                        <input type="tel" value={form.whatsapp} onChange={e => setForm(p => ({...p, whatsapp: e.target.value}))} className={inputCls + " pl-9"} placeholder="08xxx" />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Save Button */}
+                            <button onClick={handleSaveProfil} disabled={saving} className="w-full py-3.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">
+                                {saving ? <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin"></div> Menyimpan...</> : <><Icon name="floppy-disk" /> Simpan Profil</>}
+                            </button>
+                        </div>
+                    )}
+
+                    {/* === SECTION: PASSWORD === */}
+                    {section === 'password' && (
+                        <div className="p-5 space-y-4">
+                            <div className="flex gap-3 p-4 bg-amber-50 rounded-2xl border border-amber-200">
+                                <Icon name="triangle-exclamation" className="text-amber-500 text-lg flex-shrink-0 mt-0.5" />
+                                <div>
+                                    <p className="font-bold text-amber-800 text-xs">Penting</p>
+                                    <p className="text-[11px] text-amber-700 mt-0.5">Setelah kata sandi diubah, kamu perlu login ulang jika menggunakan perangkat lain.</p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 block mb-1.5">Kata Sandi Saat Ini <span className="text-red-400">*</span></label>
+                                    <div className="relative">
+                                        <Icon name="lock" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
+                                        <input type={showCurrent ? 'text' : 'password'} value={passForm.current} onChange={e => setPassForm(p => ({...p, current: e.target.value}))} className={inputCls + " pl-9 pr-10"} placeholder="••••••••" />
+                                        <button onClick={() => setShowCurrent(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                                            <Icon name={showCurrent ? 'eye-slash' : 'eye'} className="text-sm" />
+                                        </button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 block mb-1.5">Kata Sandi Baru <span className="text-red-400">*</span></label>
+                                    <div className="relative">
+                                        <Icon name="key" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
+                                        <input type={showNew ? 'text' : 'password'} value={passForm.newPass} onChange={e => setPassForm(p => ({...p, newPass: e.target.value}))} className={inputCls + " pl-9 pr-10"} placeholder="Min. 6 karakter" />
+                                        <button onClick={() => setShowNew(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                                            <Icon name={showNew ? 'eye-slash' : 'eye'} className="text-sm" />
+                                        </button>
+                                    </div>
+                                    {passForm.newPass && (
+                                        <div className="mt-1.5 flex gap-1">
+                                            {[...Array(4)].map((_, i) => (
+                                                <div key={i} className={`h-1 flex-1 rounded-full transition-all ${passForm.newPass.length > i*2 ? (passForm.newPass.length >= 8 ? 'bg-green-400' : 'bg-amber-400') : 'bg-slate-200'}`}></div>
+                                            ))}
+                                            <span className={`text-[10px] font-bold ml-1 ${passForm.newPass.length >= 8 ? 'text-green-600' : 'text-amber-600'}`}>{passForm.newPass.length >= 8 ? 'Kuat' : passForm.newPass.length >= 6 ? 'Cukup' : 'Lemah'}</span>
+                                        </div>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 block mb-1.5">Konfirmasi Kata Sandi Baru <span className="text-red-400">*</span></label>
+                                    <div className="relative">
+                                        <Icon name="shield-halved" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
+                                        <input type="password" value={passForm.confirm} onChange={e => setPassForm(p => ({...p, confirm: e.target.value}))} className={inputCls + " pl-9 " + (passForm.confirm && passForm.confirm !== passForm.newPass ? 'border-red-300 focus:border-red-400' : '')} placeholder="Ulangi kata sandi baru" />
+                                        {passForm.confirm && passForm.confirm === passForm.newPass && <Icon name="circle-check" className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500 text-sm" />}
+                                    </div>
+                                    {passForm.confirm && passForm.confirm !== passForm.newPass && <p className="text-[10px] text-red-500 mt-1 font-semibold">Kata sandi tidak cocok</p>}
+                                </div>
+                            </div>
+
+                            <button onClick={handleChangePassword} disabled={saving} className="w-full py-3.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2">
+                                {saving ? <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin"></div> Memproses...</> : <><Icon name="lock" /> Ubah Kata Sandi</>}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // ==================== PENGGUNA AKUN VIEW ====================
+        const PenggunaAkunView = ({ authSession, onUpdateSession, showToast }) => {
+            const isOwner = isOwnerEmail(authSession?.email);
+            const [users, setUsers] = React.useState([]);
+            const [loadingUsers, setLoadingUsers] = React.useState(true);
+            const [search, setSearch] = React.useState('');
+            const [actionLoading, setActionLoading] = React.useState(false);
+            const [confirmModal, setConfirmModal] = React.useState({ show: false, type: '', user: null });
+            const [editingUser, setEditingUser] = React.useState(null);
+            const [toast, setToast] = React.useState('');
+            const [filterStatus, setFilterStatus] = React.useState('semua');
+            const [mainTab, setMainTab] = React.useState('pengguna'); // 'pengguna' | 'peringkat'
+            const [rankView, setRankView] = React.useState('papan'); // 'papan' | 'tier'
+            const [transactions, setTransactions] = React.useState([]);
+            const [loadingTx, setLoadingTx] = React.useState(true);
+            const [rankPeriod, setRankPeriod] = React.useState('semua'); // 'semua' | 'bulan' | 'minggu'
+            const [customTierNames, setCustomTierNames] = React.useState({}); // { idx: 'nama baru' }
+            const [editingTier, setEditingTier] = React.useState(null); // index yang sedang diedit
+            const [editTierValue, setEditTierValue] = React.useState('');
+            const [savingTier, setSavingTier] = React.useState(false);
+            const [hideOwnerFromRank, setHideOwnerFromRank] = React.useState(false);
+            const [savingHideOwner, setSavingHideOwner] = React.useState(false);
+
+            const DEFAULT_TIER_NAMES = [
+                { name: '🐣 Kasir Baru Netas',    emoji: '🐣' },
+                { name: '🥚 Telur Setengah Matang', emoji: '🥚' },
+                { name: '🍃 Daun Muda Bergetar',  emoji: '🍃' },
+                { name: '🐌 Siput Semangat',       emoji: '🐌' },
+                { name: '🌱 Tunas Harapan',        emoji: '🌱' },
+                { name: '🫧 Gelembung Cita-cita',  emoji: '🫧' },
+                { name: '🪲 Kumbang Rajin',        emoji: '🪲' },
+                { name: '🐸 Katak Loncat Tipis',   emoji: '🐸' },
+                { name: '🌿 Ranting Baru',         emoji: '🌿' },
+                { name: '🐹 Hamster Gas Poll',     emoji: '🐹' },
+                { name: '⚡ Listrik Mulai Nyala',  emoji: '⚡' },
+                { name: '🌊 Ombak Kecil Bergoyang',emoji: '🌊' },
+                { name: '🎯 Bidikan Lumayan',      emoji: '🎯' },
+                { name: '🦊 Rubah Licin Berambisi',emoji: '🦊' },
+                { name: '🏹 Panah Mulai Terarah',  emoji: '🏹' },
+                { name: '🔥 Api Kecil Membara',    emoji: '🔥' },
+                { name: '🦅 Elang Muda Melayang',  emoji: '🦅' },
+                { name: '💎 Berlian Belum Diasah',  emoji: '💎' },
+                { name: '🌙 Bulan Sabit Bersinar',  emoji: '🌙' },
+                { name: '🚀 Roket Mulai Menanjak',  emoji: '🚀' },
+                { name: '🦁 Singa Lapar Bergerak',  emoji: '🦁' },
+                { name: '🌋 Gunung Api Panas',      emoji: '🌋' },
+                { name: '⚔️ Pejuang Kasir Sejati',  emoji: '⚔️' },
+                { name: '🏆 Piala Mulai Tercium',   emoji: '🏆' },
+                { name: '🐉 Naga Kecil Mengaum',    emoji: '🐉' },
+                { name: '🌟 Bintang Makin Terang',  emoji: '🌟' },
+                { name: '💥 Ledakan Omset Dahsyat', emoji: '💥' },
+                { name: '🔱 Trisula Kasir Sakti',   emoji: '🔱' },
+                { name: '🎖️ Medali Setengah Legenda',emoji: '🎖️' },
+                { name: '🦄 Unicorn Struk Panjang',  emoji: '🦄' },
+                { name: '👑 Mahkota Mulai Nempel',  emoji: '👑' },
+                { name: '🌠 Bintang Jatuh ke Kasir',emoji: '🌠' },
+                { name: '🏰 Sultan Meja Kasir',     emoji: '🏰' },
+                { name: '🎆 Kembang Api Omset',     emoji: '🎆' },
+                { name: '🦸 Superhero Struk',       emoji: '🦸' },
+                { name: '⚡👑 Petir Raja Kasir',    emoji: '⚡' },
+                { name: '🌞 Matahari Tak Terkalahkan',emoji:'🌞' },
+                { name: '🧿 Jimat Anti Sepi Pembeli',emoji: '🧿' },
+                { name: '🔮 Peramal Omset Maha Tahu',emoji: '🔮' },
+                { name: '🎰 Jackpot Kasir Nonstop',  emoji: '🎰' },
+                { name: '🛸 UFO Omset Dari Luar Angkasa', emoji: '🛸' },
+                { name: '🌌 Galaksi Pendapatan',     emoji: '🌌' },
+                { name: '🧠 Otak Bisnis Encer Banget',emoji: '🧠' },
+                { name: '🦋 Kupu-kupu Cuan Abadi',  emoji: '🦋' },
+                { name: '💫 Kilau Tak Tertandingi',  emoji: '💫' },
+                { name: '🌈 Pelangi Kekayaan',       emoji: '🌈' },
+                { name: '🏅 Legenda Mesin Kasir',    emoji: '🏅' },
+                { name: '👾 Boss Level Kasir',       emoji: '👾' },
+                { name: '🥇 Dewa Struk & Omset',     emoji: '🥇' },
+                { name: '💸 GOAT — Sultan Sejuta Umat', emoji: '💸' },
+            ];
+            // Merge default dengan custom dari Firestore
+            const TIER_NAMES = DEFAULT_TIER_NAMES.map((t, i) => customTierNames[i] ? { name: customTierNames[i], emoji: customTierNames[i].split(' ')[0] || t.emoji } : t);
+            const RANK_TIERS = TIER_NAMES.map((t, i) => ({
+                tier: i + 1,
+                name: t.name,
+                emoji: t.emoji,
+                minRp: i * 1_000_000,
+                maxRp: (i + 1) * 1_000_000,
+                shortLabel: t.name,
+                color: i < 10 ? '#94a3b8' : i < 20 ? '#60a5fa' : i < 30 ? '#34d399' : i < 40 ? '#f59e0b' : '#f97316',
+                bgClass: i < 10 ? 'bg-slate-100 text-slate-600 border-slate-200' : i < 20 ? 'bg-blue-100 text-blue-700 border-blue-200' : i < 30 ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : i < 40 ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-orange-100 text-orange-700 border-orange-200',
+                icon: i < 10 ? 'seedling' : i < 20 ? 'star-half-stroke' : i < 30 ? 'star' : i < 40 ? 'fire' : 'crown',
+            }));
+
+            const getTierForRevenue = (rev) => {
+                if (rev <= 0) return null;
+                const idx = Math.min(Math.floor(rev / 1_000_000), 49);
+                return RANK_TIERS[idx];
+            };
+
+            const popToast = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(''), 3000); };
+
+            React.useEffect(() => {
+                const ref = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'users');
+                const unsub = window.onSnapshot(ref, snap => {
+                    const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                    data.sort((a, b) => (a.namaLengkap || '').localeCompare(b.namaLengkap || ''));
+                    setUsers(data);
+                    setLoadingUsers(false);
+                });
+                return () => unsub();
+            }, []);
+
+            // Load transactions untuk peringkat
+            React.useEffect(() => {
+                const ref = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions');
+                const q = window.query(ref, window.orderBy('date', 'desc'), window.limit(2000));
+                const unsub = window.onSnapshot(q, snap => {
+                    setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                    setLoadingTx(false);
+                });
+                return () => unsub();
+            }, []);
+
+            // Load custom tier names dari Firestore
+            React.useEffect(() => {
+                const ref = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'config', 'tierNames');
+                const unsub = window.onSnapshot(ref, snap => {
+                    if (snap.exists()) {
+                        setCustomTierNames(snap.data().names || {});
+                        setHideOwnerFromRank(snap.data().hideOwnerFromRank || false);
+                    }
+                });
+                return () => unsub();
+            }, []);
+
+            const handleToggleHideOwner = async () => {
+                setSavingHideOwner(true);
+                try {
+                    const ref = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'config', 'tierNames');
+                    await window.setDoc(ref, { hideOwnerFromRank: !hideOwnerFromRank }, { merge: true });
+                    popToast(!hideOwnerFromRank ? 'Owner disembunyikan dari peringkat 👻' : 'Owner ditampilkan kembali di peringkat 👑');
+                } catch { popToast('Gagal menyimpan', 'error'); }
+                setSavingHideOwner(false);
+            };
+
+            const handleSaveTierName = async (idx) => {
+                const val = editTierValue.trim();
+                if (!val) return;
+                setSavingTier(true);
+                try {
+                    const ref = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'config', 'tierNames');
+                    await window.setDoc(ref, { names: { ...customTierNames, [idx]: val } }, { merge: true });
+                    popToast('Nama tier berhasil diubah! ✨');
+                    setEditingTier(null);
+                    setEditTierValue('');
+                } catch { popToast('Gagal menyimpan', 'error'); }
+                setSavingTier(false);
+            };
+
+            const handleResetTierName = async (idx) => {
+                setSavingTier(true);
+                try {
+                    const newNames = { ...customTierNames };
+                    delete newNames[idx];
+                    const ref = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'config', 'tierNames');
+                    await window.setDoc(ref, { names: newNames });
+                    popToast('Nama tier direset ke default');
+                } catch { popToast('Gagal mereset', 'error'); }
+                setSavingTier(false);
+            };
+
+            const handleToggleActive = async (usr) => {
+                setActionLoading(true);
+                try {
+                    const ref = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'users', usr.id);
+                    const newStatus = usr.isActive === false ? true : false;
+                    await window.updateDoc(ref, { isActive: newStatus });
+                    popToast(newStatus ? `Akun "${usr.namaLengkap}" diaktifkan` : `Akun "${usr.namaLengkap}" dinonaktifkan`);
+                } catch { popToast('Gagal mengubah status', 'error'); }
+                setActionLoading(false);
+                setConfirmModal({ show: false, type: '', user: null });
+            };
+
+            const handleDeleteUser = async (usr) => {
+                setActionLoading(true);
+                try {
+                    await window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'users', usr.id));
+                    try { await window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'otp_reset', usr.id)); } catch {}
+                    popToast(`Akun "${usr.namaLengkap}" dihapus`);
+                } catch { popToast('Gagal menghapus akun', 'error'); }
+                setActionLoading(false);
+                setConfirmModal({ show: false, type: '', user: null });
+            };
+
+            // Jika sedang edit profil diri sendiri
+            if (editingUser && editingUser.id === authSession.id) {
+                return (
+                    <div className="fade-in max-w-2xl mx-auto w-full pt-4 md:pt-10 pb-20">
+                        <ProfilAkunView
+                            authSession={authSession}
+                            onUpdateSession={onUpdateSession}
+                            onBack={() => setEditingUser(null)}
+                        />
+                    </div>
+                );
+            }
+
+            const filteredUsers = users.filter(u => {
+                const matchSearch = search === '' || u.namaLengkap?.toLowerCase().includes(search.toLowerCase()) || u.username?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase());
+                const matchStatus = filterStatus === 'semua' || (filterStatus === 'aktif' && u.isActive !== false) || (filterStatus === 'nonaktif' && u.isActive === false);
+                return matchSearch && matchStatus;
+            });
+
+            const totalAktif = users.filter(u => u.isActive !== false).length;
+            const totalNonaktif = users.filter(u => u.isActive === false).length;
+
+            const getRoleLabel = (u) => {
+                if (isOwnerEmail(u.email)) return { label: 'Owner', color: 'bg-amber-100 text-amber-700 border-amber-200' };
+                return { label: u.role === 'kasir' || u.role === 'ttk' || !u.role ? 'TTK' : u.role, color: 'bg-sky-100 text-sky-700 border-sky-200' };
+            };
+
+            const getInitial = (name) => (name || 'U').charAt(0).toUpperCase();
+            const avatarColors = ['bg-sky-500', 'bg-violet-500', 'bg-emerald-500', 'bg-rose-500', 'bg-orange-500', 'bg-teal-500', 'bg-indigo-500', 'bg-pink-500'];
+            const getAvatarColor = (id) => avatarColors[(id || '').charCodeAt(0) % avatarColors.length];
+
+            return (
+                <div className="fade-in max-w-2xl mx-auto w-full pt-4 md:pt-10 pb-20">
+                    {/* Confirm Modal */}
+                    {confirmModal.show && (
+                        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setConfirmModal({ show: false, type: '', user: null })}>
+                            <div className="bg-white rounded-3xl shadow-2xl p-6 max-w-sm w-full fade-in" onClick={e => e.stopPropagation()}>
+                                <div className={`w-14 h-14 rounded-2xl mx-auto mb-4 flex items-center justify-center text-2xl ${confirmModal.type === 'delete' ? 'bg-red-100 text-red-500' : 'bg-amber-100 text-amber-600'}`}>
+                                    <Icon name={confirmModal.type === 'delete' ? 'trash' : confirmModal.type === 'activate' ? 'circle-check' : 'circle-pause'} />
+                                </div>
+                                <p className="font-black text-slate-800 text-center text-base mb-1">
+                                    {confirmModal.type === 'delete' ? 'Hapus Akun?' : confirmModal.type === 'activate' ? 'Aktifkan Akun?' : 'Nonaktifkan Akun?'}
+                                </p>
+                                <p className="text-slate-500 text-center text-sm mb-5">
+                                    {confirmModal.type === 'delete' ? `Akun "${confirmModal.user?.namaLengkap}" akan dihapus permanen.` : confirmModal.type === 'activate' ? `Akun "${confirmModal.user?.namaLengkap}" akan diaktifkan kembali.` : `Akun "${confirmModal.user?.namaLengkap}" tidak bisa login sementara.`}
+                                </p>
+                                <div className="flex gap-3">
+                                    <button onClick={() => setConfirmModal({ show: false, type: '', user: null })} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 active:scale-95 transition-all">Batal</button>
+                                    <button
+                                        onClick={() => confirmModal.type === 'delete' ? handleDeleteUser(confirmModal.user) : handleToggleActive(confirmModal.user)}
+                                        disabled={actionLoading}
+                                        className={`flex-1 py-2.5 rounded-xl font-bold text-sm text-white active:scale-95 transition-all disabled:opacity-50 ${confirmModal.type === 'delete' ? 'bg-red-500 hover:bg-red-600' : confirmModal.type === 'activate' ? 'bg-green-500 hover:bg-green-600' : 'bg-amber-500 hover:bg-amber-600'}`}
+                                    >
+                                        {actionLoading ? '...' : 'Ya, Lanjutkan'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="bg-white/90 backdrop-blur-sm rounded-[30px] shadow-soft border border-white overflow-hidden">
+                        <div className="p-6 pb-4 border-b border-slate-100 bg-gradient-to-r from-indigo-50 to-violet-50">
+                            <div className="flex items-center gap-4 mb-4">
+                                <div className="w-12 h-12 bg-indigo-600 text-white rounded-2xl flex items-center justify-center text-xl shadow-sm flex-shrink-0"><Icon name="users" /></div>
+                                <div>
+                                    <h2 className="text-xl font-bold text-slate-800">Pengguna Akun</h2>
+                                    <p className="text-xs text-slate-400 mt-0.5">Daftar akun &amp; peringkat pendapatan kasir</p>
+                                </div>
+                            </div>
+                            <div className="flex gap-2 mb-4">
+                                <div className="flex items-center gap-2 flex-1 bg-white rounded-xl px-3 py-2 border border-indigo-100 shadow-sm">
+                                    <p className="text-lg font-black text-indigo-600 leading-none">{users.length}</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase leading-tight">Total</p>
+                                </div>
+                                <div className="flex items-center gap-2 flex-1 bg-white rounded-xl px-3 py-2 border border-green-100 shadow-sm">
+                                    <p className="text-lg font-black text-green-600 leading-none">{totalAktif}</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase leading-tight">Aktif</p>
+                                </div>
+                                <div className="flex items-center gap-2 flex-1 bg-white rounded-xl px-3 py-2 border border-red-100 shadow-sm">
+                                    <p className="text-lg font-black text-red-500 leading-none">{totalNonaktif}</p>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase leading-tight">Nonaktif</p>
+                                </div>
+                            </div>
+                            <div className="flex gap-2">
+                                <button onClick={() => setMainTab('pengguna')} className={`flex-1 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${mainTab==='pengguna' ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-indigo-600 border border-indigo-200 hover:bg-indigo-50'}`}><Icon name="users" /> Daftar Pengguna</button>
+                                <button onClick={() => setMainTab('peringkat')} className={`flex-1 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${mainTab==='peringkat' ? 'bg-amber-500 text-white shadow-md' : 'bg-white text-amber-600 border border-amber-200 hover:bg-amber-50'}`}><Icon name="trophy" /> Peringkat</button>
+                            </div>
+                        </div>
+
+                        {toast && <div className={`mx-5 mt-4 px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 fade-in ${toast.type==='error'?'bg-red-50 border border-red-200 text-red-700':'bg-green-50 border border-green-200 text-green-700'}`}><Icon name={toast.type==='error'?'circle-xmark':'circle-check'}/>{toast.msg}</div>}
+
+                        {mainTab === 'pengguna' && (
+                        <div className="p-5 space-y-4">
+                            <div className="flex gap-2">
+                                <div className="relative flex-1"><Icon name="magnifying-glass" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" /><input className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-indigo-400 bg-slate-50 font-medium" placeholder="Cari nama atau username..." value={search} onChange={e => setSearch(e.target.value)} /></div>
+                                <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-600 bg-slate-50 focus:outline-none focus:border-indigo-400"><option value="semua">Semua</option><option value="aktif">Aktif</option><option value="nonaktif">Nonaktif</option></select>
+                            </div>
+                            {loadingUsers && <div className="py-12 flex flex-col items-center gap-3 text-slate-400"><div className="w-8 h-8 border-2 border-indigo-200 border-t-indigo-500 rounded-full animate-spin"></div><p className="text-sm">Memuat...</p></div>}
+                            {!loadingUsers && filteredUsers.length===0 && <div className="py-12 text-center text-slate-400 text-sm font-medium">Tidak ada pengguna ditemukan</div>}
+                            {!loadingUsers && filteredUsers.map(usr => {
+                                const isSelf=usr.id===authSession.id; const isInactive=usr.isActive===false;
+                                return (
+                                    <div key={usr.id} className={`rounded-2xl border transition-all ${isInactive?'bg-slate-50 border-slate-200 opacity-80':isSelf?'bg-gradient-to-r from-indigo-50 to-violet-50 border-indigo-200 shadow-sm':'bg-white border-slate-200 shadow-sm hover:shadow-md hover:border-indigo-200'}`}>
+                                        <div className="p-4">
+                                            <div className="flex items-start gap-3">
+                                                <div className="relative flex-shrink-0">
+                                                    <div className={`w-12 h-12 rounded-2xl overflow-hidden flex items-center justify-center border-2 ${isInactive?'border-slate-300':isSelf?'border-indigo-300':'border-white shadow-sm'} ${usr.profilePhoto?'':getAvatarColor(usr.id)}`}>{usr.profilePhoto?<img src={usr.profilePhoto} alt={usr.namaLengkap} className="w-full h-full object-cover"/>:<span className="text-white font-black text-lg">{getInitial(usr.namaLengkap)}</span>}</div>
+                                                    {isSelf && <span className="absolute -bottom-1 -right-1 w-5 h-5 bg-indigo-500 rounded-full border-2 border-white flex items-center justify-center"><Icon name="star" className="text-white text-[8px]"/></span>}
+                                                    {isInactive && <span className="absolute -bottom-1 -right-1 w-5 h-5 bg-red-400 rounded-full border-2 border-white flex items-center justify-center"><Icon name="xmark" className="text-white text-[8px]"/></span>}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <p className="font-bold text-slate-800 text-sm">{usr.namaLengkap}</p>
+                                                        {isSelf && <span className="text-[9px] font-black bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full border border-indigo-200">SAYA</span>}
+                                                        {isOwnerEmail(usr.email) && <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full border border-amber-200">Owner</span>}
+                                                        {isInactive && <span className="text-[9px] font-black bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full border border-red-200">NONAKTIF</span>}
+                                                    </div>
+                                                    <p className="text-xs text-slate-500 mt-0.5">@{usr.username}</p>
+                                                    {usr.createdAt && <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1.5"><Icon name="calendar" className="text-slate-300 flex-shrink-0"/>Bergabung: {usr.createdAt?.toDate?usr.createdAt.toDate().toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}):'-'}</p>}
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2 mt-3 pt-3 border-t border-slate-100">
+                                                {isSelf && <button onClick={() => setEditingUser(usr)} className="flex-1 py-2 rounded-xl text-xs font-bold bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border border-indigo-200 flex items-center justify-center gap-1.5 transition-all active:scale-95"><Icon name="user-pen"/> Edit Profil Saya</button>}
+                                                {isOwner && !isSelf && !isOwnerEmail(usr.email) && (<>
+                                                    <button onClick={() => setConfirmModal({show:true,type:isInactive?'activate':'deactivate',user:usr})} disabled={actionLoading} className={`flex-1 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 border ${isInactive?'bg-green-100 text-green-700 hover:bg-green-200 border-green-200':'bg-amber-100 text-amber-700 hover:bg-amber-200 border-amber-200'}`}><Icon name={isInactive?'circle-check':'circle-pause'}/>{isInactive?'Aktifkan':'Nonaktifkan'}</button>
+                                                    <button onClick={() => setConfirmModal({show:true,type:'delete',user:usr})} disabled={actionLoading} className="py-2 px-3 rounded-xl text-xs font-bold bg-red-100 text-red-600 hover:bg-red-200 border border-red-200 flex items-center justify-center transition-all active:scale-95"><Icon name="trash"/></button>
+                                                </>)}
+                                                {!isSelf && (!isOwner || isOwnerEmail(usr.email)) && <div className="flex-1"></div>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        )}
+
+                        {mainTab === 'peringkat' && (() => {
+                            const now = new Date();
+                            const filteredTx = transactions.filter(tx => {
+                                if (tx.status==='returned') return false;
+                                if (rankPeriod==='semua') return true;
+                                const txDate = tx.date?.toDate ? tx.date.toDate() : (tx.date ? new Date(tx.date) : null);
+                                if (!txDate) return false;
+                                if (rankPeriod==='bulan') return txDate.getMonth()===now.getMonth() && txDate.getFullYear()===now.getFullYear();
+                                if (rankPeriod==='minggu') { const s=new Date(now); s.setDate(now.getDate()-now.getDay()); s.setHours(0,0,0,0); return txDate>=s; }
+                                return true;
+                            });
+                            const revenueMap = {};
+                            filteredTx.forEach(tx => { const n=tx.cashierName||'?'; revenueMap[n]=(revenueMap[n]||0)+(tx.total||0); });
+                            const leaderboard = users
+                                .filter(u => !(hideOwnerFromRank && isOwnerEmail(u.email)))
+                                .map(u => ({...u, revenue: revenueMap[u.namaLengkap]||0, tier: getTierForRevenue(revenueMap[u.namaLengkap]||0)})).sort((a,b)=>b.revenue-a.revenue);
+                            const fullLeaderboard = users.map(u => ({...u, revenue: revenueMap[u.namaLengkap]||0, tier: getTierForRevenue(revenueMap[u.namaLengkap]||0)})).sort((a,b)=>b.revenue-a.revenue);
+                            const myEntry = leaderboard.find(u=>u.id===authSession.id);
+                            const myRank = leaderboard.findIndex(u=>u.id===authSession.id)+1;
+                            return (
+                                <div className="p-5 space-y-4 fade-in">
+                                    <div className="flex gap-2">
+                                        <button onClick={() => setRankView('papan')} className={`flex-1 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${rankView==='papan'?'bg-amber-500 text-white shadow-md':'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'}`}><Icon name="ranking-star"/> Papan Peringkat</button>
+                                        <button onClick={() => setRankView('tier')} className={`flex-1 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${rankView==='tier'?'bg-indigo-600 text-white shadow-md':'bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100'}`}><Icon name="layer-group"/> Tier &amp; Level</button>
+                                    </div>
+                                    {rankView==='papan' && (
+                                        <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
+                                            {[['semua','Semua Waktu'],['bulan','Bulan Ini'],['minggu','Minggu Ini']].map(([v,l]) => (
+                                                <button key={v} onClick={() => setRankPeriod(v)} className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition-all ${rankPeriod===v?'bg-white text-slate-800 shadow-sm':'text-slate-500 hover:text-slate-700'}`}>{l}</button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    {loadingTx && <div className="py-10 flex flex-col items-center gap-3 text-slate-400"><div className="w-8 h-8 border-2 border-amber-200 border-t-amber-500 rounded-full animate-spin"></div><p className="text-sm">Memuat transaksi...</p></div>}
+                                    {!loadingTx && rankView==='papan' && (
+                                        <div className="space-y-4 fade-in">
+                                            {/* Toggle sembunyikan owner - hanya owner yang lihat */}
+                                            {isOwner && (
+                                                <button
+                                                    onClick={handleToggleHideOwner}
+                                                    disabled={savingHideOwner}
+                                                    className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl border text-xs font-bold transition-all active:scale-95 ${hideOwnerFromRank ? 'bg-slate-100 border-slate-300 text-slate-600' : 'bg-violet-50 border-violet-200 text-violet-700'}`}
+                                                >
+                                                    <div className="flex items-center gap-2.5">
+                                                        <span className="text-lg">{hideOwnerFromRank ? '👻' : '👑'}</span>
+                                                        <div className="text-left">
+                                                            <p className="font-black text-xs">{hideOwnerFromRank ? 'Owner Disembunyikan' : 'Sembunyikan Owner dari Papan'}</p>
+                                                            <p className="font-normal text-[10px] opacity-60 mt-0.5">{hideOwnerFromRank ? 'Klik untuk tampilkan kembali' : 'Karyawan tidak akan melihat owner di peringkat'}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className={`w-10 h-5 rounded-full transition-all flex-shrink-0 relative ${hideOwnerFromRank ? 'bg-slate-400' : 'bg-violet-500'}`}>
+                                                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${hideOwnerFromRank ? 'left-0.5' : 'left-5'}`}></div>
+                                                    </div>
+                                                </button>
+                                            )}
+                                            {leaderboard.filter(u=>u.revenue>0).length>0 && (
+                                                <div className="bg-gradient-to-b from-amber-50 to-orange-50 rounded-2xl border border-amber-200 p-4">
+                                                    <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest text-center mb-4">🏆 Top Kasir</p>
+                                                    <div className="flex items-end justify-center gap-3">
+                                                        {leaderboard[1]?.revenue>0 && <div className="flex flex-col items-center gap-1 flex-1"><div className="relative"><div className="w-14 h-14 rounded-2xl overflow-hidden bg-slate-400 flex items-center justify-center border-2 border-slate-300 shadow-md">{leaderboard[1].profilePhoto?<img src={leaderboard[1].profilePhoto} className="w-full h-full object-cover" alt=""/>:<span className="text-white font-black text-xl">{getInitial(leaderboard[1].namaLengkap)}</span>}</div><span className="absolute -top-2 -right-2 text-base">🥈</span></div><p className="text-[10px] font-black text-slate-700 text-center truncate w-full">{leaderboard[1].namaLengkap}</p><p className="text-[9px] text-slate-500 font-bold">{formatRupiah(leaderboard[1].revenue)}</p><div className="w-full h-12 bg-slate-300 rounded-t-xl"></div></div>}
+                                                        {leaderboard[0]?.revenue>0 && <div className="flex flex-col items-center gap-1 flex-1"><div className="relative"><div className="w-16 h-16 rounded-2xl overflow-hidden bg-amber-400 flex items-center justify-center border-2 border-amber-300 shadow-lg">{leaderboard[0].profilePhoto?<img src={leaderboard[0].profilePhoto} className="w-full h-full object-cover" alt=""/>:<span className="text-white font-black text-2xl">{getInitial(leaderboard[0].namaLengkap)}</span>}</div><span className="absolute -top-3 -right-2 text-xl">🥇</span></div><p className="text-[10px] font-black text-amber-800 text-center truncate w-full">{leaderboard[0].namaLengkap}</p><p className="text-[9px] text-amber-700 font-bold">{formatRupiah(leaderboard[0].revenue)}</p><div className="w-full h-20 bg-amber-400 rounded-t-xl"></div></div>}
+                                                        {leaderboard[2]?.revenue>0 && <div className="flex flex-col items-center gap-1 flex-1"><div className="relative"><div className="w-14 h-14 rounded-2xl overflow-hidden bg-orange-400 flex items-center justify-center border-2 border-orange-300 shadow-md">{leaderboard[2].profilePhoto?<img src={leaderboard[2].profilePhoto} className="w-full h-full object-cover" alt=""/>:<span className="text-white font-black text-xl">{getInitial(leaderboard[2].namaLengkap)}</span>}</div><span className="absolute -top-2 -right-2 text-base">🥉</span></div><p className="text-[10px] font-black text-slate-700 text-center truncate w-full">{leaderboard[2].namaLengkap}</p><p className="text-[9px] text-slate-500 font-bold">{formatRupiah(leaderboard[2].revenue)}</p><div className="w-full h-8 bg-orange-300 rounded-t-xl"></div></div>}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {myEntry && (
+                                                <div className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-2xl p-4 text-white shadow-lg">
+                                                    <p className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-2">Posisi Kamu</p>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/20 flex items-center justify-center flex-shrink-0">{myEntry.profilePhoto?<img src={myEntry.profilePhoto} className="w-full h-full object-cover" alt=""/>:<span className="font-black text-lg">{getInitial(myEntry.namaLengkap)}</span>}</div>
+                                                        <div className="flex-1 min-w-0"><p className="font-black text-sm">{myEntry.namaLengkap}</p><p className="text-white/70 text-[10px]">{myEntry.tier?myEntry.tier.shortLabel:'Belum ada transaksi'}</p></div>
+                                                        <div className="text-right flex-shrink-0"><p className="text-2xl font-black leading-none">#{myRank}</p><p className="text-white/70 text-[10px]">{formatRupiah(myEntry.revenue)}</p></div>
+                                                    </div>
+                                                    {myEntry.revenue>0 && myEntry.tier && (
+                                                        <div className="mt-3">
+                                                            <div className="flex justify-between text-[10px] mb-1 opacity-70"><span>{myEntry.tier.shortLabel}</span><span>{myEntry.tier.tier<50?`Next: ${RANK_TIERS[myEntry.tier.tier].name} (${formatRupiah(myEntry.tier.maxRp)})`:'Tier Tertinggi! 🔥'}</span></div>
+                                                            <div className="h-2 bg-white/20 rounded-full overflow-hidden"><div className="h-full bg-white rounded-full" style={{width:`${Math.min(100,((myEntry.revenue-myEntry.tier.minRp)/1000000)*100)}%`}}></div></div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                            <div className="space-y-2">
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Semua Peringkat</p>
+                                                {leaderboard.map((u,idx) => {
+                                                    const isSelf=u.id===authSession.id; const medal=idx===0?'🥇':idx===1?'🥈':idx===2?'🥉':null;
+                                                    return (
+                                                        <div key={u.id} className={`flex items-center gap-3 p-3 rounded-2xl border ${isSelf?'bg-indigo-50 border-indigo-200':'bg-white border-slate-100'}`}>
+                                                            <div className="w-7 text-center flex-shrink-0">{medal?<span className="text-lg">{medal}</span>:<span className="text-xs font-black text-slate-400">#{idx+1}</span>}</div>
+                                                            <div className={`w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center flex-shrink-0 ${u.profilePhoto?'':getAvatarColor(u.id)}`}>{u.profilePhoto?<img src={u.profilePhoto} className="w-full h-full object-cover" alt=""/>:<span className="text-white font-black text-sm">{getInitial(u.namaLengkap)}</span>}</div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-1.5"><p className="font-bold text-slate-800 text-xs truncate">{u.namaLengkap}</p>{isSelf&&<span className="text-[8px] font-black bg-indigo-100 text-indigo-600 px-1 py-0.5 rounded-full flex-shrink-0">SAYA</span>}</div>
+                                                                {u.tier?(<div className="flex items-center gap-1.5 mt-0.5"><span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full border ${u.tier.bgClass}`}>{u.tier.shortLabel}</span><div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden max-w-20"><div className="h-full rounded-full" style={{width:`${Math.min(100,((u.revenue-u.tier.minRp)/1000000)*100)}%`,backgroundColor:u.tier.color}}></div></div></div>):<p className="text-[9px] text-slate-400 mt-0.5">Belum ada transaksi</p>}
+                                                            </div>
+                                                            <p className="text-xs font-black text-slate-800 flex-shrink-0">{u.revenue>0?formatRupiah(u.revenue):'—'}</p>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                    {!loadingTx && rankView==='tier' && (
+                                        <div className="space-y-4 fade-in">
+                                            <div className="grid grid-cols-5 gap-1.5">
+                                                {[{label:'Tier 1–10',desc:'0–10 Jt',color:'bg-slate-100 text-slate-600 border-slate-200',icon:'seedling'},{label:'Tier 11–20',desc:'10–20 Jt',color:'bg-blue-100 text-blue-700 border-blue-200',icon:'star-half-stroke'},{label:'Tier 21–30',desc:'20–30 Jt',color:'bg-emerald-100 text-emerald-700 border-emerald-200',icon:'star'},{label:'Tier 31–40',desc:'30–40 Jt',color:'bg-amber-100 text-amber-700 border-amber-200',icon:'fire'},{label:'Tier 41–50',desc:'40–50 Jt',color:'bg-orange-100 text-orange-700 border-orange-200',icon:'crown'}].map((g,i)=>(
+                                                    <div key={i} className={`p-2 rounded-xl border text-center ${g.color}`}><Icon name={g.icon} className="text-sm mb-1"/><p className="text-[8px] font-black leading-tight">{g.label}</p><p className="text-[7px] opacity-70">{g.desc}</p></div>
+                                                ))}
+                                            </div>
+                                            {isOwner && (
+                                                <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 font-semibold">
+                                                    <Icon name="pen-to-square" className="flex-shrink-0 text-sm"/>
+                                                    <span>Owner bisa edit nama tier — klik ✏️ di samping kanan tier mana saja!</span>
+                                                </div>
+                                            )}
+                                            <div className="space-y-1.5">
+                                                {RANK_TIERS.map((tier, tIdx) => {
+                                                    const tierUsers=leaderboard.filter(u=>u.tier?.tier===tier.tier);
+                                                    const isMyTier=myEntry?.tier?.tier===tier.tier;
+                                                    const isEditing = editingTier === tIdx;
+                                                    const isCustom = !!customTierNames[tIdx];
+                                                    return (
+                                                        <div key={tier.tier} className={`rounded-2xl border overflow-hidden ${isMyTier?'ring-2 ring-indigo-400 ring-offset-1':''} ${tierUsers.length===0&&!isOwner?'opacity-40':''}`}>
+                                                            <div className={`flex items-center gap-3 px-4 py-2.5 ${tier.bgClass}`}>
+                                                                <div className="w-7 text-center flex-shrink-0"><Icon name={tier.icon} className="text-sm"/></div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    {isEditing ? (
+                                                                        <div className="flex items-center gap-1.5" onClick={e=>e.stopPropagation()}>
+                                                                            <input
+                                                                                autoFocus
+                                                                                value={editTierValue}
+                                                                                onChange={e=>setEditTierValue(e.target.value)}
+                                                                                onKeyDown={e=>{if(e.key==='Enter')handleSaveTierName(tIdx);if(e.key==='Escape'){setEditingTier(null);setEditTierValue('');}}}
+                                                                                className="flex-1 bg-white/80 border border-white rounded-lg px-2 py-1 text-xs font-bold text-slate-800 focus:outline-none min-w-0"
+                                                                                placeholder="Nama tier baru..."
+                                                                                maxLength={40}
+                                                                            />
+                                                                            <button onClick={()=>handleSaveTierName(tIdx)} disabled={savingTier||!editTierValue.trim()} className="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-green-500 text-white rounded-lg text-xs hover:bg-green-600 active:scale-95 transition-all disabled:opacity-50">
+                                                                                <Icon name="check"/>
+                                                                            </button>
+                                                                            <button onClick={()=>{setEditingTier(null);setEditTierValue('');}} className="w-7 h-7 flex-shrink-0 flex items-center justify-center bg-slate-400 text-white rounded-lg text-xs hover:bg-slate-500 active:scale-95 transition-all">
+                                                                                <Icon name="xmark"/>
+                                                                            </button>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                                            <span className="font-black text-xs">{tier.shortLabel}</span>
+                                                                            {isMyTier&&<span className="text-[8px] font-black bg-indigo-500 text-white px-1.5 py-0.5 rounded-full">SAYA</span>}
+                                                                            {isCustom&&<span className="text-[8px] font-bold bg-white/60 text-slate-500 px-1 py-0.5 rounded-full border border-white/80">custom</span>}
+                                                                        </div>
+                                                                    )}
+                                                                    {!isEditing && <p className="text-[10px] opacity-70 font-medium">{tier.tier===50?'≥ 49 Juta':`${tier.tier-1} Juta – ${tier.tier} Juta`}</p>}
+                                                                </div>
+                                                                <div className="flex items-center gap-1 flex-shrink-0">
+                                                                    {!isEditing && tierUsers.length>0 && tierUsers.map(u=>(<div key={u.id} title={u.namaLengkap} className="w-6 h-6 rounded-full overflow-hidden border-2 border-white -ml-1 first:ml-0 flex items-center justify-center bg-indigo-500 shadow-sm">{u.profilePhoto?<img src={u.profilePhoto} className="w-full h-full object-cover" alt=""/>:<span className="text-white text-[8px] font-black">{getInitial(u.namaLengkap)}</span>}</div>))}
+                                                                    {!isEditing && tierUsers.length===0 && <span className="text-[9px] opacity-50">—</span>}
+                                                                    {isOwner && !isEditing && (
+                                                                        <div className="flex items-center gap-1 ml-2">
+                                                                            <button
+                                                                                onClick={()=>{setEditingTier(tIdx);setEditTierValue(tier.shortLabel);}}
+                                                                                title="Edit nama tier"
+                                                                                className="w-6 h-6 flex items-center justify-center rounded-lg bg-white/50 hover:bg-white/80 text-slate-600 text-[10px] transition-all active:scale-90"
+                                                                            ><Icon name="pen"/></button>
+                                                                            {isCustom && (
+                                                                                <button
+                                                                                    onClick={()=>handleResetTierName(tIdx)}
+                                                                                    title="Reset ke default"
+                                                                                    className="w-6 h-6 flex items-center justify-center rounded-lg bg-white/50 hover:bg-red-100 text-slate-400 hover:text-red-500 text-[10px] transition-all active:scale-90"
+                                                                                ><Icon name="rotate-left"/></button>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
+                    </div>
+                </div>
+            );
+        };
+
+        const SettingsView = ({ settings, onSave, loading, authSession, inOwnerPanel, onUpdateSession }) => {
             const isOwner = isOwnerEmail(authSession?.email);
             const [localSettings, setLocalSettings] = useState(settings);
             const [profiles, setProfiles] = useState(() => settings.storeProfiles || [{ id: 'default', name: settings.storeName || APP_NAME, address: settings.storeAddress || '', footer: settings.receiptFooter || "Terima Kasih", headers: [] }]);
@@ -1428,6 +2189,7 @@
             const [activeMenu, setActiveMenu] = useState(null);
 
             const settingsMenuAll = [
+                { id: 'profil', label: 'Edit Profil Akun', desc: 'Foto profil, nama, username & kata sandi', icon: 'user-pen', color: 'purple', settingsKey: null },
                 { id: 'toko', label: 'Profil & Cabang Toko', desc: 'Kelola nama, alamat, dan cabang toko', icon: 'shop', color: 'sky', settingsKey: 'enableSettingsToko' },
                 { id: 'stok', label: 'Pengaturan Stok', desc: 'Batas stok menipis', icon: 'boxes-stacked', color: 'slate', settingsKey: 'enableSettingsStok' },
                 { id: 'struk', label: 'Format Cetak Struk', desc: 'Header, footer, dan format struk printer', icon: 'print', color: 'slate', settingsKey: 'enableSettingsStruk' },
@@ -1444,6 +2206,7 @@
                 teal: { bg: 'bg-teal-50', border: 'border-teal-200', icon: 'bg-teal-600', text: 'text-teal-800', btn: 'bg-teal-600 hover:bg-teal-700' },
                 green: { bg: 'bg-green-50', border: 'border-green-200', icon: 'bg-green-600', text: 'text-green-800', btn: 'bg-green-600 hover:bg-green-700' },
                 amber: { bg: 'bg-amber-50', border: 'border-amber-200', icon: 'bg-amber-500', text: 'text-amber-900', btn: 'bg-amber-500 hover:bg-amber-600' },
+                purple: { bg: 'bg-purple-50', border: 'border-purple-200', icon: 'bg-purple-600', text: 'text-purple-800', btn: 'bg-purple-600 hover:bg-purple-700' },
             };
 
             return (
@@ -1492,6 +2255,10 @@
                             </div>
                         );
 
+
+                        if (activeMenu === 'profil') return (
+                            <ProfilAkunView authSession={authSession} onUpdateSession={onUpdateSession} onBack={() => setActiveMenu(null)} c={c} />
+                        );
 
                         if (activeMenu === 'toko') return (
                             <div className={`bg-white/90 backdrop-blur-sm rounded-[30px] shadow-soft border ${c.border} overflow-hidden`}>
@@ -7959,7 +8726,7 @@
                     if (foundUser.password !== hashedPass) { setErrTimeout('Password salah'); setLoading(false); return; }
                     if (foundUser.isActive === false && !isOwnerEmail(foundUser.email)) { setErrTimeout('Akun kamu telah dinonaktifkan. Hubungi owner.'); setLoading(false); return; }
 
-                    const sessionData = { id: foundUser.id, namaLengkap: foundUser.namaLengkap, username: foundUser.username, email: foundUser.email, whatsapp: foundUser.whatsapp, loginAt: Date.now() };
+                    const sessionData = { id: foundUser.id, namaLengkap: foundUser.namaLengkap, username: foundUser.username, email: foundUser.email, whatsapp: foundUser.whatsapp, profilePhoto: foundUser.profilePhoto || null, loginAt: Date.now() };
                     saveSession(sessionData);
                     onAuthSuccess(sessionData);
                 } catch (e) { console.error(e); setErrTimeout('Terjadi kesalahan. Coba lagi.'); }
@@ -7992,7 +8759,7 @@
                     if (!snapUname.empty) { setErrTimeout('Username sudah dipakai'); setLoading(false); return; }
 
                     const hashedPass = await hashPassword(password);
-                    const newUser = { namaLengkap, username: username.toLowerCase(), email: email.toLowerCase(), whatsapp, password: hashedPass, createdAt: window.serverTimestamp(), role: 'kasir' };
+                    const newUser = { namaLengkap, username: username.toLowerCase(), email: email.toLowerCase(), whatsapp, password: hashedPass, createdAt: window.serverTimestamp(), role: 'ttk' };
                     const docRef = await window.addDoc(usersRef, newUser);
 
                     const sessionData = { id: docRef.id, namaLengkap, username: username.toLowerCase(), email: email.toLowerCase(), whatsapp, loginAt: Date.now() };
@@ -10018,6 +10785,7 @@
                 { id: 'rekam_medis', label: 'Rekam Medis',       icon: 'stethoscope',         enabled: isOwner || showMenu('showMenuRekamMedis', settingsData.showMenuRekamMedis), readOnly: !isOwner && !menuOn('enableRekamMedis', settingsData.enableRekamMedis) },
                 { id: 'jadwal_shift', label: 'Jadwal Shift',     icon: 'calendar-days',       enabled: isOwner || showMenu('showMenuJadwalShift', settingsData.showMenuJadwalShift), readOnly: !isOwner && !menuOn('enableJadwalShift', settingsData.enableJadwalShift) },
                 { id: 'transfer_barang', label: 'Transfer Barang', icon: 'right-left',         enabled: isOwner || showMenu('showMenuTransferBarang', settingsData.showMenuTransferBarang), readOnly: !isOwner && !menuOn('enableTransferBarang', settingsData.enableTransferBarang) },
+                { id: 'pengguna_akun', label: 'Pengguna Akun',   icon: 'users',               enabled: true, readOnly: false },
                 { id: 'settings',    label: 'Pengaturan',        icon: 'gears',               enabled: true, readOnly: false },
             ];
             const visibleMenuItems = menuItems.filter(m => m.enabled);
@@ -10127,8 +10895,12 @@
                                 {authSession && (
                                     <div className="mb-2 px-3 py-2 bg-sky-50 rounded-xl border border-sky-100">
                                         <div className="flex items-center gap-2">
-                                            <div className="w-7 h-7 rounded-lg bg-sky-500 flex items-center justify-center flex-shrink-0">
-                                                <span className="text-white text-xs font-black">{(authSession.namaLengkap||'U').charAt(0).toUpperCase()}</span>
+                                            <div className="w-7 h-7 rounded-lg bg-sky-500 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                                {authSession.profilePhoto ? (
+                                                    <img src={authSession.profilePhoto} alt="foto" className="w-full h-full object-cover" />
+                                                ) : (
+                                                    <span className="text-white text-xs font-black">{(authSession.namaLengkap||'U').charAt(0).toUpperCase()}</span>
+                                                )}
                                             </div>
                                             <div className="min-w-0">
                                                 <p className="text-xs font-black text-slate-700 truncate">{authSession.namaLengkap}</p>
@@ -10329,7 +11101,8 @@
                         {activeTab === 'import' && (<BulkImportView user={user} onImportComplete={(count) => { showToast(`${count} Barang berhasil diimport`); setActiveTab('list'); }} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='import')?.readOnly} />)}
                         {activeTab === 'stock_opname' && (<StockOpnameView items={inventoryData} user={user} showToast={showToast} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='stock_opname')?.readOnly} />)}
                         {activeTab === 'rekam_medis' && (<RekamMedisView user={user} showToast={showToast} readOnly={menuItems.find(m=>m.id==='rekam_medis')?.readOnly} />)}
-                        {activeTab === 'settings' && (<SettingsView settings={settingsData} onSave={handleSaveSettings} loading={submitting} authSession={authSession} />)}
+                        {activeTab === 'settings' && (<SettingsView settings={settingsData} onSave={handleSaveSettings} loading={submitting} authSession={authSession} onUpdateSession={(newSession) => { setAuthSession(newSession); saveSession(newSession); }} />)}
+                        {activeTab === 'pengguna_akun' && (<PenggunaAkunView authSession={authSession} onUpdateSession={(newSession) => { setAuthSession(newSession); saveSession(newSession); }} showToast={showToast} />)}
                         {activeTab === 'catatan' && (<PapanCatatan user={user} readOnly={menuItems.find(m=>m.id==='catatan')?.readOnly} />)}
                         {activeTab === 'jadwal_shift' && (<JadwalShiftView user={user} showToast={showToast} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='jadwal_shift')?.readOnly} />)}
                         {activeTab === 'transfer_barang' && (<TransferBarangView user={user} showToast={showToast} rawInventory={rawInventory} settings={settingsData} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='transfer_barang')?.readOnly} authSession={authSession} />)}
