@@ -5237,33 +5237,19 @@
                     const ctx = new AudioContext();
                     const t = ctx.currentTime;
 
-                    // Suara koin logam jatuh & bergerincing
-                    const playCoin = (startTime, freq, dur, gain) => {
-                        const bufSize = Math.floor(ctx.sampleRate * dur);
-                        const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
-                        const data = buf.getChannelData(0);
-                        for (let i = 0; i < bufSize; i++) {
-                            const env = Math.pow(1 - i / bufSize, 2.5);
-                            data[i] = (Math.random() * 2 - 1) * env * 0.3 +
-                                      Math.sin(2 * Math.PI * freq * i / ctx.sampleRate) * env * 0.7 +
-                                      Math.sin(2 * Math.PI * (freq * 2.76) * i / ctx.sampleRate) * env * 0.3;
-                        }
-                        const src = ctx.createBufferSource();
-                        src.buffer = buf;
-                        const g = ctx.createGain();
-                        g.gain.setValueAtTime(gain, startTime);
-                        src.connect(g); g.connect(ctx.destination);
-                        src.start(startTime);
-                    };
+                    // Ting! koin logam bersih — nada utama + harmonik
+                    [2637, 5274].forEach((freq, i) => {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.connect(gain); gain.connect(ctx.destination);
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(freq, t);
+                        gain.gain.setValueAtTime(i === 0 ? 0.5 : 0.2, t);
+                        gain.gain.exponentialRampToValueAtTime(0.001, t + 1.2);
+                        osc.start(t); osc.stop(t + 1.2);
+                    });
 
-                    // Beberapa koin jatuh berurutan
-                    playCoin(t + 0.00, 1450, 0.28, 0.55);
-                    playCoin(t + 0.10, 1600, 0.24, 0.45);
-                    playCoin(t + 0.19, 1350, 0.30, 0.50);
-                    playCoin(t + 0.27, 1700, 0.22, 0.40);
-                    playCoin(t + 0.34, 1500, 0.26, 0.35);
-
-                    setTimeout(() => ctx.close(), 1200);
+                    setTimeout(() => ctx.close(), 1400);
                 } catch(e) { console.warn('Sound error:', e); }
             };
 
