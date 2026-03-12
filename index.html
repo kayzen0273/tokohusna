@@ -5285,7 +5285,7 @@
                     }
                     
                     setReceiptData({ ...newTransaction, id: docRef.id, date: new Date() }); 
-                    setPaymentSuccess(true); showToast("Transaksi Berhasil!"); try { const snd = document.getElementById("cashierSound"); if(snd){ snd.currentTime=0; snd.play().catch(()=>{}); } } catch(e) {}
+                    setPaymentSuccess(true); try { const s = document.getElementById('chaching-sound'); if(s){ s.currentTime=0; s.play(); } } catch(e){} showToast("Transaksi Berhasil!");
                 } catch (error) { console.error(error); showToast("Transaksi Gagal", "error"); } finally { setIsProcessing(false); }
             };
 
@@ -9623,9 +9623,7 @@
                     .pagi{background:#FFF176;} .siang{background:#80DEEA;}
                     h2,h3{text-align:center;margin:2px 0;}
                     @media print{@page{size:landscape;}}
-                </style></head><body>
-<audio id="cashierSound" src="cha-ching.mp3" preload="auto"></audio>
-${el.innerHTML}</body></html>`);
+                </style></head><body>${el.innerHTML}</body></html>`);
                 win.document.close();
                 setTimeout(()=>{ win.print(); }, 400);
             };
@@ -11383,5 +11381,6 @@ ${el.innerHTML}</body></html>`);
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
+<audio id="chaching-sound" src="cha-ching.mp3" preload="auto"></audio>
 </body>
 </html>
