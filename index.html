@@ -2690,6 +2690,7 @@
             const [supplierSearch, setSupplierSearch] = useState('');
             const [purchaseSearch, setPurchaseSearch] = useState('');
             const [purchaseFilterStatus, setPurchaseFilterStatus] = useState('all');
+            const [purchaseFilterSupplier, setPurchaseFilterSupplier] = useState('all');
             const DRAFT_KEY = `faktur_draft_${currentProfile.id}`;
             const [invoiceData, setInvoiceData] = useState({ supplier: '', invoiceNumber: '', date: '', receivedDate: new Date().toISOString().slice(0,10), receivedTime: new Date().toTimeString().slice(0,5), dueDate: '', total: '', ppn: '', paymentMethod: 'Kredit', isPaid: false, isConsignment: false, items: [] });
             const [diskon, setDiskon] = useState('0');
@@ -3383,12 +3384,14 @@
                 setInvoiceModalOpen(true);
             };
             const filteredSuppliers = suppliers.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase()));
+            const uniqueSupplierNames = [...new Set(storePurchases.map(p => p.supplier).filter(Boolean))].sort();
             const filteredPurchases = storePurchases.filter(p => {
                 const q = purchaseSearch.toLowerCase();
                 const matchItems = (p.items || []).some(i => (i.name || '').toLowerCase().includes(q));
                 const matchText = !q || (p.supplier || '').toLowerCase().includes(q) || (p.invoiceNumber || '').toLowerCase().includes(q) || (p.paymentMethod || '').toLowerCase().includes(q) || matchItems;
                 const matchStatus = purchaseFilterStatus === 'all' ? true : purchaseFilterStatus === 'paid' ? p.isPaid : purchaseFilterStatus === 'unpaid' ? !p.isPaid : purchaseFilterStatus === 'overdue' ? (!p.isPaid && p.dueDate && new Date(p.dueDate) < new Date()) : purchaseFilterStatus === 'consignment' ? p.isConsignment : true;
-                return matchText && matchStatus;
+                const matchSupplier = purchaseFilterSupplier === 'all' || (p.supplier || '') === purchaseFilterSupplier;
+                return matchText && matchStatus && matchSupplier;
             });
 
             // Guard untuk mode all_stores — boleh lihat, tapi tidak bisa input
@@ -3434,9 +3437,15 @@
                             <option value="overdue">Telat Bayar</option>
                             <option value="consignment">Konsinyasi</option>
                         </select>
+                        <select value={purchaseFilterSupplier} onChange={e => setPurchaseFilterSupplier(e.target.value)} className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 bg-white outline-none focus:ring-2 focus:ring-teal-400 shadow-sm cursor-pointer max-w-[140px]">
+                            <option value="all">Semua Supplier</option>
+                            {uniqueSupplierNames.map(name => (
+                                <option key={name} value={name}>{name}</option>
+                            ))}
+                        </select>
                     </div>
                     <div className="flex-1 overflow-y-auto custom-scrollbar space-y-0 pr-1">
-                        {loading ? <div className="text-center py-10"><div className="typing-dot bg-teal-600"></div></div> : filteredPurchases.length === 0 ? <div className="text-center py-12 text-slate-400 text-xs">{purchaseSearch || purchaseFilterStatus !== 'all' ? 'Tidak ada faktur yang cocok.' : 'Belum ada faktur pembelian.'}</div> :
+                        {loading ? <div className="text-center py-10"><div className="typing-dot bg-teal-600"></div></div> : filteredPurchases.length === 0 ? <div className="text-center py-12 text-slate-400 text-xs">{purchaseSearch || purchaseFilterStatus !== 'all' || purchaseFilterSupplier !== 'all' ? 'Tidak ada faktur yang cocok.' : 'Belum ada faktur pembelian.'}</div> :
                         filteredPurchases.map((p, idx) => {
                             const dueDate = p.dueDate ? new Date(p.dueDate) : null;
                             const isOverdue = !p.isPaid && dueDate && dueDate < new Date();
