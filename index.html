@@ -484,53 +484,64 @@
 
 
 
-        // --- DEKORASI RAMADHAN ---
+        // --- DEKORASI IDUL FITRI ---
         const RamadhanDecor = () => (
-            <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+            <div className="fixed inset-0 pointer-events-none overflow-hidden" style={{zIndex: -1}}>
+                {/* Partikel bintang melayang */}
                 <div className="absolute inset-0 z-0">
-                    {[...Array(10)].map((_, i) => (
-                        <div key={i} className="absolute rounded-full bg-gold-300 opacity-0 animate-float-up" 
+                    {[...Array(14)].map((_, i) => (
+                        <div key={i} className="absolute rounded-full opacity-0 animate-float-up"
                              style={{
-                                 width: Math.random() * 4 + 2 + 'px',
-                                 height: Math.random() * 4 + 2 + 'px',
+                                 background: i % 3 === 0 ? '#facc15' : i % 3 === 1 ? '#86efac' : '#fda4af',
+                                 width: Math.random() * 5 + 2 + 'px',
+                                 height: Math.random() * 5 + 2 + 'px',
                                  left: Math.random() * 100 + '%',
                                  animationDelay: Math.random() * 10 + 's',
                                  animationDuration: Math.random() * 10 + 10 + 's'
                              }}></div>
                     ))}
                 </div>
+
+                {/* Bintang-bintang kecil berkelip */}
                 <div className="absolute top-10 left-[10%] text-gold-400 text-[10px] animate-twinkle delay-100 opacity-60"><Icon name="star" /></div>
                 <div className="absolute top-32 left-[40%] text-gold-300 text-[8px] animate-twinkle delay-700 opacity-40"><Icon name="star" /></div>
                 <div className="absolute top-5 right-[15%] text-gold-500 text-[12px] animate-twinkle delay-300 opacity-70"><Icon name="star" /></div>
+                <div className="absolute top-16 right-[35%] text-yellow-300 text-[9px] animate-twinkle delay-500 opacity-50"><Icon name="star" /></div>
                 <div className="absolute -top-10 right-10 w-20 h-0.5 bg-gradient-to-l from-transparent to-white opacity-40 animate-falling-star"></div>
-                
-                <div className="absolute -top-6 left-2 md:left-8 z-0 animate-swing origin-top duration-[3500ms]">
-                    <div className="h-24 md:h-40 w-[1px] bg-gold-400/60 mx-auto"></div>
-                    <div className="text-gold-500 text-4xl md:text-6xl drop-shadow-glow relative z-10"><Icon name="mosque" /></div>
+
+                {/* Gantungan kiri: Icon Kado — sejajar dengan bintang kanan */}
+                <div className="absolute -top-8 left-2 md:left-12 z-0 animate-swing origin-top duration-[4000ms]">
+                    <div className="h-20 md:h-32 w-[1px] bg-gold-400/60 mx-auto"></div>
+                    <div className="text-gold-500 text-4xl md:text-6xl drop-shadow-glow relative z-10"><Icon name="gift" /></div>
                 </div>
 
-                <div className="absolute -top-10 left-20 md:left-32 z-0 animate-sway-slow origin-top duration-[5000ms]">
-                    <div className="h-32 md:h-48 w-[1px] bg-gold-400/40 mx-auto"></div>
+                {/* Gantungan ketupat kiri — sejajar dengan ketupat kanan */}
+                <div className="absolute -top-14 left-20 md:left-40 z-0 animate-sway origin-top duration-[5500ms]">
+                    <div className="h-28 md:h-44 w-[1px] bg-gold-400/40 mx-auto"></div>
                     <div className="ketupat mx-auto shadow-lg"></div>
                     <div className="h-4 w-[1px] bg-gold-400/40 mx-auto"></div>
                     <div className="text-green-600 text-[10px] text-center"><Icon name="leaf" /></div>
                 </div>
 
+                {/* Gantungan tengah: kembang api / bintang */}
                 <div className="absolute -top-12 left-[30%] hidden md:block z-0 animate-swing-slow origin-top duration-[4500ms]">
                     <div className="h-20 w-[1px] bg-gold-400/40 mx-auto"></div>
-                    <div className="text-red-500 text-2xl drop-shadow-md"><Icon name="lightbulb" /></div>
+                    <div className="text-yellow-400 text-2xl drop-shadow-md animate-pulse"><Icon name="star" /></div>
                 </div>
 
+                {/* Gantungan kanan: bintang emas besar */}
                 <div className="absolute -top-8 right-4 md:right-12 z-0 animate-swing origin-top duration-[4000ms]">
                     <div className="h-20 md:h-32 w-[1px] bg-gold-400/60 mx-auto"></div>
-                    <div className="text-gold-500 text-4xl md:text-6xl drop-shadow-glow relative z-10"><Icon name="star-and-crescent" /></div>
+                    <div className="text-gold-500 text-4xl md:text-6xl drop-shadow-glow relative z-10"><Icon name="star" /></div>
                 </div>
 
+                {/* Gantungan ketupat kanan */}
                 <div className="absolute -top-14 right-20 md:right-40 z-0 animate-sway origin-top duration-[5500ms]">
                     <div className="h-28 md:h-44 w-[1px] bg-gold-400/40 mx-auto"></div>
                     <div className="ketupat mx-auto shadow-lg bg-green-200 border-green-600"></div>
                 </div>
 
+                {/* Siluet masjid bawah — tema Idul Fitri tetap pakai masjid */}
                 <div className="absolute bottom-0 left-0 right-0 h-32 opacity-10 pointer-events-none flex items-end justify-center overflow-hidden">
                     <div className="text-slate-800 text-[150px] md:text-[200px] leading-none -mb-10"><Icon name="mosque" /></div>
                     <div className="text-slate-800 text-[100px] md:text-[140px] leading-none -mb-8 -ml-10"><Icon name="mosque" /></div>
@@ -7357,8 +7368,8 @@
                     <div className="bg-gradient-to-r from-night-900 to-sky-900 rounded-3xl p-5 md:p-6 text-white relative overflow-hidden shadow-2xl border border-slate-700 group">
                         <div className="absolute right-0 top-0 w-48 h-48 bg-gold-400 opacity-10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
                         <div className="relative z-10 flex items-center justify-between">
-                            <div><h3 className="font-arab text-2xl md:text-3xl text-gold-400 mb-1">رمضان كريم</h3><p className="text-xs md:text-sm text-slate-300 font-medium opacity-90">Selamat Menunaikan Ibadah Puasa Ramadhan</p><div className="mt-3 inline-flex items-center gap-2 bg-green-500/20 px-3 py-1 rounded-full backdrop-blur-sm border border-green-500/30"><div className="w-2 h-2 rounded-full bg-green-50 animate-pulse"></div><span className="text-[10px] font-bold tracking-wide text-green-300">ONLINE (FIREBASE)</span></div></div>
-                            <div className="text-4xl text-gold-500/80 animate-pulse"><Icon name="mosque" /></div>
+                            <div><h3 className="font-arab text-2xl md:text-3xl text-gold-400 mb-1">عيد الفطر مبارك</h3><p className="text-xs md:text-sm text-slate-300 font-medium opacity-90">Selamat Hari Raya Idul Fitri — Minal Aidin Wal Faizin 🌙✨</p><div className="mt-3 inline-flex items-center gap-2 bg-green-500/20 px-3 py-1 rounded-full backdrop-blur-sm border border-green-500/30"><div className="w-2 h-2 rounded-full bg-green-50 animate-pulse"></div><span className="text-[10px] font-bold tracking-wide text-green-300">ONLINE (FIREBASE)</span></div></div>
+                            <div className="text-4xl text-gold-500/80 animate-pulse"><Icon name="star" /></div>
                         </div>
                     </div>
                     
