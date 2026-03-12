@@ -5230,6 +5230,43 @@
                 }
             };
 
+            const playPaymentSound = () => {
+                try {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (!AudioContext) return;
+                    const ctx = new AudioContext();
+                    const t = ctx.currentTime;
+
+                    // Suara koin logam jatuh & bergerincing
+                    const playCoin = (startTime, freq, dur, gain) => {
+                        const bufSize = Math.floor(ctx.sampleRate * dur);
+                        const buf = ctx.createBuffer(1, bufSize, ctx.sampleRate);
+                        const data = buf.getChannelData(0);
+                        for (let i = 0; i < bufSize; i++) {
+                            const env = Math.pow(1 - i / bufSize, 2.5);
+                            data[i] = (Math.random() * 2 - 1) * env * 0.3 +
+                                      Math.sin(2 * Math.PI * freq * i / ctx.sampleRate) * env * 0.7 +
+                                      Math.sin(2 * Math.PI * (freq * 2.76) * i / ctx.sampleRate) * env * 0.3;
+                        }
+                        const src = ctx.createBufferSource();
+                        src.buffer = buf;
+                        const g = ctx.createGain();
+                        g.gain.setValueAtTime(gain, startTime);
+                        src.connect(g); g.connect(ctx.destination);
+                        src.start(startTime);
+                    };
+
+                    // Beberapa koin jatuh berurutan
+                    playCoin(t + 0.00, 1450, 0.28, 0.55);
+                    playCoin(t + 0.10, 1600, 0.24, 0.45);
+                    playCoin(t + 0.19, 1350, 0.30, 0.50);
+                    playCoin(t + 0.27, 1700, 0.22, 0.40);
+                    playCoin(t + 0.34, 1500, 0.26, 0.35);
+
+                    setTimeout(() => ctx.close(), 1200);
+                } catch(e) { console.warn('Sound error:', e); }
+            };
+
             const handleCheckout = async () => {
                 if (!user) return;
                 if (cart.length === 0) return;
@@ -5286,6 +5323,7 @@
                     
                     setReceiptData({ ...newTransaction, id: docRef.id, date: new Date() }); 
                     setPaymentSuccess(true); showToast("Transaksi Berhasil!");
+                    playPaymentSound();
                 } catch (error) { console.error(error); showToast("Transaksi Gagal", "error"); } finally { setIsProcessing(false); }
             };
 
@@ -9135,7 +9173,7 @@
                                     <Icon name="shop" className="text-white text-2xl" />
                                 </div>
                             </div>
-                            <h1 className="font-black text-2xl text-slate-800 tracking-tight">Toko Husna</h1>
+                            <h1 className="font-black text-2xl text-slate-800 tracking-tight">Husna Group</h1>
                             <p className="text-slate-500 text-sm font-medium mt-1">Sistem Kasir & Manajemen Stok</p>
                         </div>
 
