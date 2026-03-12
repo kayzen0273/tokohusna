@@ -2691,6 +2691,58 @@
             const [purchaseSearch, setPurchaseSearch] = useState('');
             const [purchaseFilterStatus, setPurchaseFilterStatus] = useState('all');
             const [purchaseFilterSupplier, setPurchaseFilterSupplier] = useState('all');
+            const [purchaseFilterPayment, setPurchaseFilterPayment] = useState('all');
+            const [purchaseFilterDateFrom, setPurchaseFilterDateFrom] = useState('');
+            const [purchaseFilterDateTo, setPurchaseFilterDateTo] = useState('');
+            const [purchaseFilterDueDateFrom, setPurchaseFilterDueDateFrom] = useState('');
+            const [purchaseFilterDueDateTo, setPurchaseFilterDueDateTo] = useState('');
+            const [filterModalOpen, setFilterModalOpen] = useState(false);
+            const [tempFilterStatus, setTempFilterStatus] = useState('all');
+            const [tempFilterSupplier, setTempFilterSupplier] = useState('all');
+            const [tempFilterPayment, setTempFilterPayment] = useState('all');
+            const [tempFilterDateFrom, setTempFilterDateFrom] = useState('');
+            const [tempFilterDateTo, setTempFilterDateTo] = useState('');
+            const [tempFilterDueDateFrom, setTempFilterDueDateFrom] = useState('');
+            const [tempFilterDueDateTo, setTempFilterDueDateTo] = useState('');
+            const [filterActiveSection, setFilterActiveSection] = useState(null);
+            const activeFilterCount = [
+                purchaseFilterStatus !== 'all',
+                purchaseFilterSupplier !== 'all',
+                purchaseFilterPayment !== 'all',
+                purchaseFilterDateFrom !== '' || purchaseFilterDateTo !== '',
+                purchaseFilterDueDateFrom !== '' || purchaseFilterDueDateTo !== '',
+            ].filter(Boolean).length;
+            const openFilterModal = () => {
+                setTempFilterStatus(purchaseFilterStatus);
+                setTempFilterSupplier(purchaseFilterSupplier);
+                setTempFilterPayment(purchaseFilterPayment);
+                setTempFilterDateFrom(purchaseFilterDateFrom);
+                setTempFilterDateTo(purchaseFilterDateTo);
+                setTempFilterDueDateFrom(purchaseFilterDueDateFrom);
+                setTempFilterDueDateTo(purchaseFilterDueDateTo);
+                setFilterActiveSection(null);
+                setFilterModalOpen(true);
+            };
+            const applyFilter = () => {
+                setPurchaseFilterStatus(tempFilterStatus);
+                setPurchaseFilterSupplier(tempFilterSupplier);
+                setPurchaseFilterPayment(tempFilterPayment);
+                setPurchaseFilterDateFrom(tempFilterDateFrom);
+                setPurchaseFilterDateTo(tempFilterDateTo);
+                setPurchaseFilterDueDateFrom(tempFilterDueDateFrom);
+                setPurchaseFilterDueDateTo(tempFilterDueDateTo);
+                setFilterModalOpen(false);
+            };
+            const resetFilter = () => {
+                setTempFilterStatus('all');
+                setTempFilterSupplier('all');
+                setTempFilterPayment('all');
+                setTempFilterDateFrom('');
+                setTempFilterDateTo('');
+                setTempFilterDueDateFrom('');
+                setTempFilterDueDateTo('');
+            };
+            const statusLabel = { all: 'Semua', paid: 'Lunas', unpaid: 'Belum Lunas', overdue: 'Telat Bayar', consignment: 'Konsinyasi' };
             const DRAFT_KEY = `faktur_draft_${currentProfile.id}`;
             const [invoiceData, setInvoiceData] = useState({ supplier: '', invoiceNumber: '', date: '', receivedDate: new Date().toISOString().slice(0,10), receivedTime: new Date().toTimeString().slice(0,5), dueDate: '', total: '', ppn: '', paymentMethod: 'Kredit', isPaid: false, isConsignment: false, items: [] });
             const [diskon, setDiskon] = useState('0');
@@ -3391,7 +3443,14 @@
                 const matchText = !q || (p.supplier || '').toLowerCase().includes(q) || (p.invoiceNumber || '').toLowerCase().includes(q) || (p.paymentMethod || '').toLowerCase().includes(q) || matchItems;
                 const matchStatus = purchaseFilterStatus === 'all' ? true : purchaseFilterStatus === 'paid' ? p.isPaid : purchaseFilterStatus === 'unpaid' ? !p.isPaid : purchaseFilterStatus === 'overdue' ? (!p.isPaid && p.dueDate && new Date(p.dueDate) < new Date()) : purchaseFilterStatus === 'consignment' ? p.isConsignment : true;
                 const matchSupplier = purchaseFilterSupplier === 'all' || (p.supplier || '') === purchaseFilterSupplier;
-                return matchText && matchStatus && matchSupplier;
+                const matchPayment = purchaseFilterPayment === 'all' || (p.paymentMethod || 'Tunai') === purchaseFilterPayment;
+                const invoiceDate = p.date ? new Date(p.date) : null;
+                const matchDateFrom = !purchaseFilterDateFrom || (invoiceDate && invoiceDate >= new Date(purchaseFilterDateFrom));
+                const matchDateTo = !purchaseFilterDateTo || (invoiceDate && invoiceDate <= new Date(purchaseFilterDateTo + 'T23:59:59'));
+                const dueD = p.dueDate ? new Date(p.dueDate) : null;
+                const matchDueDateFrom = !purchaseFilterDueDateFrom || (dueD && dueD >= new Date(purchaseFilterDueDateFrom));
+                const matchDueDateTo = !purchaseFilterDueDateTo || (dueD && dueD <= new Date(purchaseFilterDueDateTo + 'T23:59:59'));
+                return matchText && matchStatus && matchSupplier && matchPayment && matchDateFrom && matchDateTo && matchDueDateFrom && matchDueDateTo;
             });
 
             // Guard untuk mode all_stores — boleh lihat, tapi tidak bisa input
@@ -3430,22 +3489,187 @@
                             <input type="text" className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-sm font-medium outline-none focus:ring-2 focus:ring-teal-400 bg-white shadow-sm" placeholder="Cari supplier, no. faktur, nama barang..." value={purchaseSearch} onChange={e => setPurchaseSearch(e.target.value)} />
                             {purchaseSearch && <button onClick={() => setPurchaseSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"><Icon name="xmark" /></button>}
                         </div>
-                        <select value={purchaseFilterStatus} onChange={e => setPurchaseFilterStatus(e.target.value)} className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 bg-white outline-none focus:ring-2 focus:ring-teal-400 shadow-sm cursor-pointer">
-                            <option value="all">Semua</option>
-                            <option value="unpaid">Belum Lunas</option>
-                            <option value="paid">Lunas</option>
-                            <option value="overdue">Telat Bayar</option>
-                            <option value="consignment">Konsinyasi</option>
-                        </select>
-                        <select value={purchaseFilterSupplier} onChange={e => setPurchaseFilterSupplier(e.target.value)} className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 bg-white outline-none focus:ring-2 focus:ring-teal-400 shadow-sm cursor-pointer max-w-[140px]">
-                            <option value="all">Semua Supplier</option>
-                            {uniqueSupplierNames.map(name => (
-                                <option key={name} value={name}>{name}</option>
-                            ))}
-                        </select>
+                        <button onClick={openFilterModal} className={`relative flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-all shadow-sm ${activeFilterCount > 0 ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                            <Icon name="sliders" />
+                            <span>Filter</span>
+                            {activeFilterCount > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">{activeFilterCount}</span>}
+                        </button>
                     </div>
+                    {/* Filter active chips */}
+                    {(purchaseFilterStatus !== 'all' || purchaseFilterSupplier !== 'all' || purchaseFilterPayment !== 'all' || purchaseFilterDateFrom || purchaseFilterDateTo || purchaseFilterDueDateFrom || purchaseFilterDueDateTo) && (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                            {purchaseFilterStatus !== 'all' && (
+                                <span className="inline-flex items-center gap-1 bg-teal-50 border border-teal-200 text-teal-700 text-[11px] font-bold px-2.5 py-1 rounded-full">
+                                    Status: {statusLabel[purchaseFilterStatus]}
+                                    <button onClick={() => setPurchaseFilterStatus('all')} className="ml-0.5 text-teal-400 hover:text-teal-700 leading-none">✕</button>
+                                </span>
+                            )}
+                            {purchaseFilterSupplier !== 'all' && (
+                                <span className="inline-flex items-center gap-1 bg-teal-50 border border-teal-200 text-teal-700 text-[11px] font-bold px-2.5 py-1 rounded-full">
+                                    {purchaseFilterSupplier}
+                                    <button onClick={() => setPurchaseFilterSupplier('all')} className="ml-0.5 text-teal-400 hover:text-teal-700 leading-none">✕</button>
+                                </span>
+                            )}
+                            {purchaseFilterPayment !== 'all' && (
+                                <span className="inline-flex items-center gap-1 bg-teal-50 border border-teal-200 text-teal-700 text-[11px] font-bold px-2.5 py-1 rounded-full">
+                                    Bayar: {purchaseFilterPayment}
+                                    <button onClick={() => setPurchaseFilterPayment('all')} className="ml-0.5 text-teal-400 hover:text-teal-700 leading-none">✕</button>
+                                </span>
+                            )}
+                            {(purchaseFilterDateFrom || purchaseFilterDateTo) && (
+                                <span className="inline-flex items-center gap-1 bg-teal-50 border border-teal-200 text-teal-700 text-[11px] font-bold px-2.5 py-1 rounded-full">
+                                    Tgl Faktur: {purchaseFilterDateFrom || '...'} — {purchaseFilterDateTo || '...'}
+                                    <button onClick={() => { setPurchaseFilterDateFrom(''); setPurchaseFilterDateTo(''); }} className="ml-0.5 text-teal-400 hover:text-teal-700 leading-none">✕</button>
+                                </span>
+                            )}
+                            {(purchaseFilterDueDateFrom || purchaseFilterDueDateTo) && (
+                                <span className="inline-flex items-center gap-1 bg-teal-50 border border-teal-200 text-teal-700 text-[11px] font-bold px-2.5 py-1 rounded-full">
+                                    Jatuh Tempo: {purchaseFilterDueDateFrom || '...'} — {purchaseFilterDueDateTo || '...'}
+                                    <button onClick={() => { setPurchaseFilterDueDateFrom(''); setPurchaseFilterDueDateTo(''); }} className="ml-0.5 text-teal-400 hover:text-teal-700 leading-none">✕</button>
+                                </span>
+                            )}
+                        </div>
+                    )}
+                    {/* Filter Modal */}
+                    {filterModalOpen && (
+                        <div className="fixed inset-0 z-50 flex flex-col justify-end" style={{background:'rgba(0,0,0,0.45)'}}>
+                            <div onClick={() => setFilterModalOpen(false)} className="absolute inset-0" />
+                            <div className="relative bg-white rounded-t-2xl shadow-2xl w-full max-w-lg mx-auto" style={{maxHeight:'90vh',overflowY:'auto'}}>
+                                {/* Header */}
+                                <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-slate-100">
+                                    <div className="flex items-center gap-3">
+                                        <button onClick={() => setFilterModalOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-500"><Icon name="xmark" /></button>
+                                        <h3 className="text-xl font-extrabold text-slate-800">Filter</h3>
+                                    </div>
+                                    <button onClick={applyFilter} className="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm rounded-xl transition-all active:scale-95">Pasang</button>
+                                </div>
+                                {/* Filter rows */}
+                                <div className="px-5 py-2">
+                                    {/* Status */}
+                                    <div className="border-b border-slate-100">
+                                        <button onClick={() => setFilterActiveSection(filterActiveSection === 'status' ? null : 'status')} className="w-full flex items-center justify-between py-4 text-left">
+                                            <span className="font-bold text-slate-800 text-sm">Status</span>
+                                            <span className={`flex items-center gap-1.5 text-xs font-bold border rounded-lg px-3 py-1.5 transition-all ${tempFilterStatus !== 'all' ? 'border-teal-500 text-teal-600 bg-teal-50' : 'border-slate-200 text-teal-600'}`}>
+                                                <Icon name="pen" className="text-[10px]" /> {tempFilterStatus !== 'all' ? statusLabel[tempFilterStatus] : 'Ubah'}
+                                            </span>
+                                        </button>
+                                        {filterActiveSection === 'status' && (
+                                            <div className="pb-4 flex flex-wrap gap-2">
+                                                {Object.entries(statusLabel).map(([val, label]) => (
+                                                    <button key={val} onClick={() => { setTempFilterStatus(val); setFilterActiveSection(null); }}
+                                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${tempFilterStatus === val ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                                                        {label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {/* Supplier */}
+                                    <div className="border-b border-slate-100">
+                                        <button onClick={() => setFilterActiveSection(filterActiveSection === 'supplier' ? null : 'supplier')} className="w-full flex items-center justify-between py-4 text-left">
+                                            <span className="font-bold text-slate-800 text-sm">Supplier</span>
+                                            <span className={`flex items-center gap-1.5 text-xs font-bold border rounded-lg px-3 py-1.5 transition-all ${tempFilterSupplier !== 'all' ? 'border-teal-500 text-teal-600 bg-teal-50' : 'border-slate-200 text-teal-600'}`}>
+                                                <Icon name="pen" className="text-[10px]" /> {tempFilterSupplier !== 'all' ? tempFilterSupplier : 'Ubah'}
+                                            </span>
+                                        </button>
+                                        {filterActiveSection === 'supplier' && (
+                                            <div className="pb-4 flex flex-col gap-1 max-h-48 overflow-y-auto">
+                                                <button onClick={() => { setTempFilterSupplier('all'); setFilterActiveSection(null); }}
+                                                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold border transition-all ${tempFilterSupplier === 'all' ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                                                    Semua Supplier
+                                                </button>
+                                                {uniqueSupplierNames.map(name => (
+                                                    <button key={name} onClick={() => { setTempFilterSupplier(name); setFilterActiveSection(null); }}
+                                                        className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold border transition-all ${tempFilterSupplier === name ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                                                        {name}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {/* Tanggal Faktur */}
+                                    <div className="border-b border-slate-100">
+                                        <button onClick={() => setFilterActiveSection(filterActiveSection === 'tanggalFaktur' ? null : 'tanggalFaktur')} className="w-full flex items-center justify-between py-4 text-left">
+                                            <span className="font-bold text-slate-800 text-sm">Tanggal Faktur</span>
+                                            <span className={`flex items-center gap-1.5 text-xs font-bold border rounded-lg px-3 py-1.5 transition-all ${(tempFilterDateFrom || tempFilterDateTo) ? 'border-teal-500 text-teal-600 bg-teal-50' : 'border-slate-200 text-teal-600'}`}>
+                                                <Icon name="pen" className="text-[10px]" /> {(tempFilterDateFrom || tempFilterDateTo) ? `${tempFilterDateFrom || '...'} — ${tempFilterDateTo || '...'}` : 'Ubah'}
+                                            </span>
+                                        </button>
+                                        {filterActiveSection === 'tanggalFaktur' && (
+                                            <div className="pb-4 flex flex-col gap-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex-1">
+                                                        <p className="text-[10px] text-slate-500 font-bold mb-1">Dari</p>
+                                                        <input type="date" value={tempFilterDateFrom} onChange={e => setTempFilterDateFrom(e.target.value)} className="w-full h-9 px-3 border border-slate-200 rounded-xl text-xs bg-white outline-none focus:border-teal-500 font-medium" />
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <p className="text-[10px] text-slate-500 font-bold mb-1">Sampai</p>
+                                                        <input type="date" value={tempFilterDateTo} onChange={e => setTempFilterDateTo(e.target.value)} className="w-full h-9 px-3 border border-slate-200 rounded-xl text-xs bg-white outline-none focus:border-teal-500 font-medium" />
+                                                    </div>
+                                                </div>
+                                                {(tempFilterDateFrom || tempFilterDateTo) && (
+                                                    <button onClick={() => { setTempFilterDateFrom(''); setTempFilterDateTo(''); }} className="text-xs text-red-500 font-bold hover:text-red-700 text-left">✕ Hapus filter tanggal faktur</button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {/* Jatuh Tempo */}
+                                    <div className="border-b border-slate-100">
+                                        <button onClick={() => setFilterActiveSection(filterActiveSection === 'jatuhTempo' ? null : 'jatuhTempo')} className="w-full flex items-center justify-between py-4 text-left">
+                                            <span className="font-bold text-slate-800 text-sm">Jatuh Tempo</span>
+                                            <span className={`flex items-center gap-1.5 text-xs font-bold border rounded-lg px-3 py-1.5 transition-all ${(tempFilterDueDateFrom || tempFilterDueDateTo) ? 'border-teal-500 text-teal-600 bg-teal-50' : 'border-slate-200 text-teal-600'}`}>
+                                                <Icon name="pen" className="text-[10px]" /> {(tempFilterDueDateFrom || tempFilterDueDateTo) ? `${tempFilterDueDateFrom || '...'} — ${tempFilterDueDateTo || '...'}` : 'Ubah'}
+                                            </span>
+                                        </button>
+                                        {filterActiveSection === 'jatuhTempo' && (
+                                            <div className="pb-4 flex flex-col gap-3">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex-1">
+                                                        <p className="text-[10px] text-slate-500 font-bold mb-1">Dari</p>
+                                                        <input type="date" value={tempFilterDueDateFrom} onChange={e => setTempFilterDueDateFrom(e.target.value)} className="w-full h-9 px-3 border border-slate-200 rounded-xl text-xs bg-white outline-none focus:border-teal-500 font-medium" />
+                                                    </div>
+                                                    <div className="flex-1">
+                                                        <p className="text-[10px] text-slate-500 font-bold mb-1">Sampai</p>
+                                                        <input type="date" value={tempFilterDueDateTo} onChange={e => setTempFilterDueDateTo(e.target.value)} className="w-full h-9 px-3 border border-slate-200 rounded-xl text-xs bg-white outline-none focus:border-teal-500 font-medium" />
+                                                    </div>
+                                                </div>
+                                                {(tempFilterDueDateFrom || tempFilterDueDateTo) && (
+                                                    <button onClick={() => { setTempFilterDueDateFrom(''); setTempFilterDueDateTo(''); }} className="text-xs text-red-500 font-bold hover:text-red-700 text-left">✕ Hapus filter jatuh tempo</button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {/* Pembayaran */}
+                                    <div className="border-b border-slate-100">
+                                        <button onClick={() => setFilterActiveSection(filterActiveSection === 'pembayaran' ? null : 'pembayaran')} className="w-full flex items-center justify-between py-4 text-left">
+                                            <span className="font-bold text-slate-800 text-sm">Pembayaran</span>
+                                            <span className={`flex items-center gap-1.5 text-xs font-bold border rounded-lg px-3 py-1.5 transition-all ${tempFilterPayment !== 'all' ? 'border-teal-500 text-teal-600 bg-teal-50' : 'border-slate-200 text-teal-600'}`}>
+                                                <Icon name="pen" className="text-[10px]" /> {tempFilterPayment !== 'all' ? tempFilterPayment : 'Ubah'}
+                                            </span>
+                                        </button>
+                                        {filterActiveSection === 'pembayaran' && (
+                                            <div className="pb-4 flex flex-wrap gap-2">
+                                                {['all','Kredit','Tunai','Transfer'].map(val => (
+                                                    <button key={val} onClick={() => { setTempFilterPayment(val); setFilterActiveSection(null); }}
+                                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${tempFilterPayment === val ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                                                        {val === 'all' ? 'Semua' : val}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                                {/* Reset button */}
+                                <div className="px-5 py-4">
+                                    <button onClick={resetFilter} className="w-full py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-500 hover:bg-slate-50 transition-all">
+                                        Reset Filter
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     <div className="flex-1 overflow-y-auto custom-scrollbar space-y-0 pr-1">
-                        {loading ? <div className="text-center py-10"><div className="typing-dot bg-teal-600"></div></div> : filteredPurchases.length === 0 ? <div className="text-center py-12 text-slate-400 text-xs">{purchaseSearch || purchaseFilterStatus !== 'all' || purchaseFilterSupplier !== 'all' ? 'Tidak ada faktur yang cocok.' : 'Belum ada faktur pembelian.'}</div> :
+                        {loading ? <div className="text-center py-10"><div className="typing-dot bg-teal-600"></div></div> : filteredPurchases.length === 0 ? <div className="text-center py-12 text-slate-400 text-xs">{purchaseSearch || purchaseFilterStatus !== 'all' || purchaseFilterSupplier !== 'all' || purchaseFilterPayment !== 'all' || purchaseFilterDateFrom || purchaseFilterDateTo || purchaseFilterDueDateFrom || purchaseFilterDueDateTo ? 'Tidak ada faktur yang cocok.' : 'Belum ada faktur pembelian.'}</div> :
                         filteredPurchases.map((p, idx) => {
                             const dueDate = p.dueDate ? new Date(p.dueDate) : null;
                             const isOverdue = !p.isPaid && dueDate && dueDate < new Date();
