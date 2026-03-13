@@ -2809,6 +2809,7 @@
             const [itemBuyPrice, setItemBuyPrice] = useState('');
             const [itemDiscountBeli, setItemDiscountBeli] = useState('');
             const [itemDiscountBeliType, setItemDiscountBeliType] = useState('%');
+            const [itemBatchNo, setItemBatchNo] = useState('');
             const [editingItemIndex, setEditingItemIndex] = useState(null); // index item yang sedang diedit
             const [originalItemsSnapshot, setOriginalItemsSnapshot] = useState({}); // qty asli sebelum diedit { itemId: qty }
             // State untuk tambah barang baru via faktur (belum disimpan ke Firestore)
@@ -2872,6 +2873,7 @@
                             buyPrice: itemBuyPrice ? parseFloat(itemBuyPrice) : 0,
                             discountBeli: itemDiscountBeli ? parseFloat(itemDiscountBeli) : 0,
                             discountBeliType: itemDiscountBeliType,
+                            batchNo: itemBatchNo.trim(),
                         };
                         return { ...prev, items: updatedItems };
                     });
@@ -2883,6 +2885,7 @@
                     setItemBuyPrice('');
                     setItemDiscountBeli('');
                     setItemDiscountBeliType('%');
+                    setItemBatchNo('');
                     showToast("✅ Barang diperbarui");
                     return;
                 }
@@ -2901,6 +2904,7 @@
                     buyPrice: itemBuyPrice ? parseFloat(itemBuyPrice) : 0,
                     discountBeli: itemDiscountBeli ? parseFloat(itemDiscountBeli) : 0,
                     discountBeliType: itemDiscountBeliType,
+                    batchNo: itemBatchNo.trim(),
                     currentStock: selectedItem.qty || 0
                 };
                 
@@ -2919,6 +2923,7 @@
                 setItemBuyPrice('');
                 setItemDiscountBeli('');
                 setItemDiscountBeliType('%');
+                setItemBatchNo('');
                 showToast("Barang ditambahkan");
             };
 
@@ -2933,6 +2938,7 @@
                 setItemBuyPrice(item.buyPrice ? item.buyPrice.toString() : '');
                 setItemDiscountBeli(item.discountBeli ? item.discountBeli.toString() : '');
                 setItemDiscountBeliType(item.discountBeliType || '%');
+                setItemBatchNo(item.batchNo || '');
             };
 
             // Fungsi untuk batal edit item
@@ -2945,6 +2951,7 @@
                 setItemBuyPrice('');
                 setItemDiscountBeli('');
                 setItemDiscountBeliType('%');
+                setItemBatchNo('');
             };
 
             // Tambah barang BARU ke daftar faktur — hanya di memori, belum ke Firestore.
@@ -2981,6 +2988,7 @@
                         buyPrice: itemBuyPrice ? parseFloat(itemBuyPrice) : 0,
                         discountBeli: itemDiscountBeli ? parseFloat(itemDiscountBeli) : 0,
                         discountBeliType: itemDiscountBeliType,
+                        batchNo: itemBatchNo.trim(),
                         currentStock: 0,
                         _pendingNew: true,           // flag: belum ada di Firestore
                         _newItemMeta: {              // data untuk createDoc saat simpan faktur
@@ -3002,6 +3010,7 @@
                 setItemBuyPrice('');
                 setItemDiscountBeli('');
                 setItemDiscountBeliType('%');
+                setItemBatchNo('');
                 showToast(`"${newItemData.name.trim()}" ditambahkan — akan dibuat saat faktur disimpan`);
             };
             
@@ -3439,8 +3448,8 @@
             const uniqueSupplierNames = [...new Set(storePurchases.map(p => p.supplier).filter(Boolean))].sort();
             const filteredPurchases = storePurchases.filter(p => {
                 const q = purchaseSearch.toLowerCase();
-                const matchItems = (p.items || []).some(i => (i.name || '').toLowerCase().includes(q));
-                const matchText = !q || (p.supplier || '').toLowerCase().includes(q) || (p.invoiceNumber || '').toLowerCase().includes(q) || (p.paymentMethod || '').toLowerCase().includes(q) || matchItems;
+                const matchItems = (p.items || []).some(i => (i.name || '').toLowerCase().includes(q) || (i.batchNo || '').toLowerCase().includes(q));
+                const matchText = !q || (p.invoiceNumber || '').toLowerCase().includes(q) || (p.paymentMethod || '').toLowerCase().includes(q) || matchItems;
                 const matchStatus = purchaseFilterStatus === 'all' ? true : purchaseFilterStatus === 'paid' ? p.isPaid : purchaseFilterStatus === 'unpaid' ? !p.isPaid : purchaseFilterStatus === 'overdue' ? (!p.isPaid && p.dueDate && new Date(p.dueDate) < new Date()) : purchaseFilterStatus === 'consignment' ? p.isConsignment : true;
                 const matchSupplier = purchaseFilterSupplier === 'all' || (p.supplier || '') === purchaseFilterSupplier;
                 const matchPayment = purchaseFilterPayment === 'all' || (p.paymentMethod || 'Tunai') === purchaseFilterPayment;
@@ -3486,7 +3495,7 @@
                     <div className="flex gap-2 mb-4">
                         <div className="relative flex-1">
                             <Icon name="magnifying-glass" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
-                            <input type="text" className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-sm font-medium outline-none focus:ring-2 focus:ring-teal-400 bg-white shadow-sm" placeholder="Cari supplier, no. faktur, nama barang..." value={purchaseSearch} onChange={e => setPurchaseSearch(e.target.value)} />
+                            <input type="text" className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-sm font-medium outline-none focus:ring-2 focus:ring-teal-400 bg-white shadow-sm" placeholder="Cari no. faktur, nama barang, no. batch..." value={purchaseSearch} onChange={e => setPurchaseSearch(e.target.value)} />
                             {purchaseSearch && <button onClick={() => setPurchaseSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500"><Icon name="xmark" /></button>}
                         </div>
                         <button onClick={openFilterModal} className={`relative flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-all shadow-sm ${activeFilterCount > 0 ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
@@ -3496,18 +3505,12 @@
                         </button>
                     </div>
                     {/* Filter active chips */}
-                    {(purchaseFilterStatus !== 'all' || purchaseFilterSupplier !== 'all' || purchaseFilterPayment !== 'all' || purchaseFilterDateFrom || purchaseFilterDateTo || purchaseFilterDueDateFrom || purchaseFilterDueDateTo) && (
+                    {(purchaseFilterStatus !== 'all' || purchaseFilterPayment !== 'all' || purchaseFilterDateFrom || purchaseFilterDateTo || purchaseFilterDueDateFrom || purchaseFilterDueDateTo) && (
                         <div className="flex flex-wrap gap-2 mb-3">
                             {purchaseFilterStatus !== 'all' && (
                                 <span className="inline-flex items-center gap-1 bg-teal-50 border border-teal-200 text-teal-700 text-[11px] font-bold px-2.5 py-1 rounded-full">
                                     Status: {statusLabel[purchaseFilterStatus]}
                                     <button onClick={() => setPurchaseFilterStatus('all')} className="ml-0.5 text-teal-400 hover:text-teal-700 leading-none">✕</button>
-                                </span>
-                            )}
-                            {purchaseFilterSupplier !== 'all' && (
-                                <span className="inline-flex items-center gap-1 bg-teal-50 border border-teal-200 text-teal-700 text-[11px] font-bold px-2.5 py-1 rounded-full">
-                                    {purchaseFilterSupplier}
-                                    <button onClick={() => setPurchaseFilterSupplier('all')} className="ml-0.5 text-teal-400 hover:text-teal-700 leading-none">✕</button>
                                 </span>
                             )}
                             {purchaseFilterPayment !== 'all' && (
@@ -3559,29 +3562,6 @@
                                                     <button key={val} onClick={() => { setTempFilterStatus(val); setFilterActiveSection(null); }}
                                                         className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${tempFilterStatus === val ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                                                         {label}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                    {/* Supplier */}
-                                    <div className="border-b border-slate-100">
-                                        <button onClick={() => setFilterActiveSection(filterActiveSection === 'supplier' ? null : 'supplier')} className="w-full flex items-center justify-between py-4 text-left">
-                                            <span className="font-bold text-slate-800 text-sm">Supplier</span>
-                                            <span className={`flex items-center gap-1.5 text-xs font-bold border rounded-lg px-3 py-1.5 transition-all ${tempFilterSupplier !== 'all' ? 'border-teal-500 text-teal-600 bg-teal-50' : 'border-slate-200 text-teal-600'}`}>
-                                                <Icon name="pen" className="text-[10px]" /> {tempFilterSupplier !== 'all' ? tempFilterSupplier : 'Ubah'}
-                                            </span>
-                                        </button>
-                                        {filterActiveSection === 'supplier' && (
-                                            <div className="pb-4 flex flex-col gap-1 max-h-48 overflow-y-auto">
-                                                <button onClick={() => { setTempFilterSupplier('all'); setFilterActiveSection(null); }}
-                                                    className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold border transition-all ${tempFilterSupplier === 'all' ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                                                    Semua Supplier
-                                                </button>
-                                                {uniqueSupplierNames.map(name => (
-                                                    <button key={name} onClick={() => { setTempFilterSupplier(name); setFilterActiveSection(null); }}
-                                                        className={`w-full text-left px-3 py-2.5 rounded-xl text-xs font-bold border transition-all ${tempFilterSupplier === name ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                                                        {name}
                                                     </button>
                                                 ))}
                                             </div>
@@ -4042,6 +4022,11 @@
                                                     </div>
                                                 )}
                                             </div>
+                                            {/* No. Batch per barang */}
+                                            <div className="mb-2">
+                                                <label className="block text-[10px] text-indigo-500 font-semibold mb-1">🔢 No. Batch</label>
+                                                <input type="text" className="w-full h-8 px-2 border border-indigo-200 rounded text-xs bg-white outline-none focus:border-indigo-400" placeholder="Contoh: BTH-2025-001 (opsional)" value={itemBatchNo} onChange={e => setItemBatchNo(e.target.value)} />
+                                            </div>
                                             <div className="flex gap-2">
                                                 {editingItemIndex !== null && (
                                                     <button type="button" onClick={cancelEditItem} className="flex-1 py-1.5 bg-white border border-gray-300 text-gray-600 rounded text-xs font-bold hover:bg-gray-50 active:scale-95 transition-all">
@@ -4087,6 +4072,7 @@
                                                                 )}
                                                                 <span className="text-[11px] text-slate-500">Jual: {formatRupiah(item.price)}</span>
                                                                 <span className="text-[11px] text-teal-600 font-bold">= {formatRupiah(item.qty * (item.discountBeli > 0 ? (item.discountBeliType === 'Rp' ? Math.max(0, item.buyPrice - item.discountBeli) : item.buyPrice * (1 - item.discountBeli/100)) : (item.buyPrice || 0)))}</span>
+                                                                {item.batchNo && <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded">Batch: {item.batchNo}</span>}
                                                             </div>
                                                         </div>
                                                         <button type="button" onClick={() => { if(editingItemIndex === index) cancelEditItem(); removeItemFromInvoice(index); }} className="ml-3 text-red-400 hover:text-red-600 p-1 flex-shrink-0"><Icon name="trash" /></button>
@@ -4250,6 +4236,11 @@
                                                                 </p>
                                                             )}
                                                             <p className="text-[10px] text-slate-400 mt-0.5">Harga Jual Toko: {formatRupiah(item.price)}</p>
+                                                            {item.batchNo && (
+                                                                <p className="text-[10px] text-indigo-600 font-bold mt-0.5 flex items-center gap-1">
+                                                                    <span className="bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded font-mono">🔢 Batch: {item.batchNo}</span>
+                                                                </p>
+                                                            )}
                                                         </div>
                                                         <span className="text-xs font-bold text-teal-700">{formatRupiah(item.qty * (item.discountBeli > 0 ? (item.discountBeliType === 'Rp' ? Math.max(0, (item.buyPrice||0) - item.discountBeli) : (item.buyPrice||0) * (1 - item.discountBeli/100)) : (item.buyPrice || 0)))}</span>
                                                     </div>
