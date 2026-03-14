@@ -247,6 +247,40 @@
         // --- CHANGELOG / NOTIFIKASI UPDATE ---
         const CHANGELOG = [
             {
+                id: 'v53_1',
+                version: 'v53.1',
+                date: '14 Mar 2026',
+                title: 'Akses Toko per Karyawan',
+                tag: 'Fitur Baru',
+                tagColor: 'bg-green-100 text-green-700',
+                icon: 'shop',
+                isNew: true,
+                items: [
+                    '🏪 Owner bisa atur toko mana saja yang boleh diakses tiap karyawan',
+                    '🔒 Mode Terbatas: pilih satu atau beberapa toko saja yang diizinkan',
+                    '🌐 Mode Semua Toko: karyawan bebas berpindah ke semua toko',
+                    '📍 Toko yang tidak diizinkan otomatis tersembunyi dari tampilan karyawan',
+                    '⚙️ Dikelola di Panel Owner → Tab "Akses Toko"',
+                ]
+            },
+            {
+                id: 'v52_1',
+                version: 'v52.1',
+                date: '14 Mar 2026',
+                title: 'Jadwal Shift: Jam Dinamis & 2 Orang per Slot',
+                tag: 'Fitur Baru',
+                tagColor: 'bg-green-100 text-green-700',
+                icon: 'calendar-days',
+                isNew: true,
+                items: [
+                    '🕐 Tombol "Shift" baru untuk edit jam mulai & selesai tiap shift (Pagi/Siang)',
+                    '⏱️ Jam shift tampil langsung di tabel jadwal & form absensi',
+                    '👥 Mode 2 Orang per Shift — aktifkan toggle di pengaturan Shift',
+                    '✅ Setiap slot bisa diisi 2 karyawan berbeda sekaligus',
+                    '🔧 Perbaikan: jam yang diedit kini tersimpan & langsung tercermin di tabel',
+                ]
+            },
+            {
                 id: 'v50_1',
                 version: 'v50.1',
                 date: '11 Mar 2025',
@@ -916,11 +950,235 @@
         };
         // ==================== END AKSES MENU TAB ====================
 
+        // ==================== AKSES TOKO TAB ====================
+        const AksesTokoTab = ({ users, loadingUsers, storeProfiles, showToast }) => {
+            const [selectedUser, setSelectedUser] = useState(null);
+            const [allowedStores, setAllowedStores] = useState([]); // [] = semua diizinkan
+            const [isAllStores, setIsAllStores] = useState(true); // true = akses semua toko
+            const [loadingAccess, setLoadingAccess] = useState(false);
+            const [saving, setSaving] = useState(false);
+            const [searchKaryawan, setSearchKaryawan] = useState('');
+
+            const realProfiles = storeProfiles.filter(p => p.id !== 'all_stores');
+            const activeUsers = users.filter(u => u.isActive !== false);
+            const filteredUsers = activeUsers.filter(u =>
+                searchKaryawan === '' ||
+                u.namaLengkap?.toLowerCase().includes(searchKaryawan.toLowerCase()) ||
+                u.username?.toLowerCase().includes(searchKaryawan.toLowerCase())
+            );
+
+            const handleSelectUser = async (usr) => {
+                setSelectedUser(usr);
+                setLoadingAccess(true);
+                try {
+                    const ref = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'users', usr.id);
+                    const snap = await window.getDoc(ref);
+                    const data = snap.exists() ? snap.data() : {};
+                    const saved = data.allowedStores;
+                    if (!saved || saved.length === 0) {
+                        setIsAllStores(true);
+                        setAllowedStores(realProfiles.map(p => p.id));
+                    } else {
+                        setIsAllStores(false);
+                        setAllowedStores(saved);
+                    }
+                } catch (e) {
+                    setIsAllStores(true);
+                    setAllowedStores(realProfiles.map(p => p.id));
+                }
+                setLoadingAccess(false);
+            };
+
+            const handleSave = async () => {
+                if (!selectedUser) return;
+                setSaving(true);
+                try {
+                    const ref = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'users', selectedUser.id);
+                    const storeData = isAllStores ? [] : allowedStores;
+                    await window.updateDoc(ref, { allowedStores: storeData });
+                    showToast(`Akses toko "${selectedUser.namaLengkap}" berhasil disimpan!`);
+                } catch (e) { showToast('Gagal menyimpan akses toko'); }
+                setSaving(false);
+            };
+
+            const handleReset = async () => {
+                if (!selectedUser) return;
+                setSaving(true);
+                try {
+                    const ref = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'users', selectedUser.id);
+                    await window.updateDoc(ref, { allowedStores: [] });
+                    showToast(`Akses toko "${selectedUser.namaLengkap}" direset ke semua toko`);
+                    setIsAllStores(true);
+                    setAllowedStores(realProfiles.map(p => p.id));
+                } catch (e) { showToast('Gagal mereset'); }
+                setSaving(false);
+            };
+
+            const toggleStore = (storeId) => {
+                setAllowedStores(prev => {
+                    if (prev.includes(storeId)) {
+                        const next = prev.filter(id => id !== storeId);
+                        return next;
+                    }
+                    return [...prev, storeId];
+                });
+            };
+
+            if (realProfiles.length <= 1) {
+                return (
+                    <div className="p-4">
+                        <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center">
+                            <Icon name="shop" className="text-3xl text-slate-300 mb-2" />
+                            <p className="font-bold text-slate-500 text-sm">Hanya ada 1 toko</p>
+                            <p className="text-xs text-slate-400 mt-1">Fitur ini aktif jika ada 2 toko atau lebih. Tambahkan profil toko di menu <strong>Pengaturan → Profil & Cabang Toko</strong>.</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="p-4 space-y-3">
+                    <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl">
+                        <p className="text-xs text-teal-800 font-semibold"><Icon name="circle-info" className="mr-1" />Atur toko mana saja yang bisa diakses setiap karyawan. Karyawan hanya bisa berpindah ke toko yang diizinkan.</p>
+                    </div>
+
+                    {/* Pilih karyawan */}
+                    {!selectedUser && (
+                        <div className="space-y-2">
+                            <div className="relative">
+                                <Icon name="magnifying-glass" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
+                                <input className="w-full pl-9 pr-3 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-teal-400 bg-slate-50" placeholder="Cari karyawan..." value={searchKaryawan} onChange={e => setSearchKaryawan(e.target.value)} />
+                            </div>
+                            {loadingUsers && <div className="text-center py-6 text-slate-400 text-sm">Memuat karyawan...</div>}
+                            {!loadingUsers && filteredUsers.length === 0 && (
+                                <div className="py-10 text-center text-slate-400 text-sm font-medium">
+                                    <Icon name="users-slash" className="text-3xl mb-2 block" />
+                                    {searchKaryawan ? 'Karyawan tidak ditemukan' : 'Belum ada karyawan aktif'}
+                                </div>
+                            )}
+                            {filteredUsers.map(usr => {
+                                const storedStores = usr.allowedStores;
+                                const hasRestriction = storedStores && storedStores.length > 0;
+                                const accessCount = hasRestriction ? storedStores.length : realProfiles.length;
+                                return (
+                                    <button key={usr.id} onClick={() => handleSelectUser(usr)}
+                                        className="w-full p-3 bg-white border border-slate-200 hover:border-teal-300 rounded-xl flex items-center gap-3 transition-all active:scale-[0.99] text-left">
+                                        <div className="w-9 h-9 rounded-xl bg-teal-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                            {usr.profilePhoto ? <img src={usr.profilePhoto} alt="" className="w-full h-full object-cover" /> : <span className="font-black text-teal-700 text-sm">{(usr.namaLengkap||'?').charAt(0).toUpperCase()}</span>}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="font-bold text-slate-800 text-sm truncate">{usr.namaLengkap}</p>
+                                            <p className="text-[10px] text-slate-400 truncate">@{usr.username}</p>
+                                        </div>
+                                        <div className={`flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-bold border ${hasRestriction ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-teal-50 text-teal-700 border-teal-200'}`}>
+                                            <Icon name={hasRestriction ? 'lock' : 'store'} className="text-[9px]" />
+                                            {hasRestriction ? `${accessCount} toko` : 'Semua toko'}
+                                        </div>
+                                        <Icon name="chevron-right" className="text-slate-300 text-xs flex-shrink-0" />
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {/* Detail akses toko */}
+                    {selectedUser && (
+                        <div className="space-y-3">
+                            {/* Back + user info */}
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => setSelectedUser(null)} className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-all active:scale-95 flex-shrink-0">
+                                    <Icon name="arrow-left" className="text-sm" />
+                                </button>
+                                <div className="flex items-center gap-2.5 flex-1 min-w-0 p-2 bg-teal-50 rounded-xl border border-teal-100">
+                                    <div className="w-8 h-8 rounded-lg bg-teal-500 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                                        {selectedUser.profilePhoto ? <img src={selectedUser.profilePhoto} alt="" className="w-full h-full object-cover" /> : <span className="font-black text-white text-xs">{(selectedUser.namaLengkap||'?').charAt(0).toUpperCase()}</span>}
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="font-bold text-teal-900 text-sm truncate">{selectedUser.namaLengkap}</p>
+                                        <p className="text-[10px] text-teal-600">@{selectedUser.username}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {loadingAccess && <div className="text-center py-6 text-slate-400 text-sm">Memuat akses...</div>}
+
+                            {!loadingAccess && (
+                                <>
+                                    {/* Toggle akses semua / terbatas */}
+                                    <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-3">
+                                        <p className="font-bold text-slate-700 text-xs">Mode Akses Toko</p>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => { setIsAllStores(true); setAllowedStores(realProfiles.map(p => p.id)); }}
+                                                className={`flex-1 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${isAllStores ? 'bg-teal-500 text-white border-teal-500 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-teal-300'}`}>
+                                                <Icon name="store" /> Semua Toko
+                                            </button>
+                                            <button onClick={() => { setIsAllStores(false); if (allowedStores.length === realProfiles.length) setAllowedStores([]); }}
+                                                className={`flex-1 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${!isAllStores ? 'bg-amber-500 text-white border-amber-500 shadow-md' : 'bg-white text-slate-600 border-slate-200 hover:border-amber-300'}`}>
+                                                <Icon name="lock" /> Terbatas
+                                            </button>
+                                        </div>
+                                        {isAllStores && <p className="text-[10px] text-teal-700 bg-teal-50 px-3 py-2 rounded-lg font-medium"><Icon name="circle-check" className="mr-1" />Karyawan ini bisa mengakses semua toko yang tersedia.</p>}
+                                        {!isAllStores && <p className="text-[10px] text-amber-700 bg-amber-50 px-3 py-2 rounded-lg font-medium"><Icon name="circle-exclamation" className="mr-1" />Pilih toko yang boleh diakses. Toko yang tidak dipilih akan disembunyikan.</p>}
+                                    </div>
+
+                                    {/* Daftar toko (hanya tampil jika mode terbatas) */}
+                                    {!isAllStores && (
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-bold text-slate-600 px-1">Pilih Toko yang Dapat Diakses:</p>
+                                            {realProfiles.map(profile => {
+                                                const checked = allowedStores.includes(profile.id);
+                                                return (
+                                                    <div key={profile.id} onClick={() => toggleStore(profile.id)}
+                                                        className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${checked ? 'bg-teal-50 border-teal-300' : 'bg-white border-slate-200 hover:border-slate-300'}`}>
+                                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${checked ? 'bg-teal-500' : 'bg-slate-100'}`}>
+                                                            <Icon name="shop" className={`text-sm ${checked ? 'text-white' : 'text-slate-400'}`} />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className={`font-bold text-sm ${checked ? 'text-teal-900' : 'text-slate-600'}`}>{profile.name}</p>
+                                                            {profile.address && <p className="text-[10px] text-slate-400 truncate">{profile.address}</p>}
+                                                        </div>
+                                                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all ${checked ? 'bg-teal-500 border-teal-500' : 'border-slate-300'}`}>
+                                                            {checked && <Icon name="check" className="text-white text-[9px]" />}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                            {allowedStores.length === 0 && (
+                                                <div className="p-3 bg-red-50 border border-red-200 rounded-xl">
+                                                    <p className="text-xs text-red-700 font-semibold"><Icon name="triangle-exclamation" className="mr-1" />Minimal 1 toko harus dipilih. Karyawan tidak bisa login jika tidak ada toko yang diizinkan.</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Tombol simpan & reset */}
+                                    <div className="flex gap-2 pt-1">
+                                        <button onClick={handleReset} disabled={saving}
+                                            className="px-4 py-3 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200 transition-all active:scale-95 disabled:opacity-50 flex items-center gap-1.5">
+                                            <Icon name="rotate-left" /> Reset
+                                        </button>
+                                        <button onClick={handleSave} disabled={saving || (!isAllStores && allowedStores.length === 0)}
+                                            className="flex-1 py-3 rounded-xl bg-teal-500 hover:bg-teal-600 text-white text-xs font-bold shadow-md transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5">
+                                            {saving
+                                                ? <><span className="typing-dot bg-white"></span><span className="typing-dot bg-white"></span><span className="typing-dot bg-white"></span></>
+                                                : <><Icon name="floppy-disk" /> Simpan Akses Toko</>
+                                            }
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+        // ==================== END AKSES TOKO TAB ====================
+
         // ==================== OWNER PANEL ====================
         const OwnerPanel = ({ onBack, localSettings, handleChange, onSave, savingSettings, ownerSettings, onSaveSettings, ownerAuthSession }) => {
             const [users, setUsers] = useState([]);
             const [loadingUsers, setLoadingUsers] = useState(true);
-            const [activeTab, setActiveTab] = useState('karyawan'); // 'karyawan' | 'akses_menu' | 'sidebar' | 'pengaturan_menu' | 'kode'
+            const [activeTab, setActiveTab] = useState('karyawan'); // 'karyawan' | 'akses_menu' | 'akses_toko' | 'sidebar' | 'pengaturan_menu' | 'kode'
             const [confirmModal, setConfirmModal] = useState({ show: false, type: '', user: null });
             const [actionLoading, setActionLoading] = useState(false);
             const [toast, setToast] = useState('');
@@ -1066,6 +1324,7 @@
                     <div className="flex gap-1 p-4 pb-0 flex-wrap">
                         <button onClick={() => setActiveTab('karyawan')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab==='karyawan' ? 'bg-amber-500 text-white shadow-md' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}><Icon name="users" className="mr-1.5" />Karyawan ({filteredUsers.length})</button>
                         <button onClick={() => setActiveTab('akses_menu')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab==='akses_menu' ? 'bg-amber-500 text-white shadow-md' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}><Icon name="sliders" className="mr-1.5" />Akses Menu</button>
+                        <button onClick={() => setActiveTab('akses_toko')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab==='akses_toko' ? 'bg-teal-500 text-white shadow-md' : 'bg-teal-50 text-teal-700 hover:bg-teal-100'}`}><Icon name="shop" className="mr-1.5" />Akses Toko</button>
                         <button onClick={() => setActiveTab('sidebar')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab==='sidebar' ? 'bg-amber-500 text-white shadow-md' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}><Icon name="sidebar" className="mr-1.5" />Sidebar</button>
                         <button onClick={() => setActiveTab('pengaturan_menu')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab==='pengaturan_menu' ? 'bg-amber-500 text-white shadow-md' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}><Icon name="gears" className="mr-1.5" />Menu Pengaturan</button>
                         <button onClick={() => setActiveTab('kode')} className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${activeTab==='kode' ? 'bg-amber-500 text-white shadow-md' : 'bg-amber-50 text-amber-700 hover:bg-amber-100'}`}><Icon name="key" className="mr-1.5" />Ubah Kode</button>
@@ -1144,6 +1403,16 @@
                             onSaveGlobal={onSave}
                             savingSettings={savingSettings}
                             menuAccessList={menuAccessList}
+                            showToast={showToast}
+                        />
+                    )}
+
+                    {/* ---- TAB: AKSES TOKO ---- */}
+                    {activeTab === 'akses_toko' && (
+                        <AksesTokoTab
+                            users={users.filter(u => !isOwnerEmail(u.email))}
+                            loadingUsers={loadingUsers}
+                            storeProfiles={localSettings.storeProfiles || [{ id: 'default', name: 'Toko Utama' }]}
                             showToast={showToast}
                         />
                     )}
@@ -9702,20 +9971,15 @@
         };
 
         // =================== JADWAL SHIFT VIEW (v2 - Pagi/Siang per Lokasi) ===================
-        const JadwalShiftView = ({ user, showToast, readOnly, currentProfile, settings }) => {
+        const JadwalShiftView = ({ user, showToast, readOnly, currentProfile, settings, isOwner, authSession }) => {
             const HARI = ['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Minggu'];
-            const SHIFTS = [
-                { id: 'pagi',  label: 'Pagi',  jam: '08:00 – 14:00', bg: '#FFF176', text: '#5D4037', border: '#F9A825' },
-                { id: 'siang', label: 'Siang', jam: '14:00 – 21:00', bg: '#80DEEA', text: '#006064', border: '#00ACC1' },
-                { id: 'libur', label: 'Libur', jam: '—',             bg: '#F8FAFC', text: '#94a3b8', border: '#e2e8f0' },
-            ];
 
             const [weekOffset, setWeekOffset]   = useState(0);
             const [jadwal, setJadwal]            = useState({});
             const [karyawanList, setKaryawanList]= useState([]);
             const [lokasiList, setLokasiList]    = useState([]);
             const [loadingData, setLoadingData]  = useState(true);
-            const [pickerTarget, setPickerTarget]= useState(null); // {dayIdx, shiftId, lokasiId}
+            const [pickerTarget, setPickerTarget]= useState(null); // {dayIdx, shiftId, lokasiId, slotIdx}
             const [pickerSearch, setPickerSearch]= useState('');
             // Modals karyawan
             const [modalKaryawan, setModalKaryawan] = useState(false);
@@ -9728,10 +9992,45 @@
             const [newLNama, setNewLNama]            = useState('');
             const [editLokasi, setEditLokasi]        = useState(null);
             const [delLokasi, setDelLokasi]          = useState(null);
-            // Rekap
-            const [activeView, setActiveView]        = useState('jadwal'); // 'jadwal' | 'rekap'
+            // Tab aktif
+            const [activeView, setActiveView]        = useState('jadwal'); // 'jadwal' | 'absensi'
             // Print title
             const storeName = currentProfile?.name || settings?.storeName || 'Apotek';
+
+            // ---- Absensi states ----
+            const [absensiList, setAbsensiList]         = useState([]);
+            const [loadingAbsensi, setLoadingAbsensi]   = useState(true);
+            const [cameraActive, setCameraActive]       = useState(false);
+            const [cameraStream, setCameraStream]       = useState(null);
+            const [capturedPhoto, setCapturedPhoto]     = useState(null); // base64
+            const [absensiShift, setAbsensiShift]       = useState('pagi');
+            const [absensiCatatan, setAbsensiCatatan]   = useState('');
+            const [submittingAbsensi, setSubmittingAbsensi] = useState(false);
+            const [confirmClearAll, setConfirmClearAll] = useState(false);
+            const [confirmDelOne, setConfirmDelOne]     = useState(null); // absensi doc id
+            const [lightboxAbsensi, setLightboxAbsensi] = useState(null);
+            const [filterAbsensiDate, setFilterAbsensiDate] = useState('');
+            // ---- Shift Config states ----
+            const [shiftConfig, setShiftConfig]       = useState({});
+            const [modalShift, setModalShift]         = useState(false);
+            const [editShiftRow, setEditShiftRow]     = useState(null); // {id, label, jamMulai, jamSelesai}
+
+            // ---- SHIFTS dihitung SETELAH shiftConfig state (agar reaktif) ----
+            const DEFAULT_SHIFTS = [
+                { id: 'pagi',  label: 'Pagi',  jamMulai: '08:00', jamSelesai: '14:00', bg: '#FFF176', text: '#5D4037', border: '#F9A825' },
+                { id: 'siang', label: 'Siang', jamMulai: '14:00', jamSelesai: '21:00', bg: '#80DEEA', text: '#006064', border: '#00ACC1' },
+                { id: 'libur', label: 'Libur', jamMulai: '',      jamSelesai: '',      bg: '#F8FAFC', text: '#94a3b8', border: '#e2e8f0' },
+            ];
+            const SHIFTS = DEFAULT_SHIFTS.map(s => {
+                const cfg = shiftConfig?.[s.id];
+                return { ...s, jamMulai: cfg?.jamMulai ?? s.jamMulai, jamSelesai: cfg?.jamSelesai ?? s.jamSelesai };
+            });
+            // ---- Lokasi states ----
+            const [locationStatus, setLocationStatus]   = useState('idle'); // 'idle' | 'requesting' | 'granted' | 'denied'
+            const [locationData, setLocationData]       = useState(null);   // {lat, lng, accuracy}
+            const [locationError, setLocationError]     = useState('');
+            const videoRef = React.useRef(null);
+            const canvasRef = React.useRef(null);
 
             /* ---------- Helpers tanggal ---------- */
             const getMondayOfWeek = (offset = 0) => {
@@ -9756,9 +10055,12 @@
             const weekLabel  = weekOffset===0?'Pekan Ini':weekOffset===1?'Pekan Depan':weekOffset===-1?'Pekan Lalu':`${weekOffset>0?'+':''}${weekOffset} Pekan`;
 
             /* ---------- Firestore ---------- */
-            const colKaryawan = () => window.collection(window.db,'artifacts',window.appId,'public','data','shift_karyawan');
-            const colLokasi   = () => window.collection(window.db,'artifacts',window.appId,'public','data','shift_lokasi');
-            const colJadwal   = () => window.collection(window.db,'artifacts',window.appId,'public','data','shift_jadwal');
+            const colKaryawan  = () => window.collection(window.db,'artifacts',window.appId,'public','data','shift_karyawan');
+            const colLokasi    = () => window.collection(window.db,'artifacts',window.appId,'public','data','shift_lokasi');
+            const colJadwal    = () => window.collection(window.db,'artifacts',window.appId,'public','data','shift_jadwal');
+            const colAbsensi   = () => window.collection(window.db,'artifacts',window.appId,'public','data','shift_absensi');
+            const colShiftCfg  = () => window.collection(window.db,'artifacts',window.appId,'public','data','shift_config');
+            const docShiftCfg  = () => window.doc(colShiftCfg(), 'default');
 
             useEffect(() => {
                 if (!user) return;
@@ -9774,15 +10076,40 @@
 
             useEffect(() => {
                 if (!user) return;
+                const ref = docShiftCfg();
+                return window.onSnapshot(ref,
+                    snap => { setShiftConfig(snap.exists() ? snap.data() : {}); },
+                    err  => { console.error('shiftConfig onSnapshot error:', err); }
+                );
+            }, [user]);
+
+            useEffect(() => {
+                if (!user) return;
                 const ref = window.doc(colJadwal(), weekKey);
                 return window.onSnapshot(ref, snap => {
                     setJadwal(prev => ({...prev, [weekKey]: snap.exists() ? snap.data() : {}}));
                 });
             }, [user, weekKey]);
 
+            // Load absensi (realtime, 100 terbaru)
+            useEffect(() => {
+                if (!user) return;
+                setLoadingAbsensi(true);
+                const q = window.query(colAbsensi(), window.orderBy('createdAt','desc'), window.limit(200));
+                return window.onSnapshot(q, snap => {
+                    setAbsensiList(snap.docs.map(d=>({id:d.id,...d.data()})));
+                    setLoadingAbsensi(false);
+                });
+            }, [user]);
+
             const weekJadwal = jadwal[weekKey] || {};
             const cellKey    = (dayIdx, shiftId, lokasiId) => `${dayIdx}_${shiftId}_${lokasiId}`;
-            const getCell    = (dayIdx, shiftId, lokasiId) => weekJadwal[cellKey(dayIdx,shiftId,lokasiId)] || null;
+            const getCell    = (dayIdx, shiftId, lokasiId) => {
+                const v = weekJadwal[cellKey(dayIdx,shiftId,lokasiId)];
+                if (!v) return [];
+                if (Array.isArray(v)) return v.filter(Boolean);
+                return [v]; // backward compat: single string → array
+            };
             const getKaryawan= (id) => karyawanList.find(k=>k.id===id);
 
             const setCell = async (dayIdx, shiftId, lokasiId, karyawanId) => {
@@ -9790,7 +10117,21 @@
                 const ref = window.doc(colJadwal(), weekKey);
                 const k   = cellKey(dayIdx, shiftId, lokasiId);
                 try {
-                    await window.setDoc(ref, { [k]: karyawanId || null, updatedAt: window.serverTimestamp() }, {merge:true});
+                    await window.setDoc(ref, { [k]: karyawanId ? [karyawanId] : null, updatedAt: window.serverTimestamp() }, {merge:true});
+                } catch(e) { showToast('Gagal menyimpan','error'); }
+                setPickerTarget(null);
+            };
+
+            const setCellSlot = async (dayIdx, shiftId, lokasiId, slotIdx, karyawanId) => {
+                if (readOnly) { showToast('Tidak ada akses edit','error'); return; }
+                const ref = window.doc(colJadwal(), weekKey);
+                const k   = cellKey(dayIdx, shiftId, lokasiId);
+                const current = [...getCell(dayIdx, shiftId, lokasiId)];
+                while (current.length <= slotIdx) current.push(null);
+                current[slotIdx] = karyawanId || null;
+                const cleaned = current.filter(Boolean);
+                try {
+                    await window.setDoc(ref, { [k]: cleaned.length ? cleaned : null, updatedAt: window.serverTimestamp() }, {merge:true});
                 } catch(e) { showToast('Gagal menyimpan','error'); }
                 setPickerTarget(null);
             };
@@ -9825,13 +10166,30 @@
                 await window.deleteDoc(window.doc(colLokasi(),id)); setDelLokasi(null); showToast('Lokasi dihapus');
             };
 
+            /* ---------- Save Shift Config ---------- */
+            const saveShiftConfig = async (id, jamMulai, jamSelesai) => {
+                const ref = docShiftCfg();
+                try {
+                    await window.setDoc(ref, {
+                        [id]: { jamMulai: jamMulai.trim(), jamSelesai: jamSelesai.trim() },
+                        updatedAt: window.serverTimestamp()
+                    }, {merge: true});
+                    setEditShiftRow(null);
+                    showToast('✅ Jam shift disimpan');
+                } catch(e) {
+                    console.error('saveShiftConfig error:', e);
+                    showToast('Gagal simpan: ' + e.message, 'error');
+                }
+            };
+
             /* ---------- Rekap ---------- */
             const getRekapKaryawan = (k) => {
                 const counts = {pagi:0, siang:0, libur:0, total:0};
                 for (let d=0; d<7; d++) {
                     lokasiList.forEach(loc => {
                         SHIFTS.forEach(s => {
-                            if (getCell(d,s.id,loc.id) === k.id) {
+                            const ids = getCell(d,s.id,loc.id);
+                            if (ids.includes(k.id)) {
                                 counts[s.id]++;
                                 if (s.id !== 'libur') counts.total++;
                             }
@@ -9840,6 +10198,138 @@
                 }
                 return counts;
             };
+
+            /* ---------- Absensi: Camera ---------- */
+            const startCamera = async () => {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: {ideal:640}, height: {ideal:480} }, audio: false });
+                    setCameraStream(stream);
+                    setCameraActive(true);
+                    setTimeout(() => {
+                        if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
+                    }, 150);
+                } catch(e) { showToast('Tidak bisa akses kamera: ' + e.message, 'error'); }
+            };
+            const stopCamera = () => {
+                if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); setCameraStream(null); }
+                setCameraActive(false);
+            };
+            const capturePhoto = () => {
+                if (!videoRef.current || !canvasRef.current) return;
+                const v = videoRef.current;
+                const c = canvasRef.current;
+                c.width = v.videoWidth || 640;
+                c.height = v.videoHeight || 480;
+                const ctx = c.getContext('2d');
+                // Mirror untuk selfie
+                ctx.save(); ctx.scale(-1, 1); ctx.drawImage(v, -c.width, 0, c.width, c.height); ctx.restore();
+                const dataUrl = c.toDataURL('image/jpeg', 0.75);
+                setCapturedPhoto(dataUrl);
+                stopCamera();
+            };
+            const retakePhoto = () => { setCapturedPhoto(null); startCamera(); };
+
+            /* ---------- Absensi: Lokasi ---------- */
+            const requestLocation = () => new Promise((resolve, reject) => {
+                if (!navigator.geolocation) {
+                    setLocationStatus('denied');
+                    setLocationError('Perangkat tidak mendukung GPS');
+                    reject(new Error('Geolocation not supported'));
+                    return;
+                }
+                setLocationStatus('requesting');
+                setLocationError('');
+                navigator.geolocation.getCurrentPosition(
+                    (pos) => {
+                        const data = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: Math.round(pos.coords.accuracy) };
+                        setLocationData(data);
+                        setLocationStatus('granted');
+                        resolve(data);
+                    },
+                    (err) => {
+                        setLocationStatus('denied');
+                        const msg = err.code === 1 ? 'Izin lokasi ditolak. Aktifkan lokasi di pengaturan browser.' : err.code === 2 ? 'Lokasi tidak tersedia. Coba lagi.' : 'Waktu habis. Coba lagi.';
+                        setLocationError(msg);
+                        reject(new Error(msg));
+                    },
+                    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+                );
+            });
+
+            /* ---------- Absensi: Submit ---------- */
+            const submitAbsensi = async () => {
+                if (!capturedPhoto) { showToast('Foto selfie wajib diambil!', 'error'); return; }
+                // Minta lokasi jika belum granted
+                let locData = locationData;
+                if (locationStatus !== 'granted' || !locData) {
+                    try {
+                        locData = await requestLocation();
+                    } catch(e) {
+                        showToast('❌ Aktifkan izin lokasi untuk menyimpan absensi!', 'error');
+                        return;
+                    }
+                }
+                setSubmittingAbsensi(true);
+                try {
+                    const namaDisplay = authSession?.namaLengkap || authSession?.username || '-';
+                    const jabatanDisplay = isOwner ? 'Owner' : (authSession?.jabatan || 'Karyawan');
+                    const now  = new Date();
+                    await window.addDoc(colAbsensi(), {
+                        karyawanId:   authSession?.id || authSession?.uid || '-',
+                        karyawanNama: namaDisplay,
+                        karyawanJabatan: jabatanDisplay,
+                        shift:        absensiShift,
+                        catatan:      absensiCatatan.trim(),
+                        photo:        capturedPhoto,
+                        tanggal:      now.toISOString().slice(0,10),
+                        waktu:        now.toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}),
+                        lokasi:       locData ? { lat: locData.lat, lng: locData.lng, accuracy: locData.accuracy } : null,
+                        createdAt:    window.serverTimestamp(),
+                    });
+                    showToast('✅ Absensi berhasil disimpan!', 'success');
+                    setCapturedPhoto(null);
+                    setAbsensiCatatan('');
+                } catch(e) { showToast('Gagal menyimpan absensi: ' + e.message, 'error'); }
+                setSubmittingAbsensi(false);
+            };
+
+            /* ---------- Absensi: Delete ---------- */
+            const doDelAbsensi = async (id) => {
+                try {
+                    await window.deleteDoc(window.doc(colAbsensi(), id));
+                    showToast('Data absensi dihapus', 'success');
+                } catch(e) { showToast('Gagal menghapus', 'error'); }
+                setConfirmDelOne(null);
+            };
+            const doClearAllAbsensi = async () => {
+                try {
+                    const toDelete = filterAbsensiDate
+                        ? absensiList.filter(a => a.tanggal === filterAbsensiDate)
+                        : absensiList;
+                    const batch = window.writeBatch(window.db);
+                    toDelete.forEach(a => batch.delete(window.doc(colAbsensi(), a.id)));
+                    await batch.commit();
+                    showToast(`${toDelete.length} data absensi dihapus`, 'success');
+                } catch(e) { showToast('Gagal menghapus semua', 'error'); }
+                setConfirmClearAll(false);
+            };
+
+            /* ---------- Absensi: Helpers ---------- */
+            const fmtAbsDate = (tgl) => {
+                if (!tgl) return '-';
+                const [y,m,d] = tgl.split('-');
+                const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+                const days = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+                const dateObj = new Date(parseInt(y), parseInt(m)-1, parseInt(d));
+                const dayName = days[dateObj.getDay()];
+                return `${dayName}, ${d} ${months[parseInt(m)-1]} ${y}`;
+            };
+            const shiftColor = { pagi: {bg:'#FFF9C4',text:'#7B6200',border:'#F9A825'}, siang: {bg:'#B2EBF2',text:'#006064',border:'#00ACC1'}, libur: {bg:'#F1F5F9',text:'#94A3B8',border:'#E2E8F0'} };
+            const filteredAbsensi = filterAbsensiDate ? absensiList.filter(a => a.tanggal === filterAbsensiDate) : absensiList;
+
+            /* ---------- Absensi: avatar color helper ---------- */
+            const avatarColors = ['#8B5CF6','#3B82F6','#10B981','#F59E0B','#EF4444','#EC4899','#14B8A6','#F97316'];
+            const getAvatarColor = (str) => avatarColors[(str||'').charCodeAt(0) % avatarColors.length];
 
             /* ---------- Print ---------- */
             const handlePrint = () => {
@@ -9866,16 +10356,19 @@
                     <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
                         <div className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 text-white flex items-center justify-center shadow text-sm">
-                                <Icon name="calendar-days" />
+                                <Icon name={activeView === 'absensi' ? 'camera' : 'calendar-days'} />
                             </div>
                             <div>
-                                <h2 className="font-extrabold text-slate-800 text-base leading-tight">Jadwal Shift</h2>
-                                <p className="text-[10px] text-slate-400">Pagi & Siang per lokasi toko</p>
+                                <h2 className="font-extrabold text-slate-800 text-base leading-tight">{activeView === 'absensi' ? 'Absensi Kehadiran' : 'Jadwal Shift'}</h2>
+                                <p className="text-[10px] text-slate-400">{activeView === 'absensi' ? 'Foto selfie wajib saat absen' : 'Pagi & Siang per lokasi toko'}</p>
                             </div>
                         </div>
                         <div className="flex gap-1.5 flex-wrap">
-                            {!readOnly && (
+                            {activeView === 'jadwal' && !readOnly && (
                                 <>
+                                    <button onClick={() => setModalShift(true)} className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold rounded-lg shadow transition-all active:scale-95">
+                                        <Icon name="clock" /> Shift
+                                    </button>
                                     <button onClick={() => setModalLokasi(true)} className="flex items-center gap-1 px-2.5 py-1.5 bg-sky-500 hover:bg-sky-600 text-white text-[11px] font-bold rounded-lg shadow transition-all active:scale-95">
                                         <Icon name="shop" /> Lokasi
                                     </button>
@@ -9884,10 +10377,32 @@
                                     </button>
                                 </>
                             )}
+                            {activeView === 'absensi' && isOwner && filteredAbsensi.length > 0 && (
+                                <button onClick={() => setConfirmClearAll(true)} className="flex items-center gap-1 px-2.5 py-1.5 bg-red-500 hover:bg-red-600 text-white text-[11px] font-bold rounded-lg shadow transition-all active:scale-95">
+                                    <Icon name="trash" /> Hapus Semua
+                                </button>
+                            )}
                         </div>
                     </div>
 
-                    {/* NAVIGASI PEKAN */}
+                    {/* TAB NAVIGASI */}
+                    <div className="flex gap-1.5 mb-3 bg-slate-100 rounded-xl p-1">
+                        <button
+                            onClick={() => setActiveView('jadwal')}
+                            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-extrabold transition-all ${activeView === 'jadwal' ? 'bg-white text-violet-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            <Icon name="calendar-days" /> Jadwal Shift
+                        </button>
+                        <button
+                            onClick={() => { setActiveView('absensi'); stopCamera(); setCapturedPhoto(null); }}
+                            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-extrabold transition-all ${activeView === 'absensi' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            <Icon name="camera" /> Absensi
+                        </button>
+                    </div>
+
+                    {/* NAVIGASI PEKAN — hanya tampil di tab Jadwal */}
+                    {activeView === 'jadwal' && (
                     <div className="flex items-center justify-between mb-3 bg-white rounded-xl border border-slate-200 px-3 py-2 shadow-sm">
                         <button onClick={()=>setWeekOffset(w=>w-1)} className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 transition-all active:scale-95 text-xs">
                             <Icon name="chevron-left" />
@@ -9905,7 +10420,11 @@
                             </button>
                         </div>
                     </div>
+                    )}
 
+                    {/* ===== TAB JADWAL ===== */}
+                    {activeView === 'jadwal' && (
+                    <>
                     {loadingData ? (
                         <div className="flex flex-col items-center justify-center py-20 gap-3">
                             <div className="w-10 h-10 border-4 border-violet-200 border-t-violet-500 rounded-full animate-spin"></div>
@@ -9963,61 +10482,74 @@
                                                         )}
                                                         {/* SHIFT LABEL */}
                                                         <td className="px-1.5 py-1 text-center font-extrabold border border-slate-200" style={{background: shift.id==='libur' ? '#f1f5f9' : shift.bg, color: shift.id==='libur' ? '#94a3b8' : shift.text, fontSize:'10px'}}>
-                                                            {shift.label}
+                                                            <div>{shift.label}</div>
+                                                            {shift.id !== 'libur' && (
+                                                                <div style={{fontSize:'8px', opacity:0.75, fontWeight:600}}>{shift.jamMulai}–{shift.jamSelesai}</div>
+                                                            )}
                                                         </td>
                                                         {/* LOKASI CELLS */}
                                                         {lokasiList.map(loc => {
-                                                            const kId  = getCell(dayIdx, shift.id, loc.id);
-                                                            const k    = kId ? getKaryawan(kId) : null;
-                                                            const isT  = pickerTarget?.dayIdx===dayIdx && pickerTarget?.shiftId===shift.id && pickerTarget?.lokasiId===loc.id;
+                                                            const ids  = getCell(dayIdx, shift.id, loc.id);
                                                             const isLibur = shift.id === 'libur';
                                                             return (
                                                                 <td key={loc.id} className="px-1 py-0.5 text-center border border-slate-200 relative" style={{background: isLibur ? '#f8fafc' : shift.bg + '60'}}>
-                                                                    <button
-                                                                        disabled={readOnly}
-                                                                        onClick={()=>{ setPickerTarget(isT?null:{dayIdx,shiftId:shift.id,lokasiId:loc.id}); setPickerSearch(''); }}
-                                                                        className={`w-full rounded-md py-1 px-1 font-bold transition-all ${!readOnly ? 'cursor-pointer hover:ring-2 ring-violet-400' : ''} ${isT ? 'ring-2 ring-violet-500 ring-offset-1' : ''}`}
-                                                                        style={{
-                                                                            fontSize: '11px',
-                                                                            color: k ? (isLibur ? '#dc2626' : shift.text) : '#d1d5db',
-                                                                            background: k ? (isLibur ? '#fee2e2' : shift.bg) : 'transparent',
-                                                                            minHeight:'24px'
-                                                                        }}
-                                                                    >
-                                                                        {k ? `${k.nama}${isLibur ? ' (L)' : ''}` : <span style={{color:'#e2e8f0'}}>—</span>}
-                                                                    </button>
-                                                                    {/* PICKER DROPDOWN */}
-                                                                    {isT && (
-                                                                        <div className="absolute z-40 top-full left-0 mt-1 bg-white border border-slate-200 rounded-2xl shadow-2xl p-2 w-48" onClick={e=>e.stopPropagation()}>
-                                                                            <input
-                                                                                autoFocus
-                                                                                value={pickerSearch}
-                                                                                onChange={e=>setPickerSearch(e.target.value)}
-                                                                                placeholder="Cari karyawan..."
-                                                                                className="w-full border border-slate-200 rounded-xl px-2.5 py-1.5 text-[11px] outline-none focus:border-violet-400 mb-1.5"
-                                                                            />
-                                                                            <div className="max-h-44 overflow-y-auto">
-                                                                                {karyawanList
-                                                                                    .filter(k => !pickerSearch || k.nama.toLowerCase().includes(pickerSearch.toLowerCase()))
-                                                                                    .map(k => (
-                                                                                    <button key={k.id} onClick={()=>setCell(dayIdx,shift.id,loc.id,k.id)}
-                                                                                        className="w-full text-left px-2.5 py-1.5 rounded-xl mb-0.5 text-[12px] font-bold hover:bg-violet-50 hover:text-violet-700 transition-all">
-                                                                                        {k.nama}
-                                                                                        <span className="text-[9px] text-slate-400 font-normal block">{k.jabatan}</span>
-                                                                                    </button>
-                                                                                ))}
-                                                                                {karyawanList.filter(k=>!pickerSearch||k.nama.toLowerCase().includes(pickerSearch.toLowerCase())).length===0 && (
-                                                                                    <p className="text-xs text-slate-400 text-center py-2">Tidak ditemukan</p>
+                                                                    {/* SLOT 0 */}
+                                                                    {[0, 1].filter(idx => idx === 0 || shiftConfig?.doubleSlot).map(slotIdx => {
+                                                                        const kId = ids[slotIdx] || null;
+                                                                        const k   = kId ? getKaryawan(kId) : null;
+                                                                        const isT = pickerTarget?.dayIdx===dayIdx && pickerTarget?.shiftId===shift.id && pickerTarget?.lokasiId===loc.id && pickerTarget?.slotIdx===slotIdx;
+                                                                        return (
+                                                                            <div key={slotIdx} className="relative">
+                                                                                <button
+                                                                                    disabled={readOnly}
+                                                                                    onClick={()=>{ setPickerTarget(isT?null:{dayIdx,shiftId:shift.id,lokasiId:loc.id,slotIdx}); setPickerSearch(''); }}
+                                                                                    className={`w-full rounded-md py-0.5 px-1 font-bold transition-all ${!readOnly ? 'cursor-pointer hover:ring-2 ring-violet-400' : ''} ${isT ? 'ring-2 ring-violet-500 ring-offset-1' : ''}`}
+                                                                                    style={{
+                                                                                        fontSize: '10px',
+                                                                                        color: k ? (isLibur ? '#dc2626' : shift.text) : '#bfbfbf',
+                                                                                        background: k ? (isLibur ? '#fee2e2' : shift.bg) : 'transparent',
+                                                                                        minHeight:'20px',
+                                                                                        marginBottom: slotIdx===0 ? '1px' : 0,
+                                                                                    }}
+                                                                                >
+                                                                                    {k ? `${k.nama}${isLibur ? ' (L)' : ''}` : <span style={{color:'#e2e8f0'}}>—</span>}
+                                                                                </button>
+                                                                                {/* PICKER DROPDOWN */}
+                                                                                {isT && (
+                                                                                    <div className="absolute z-40 top-full left-0 mt-1 bg-white border border-slate-200 rounded-2xl shadow-2xl p-2 w-48" onClick={e=>e.stopPropagation()} style={{minWidth:'180px'}}>
+                                                                                        <div className="text-[10px] font-bold text-slate-400 mb-1.5 px-1">Orang ke-{slotIdx+1}</div>
+                                                                                        <input
+                                                                                            autoFocus
+                                                                                            value={pickerSearch}
+                                                                                            onChange={e=>setPickerSearch(e.target.value)}
+                                                                                            placeholder="Cari karyawan..."
+                                                                                            className="w-full border border-slate-200 rounded-xl px-2.5 py-1.5 text-[11px] outline-none focus:border-violet-400 mb-1.5"
+                                                                                        />
+                                                                                        <div className="max-h-44 overflow-y-auto">
+                                                                                            {karyawanList
+                                                                                                .filter(k => !pickerSearch || k.nama.toLowerCase().includes(pickerSearch.toLowerCase()))
+                                                                                                .map(k => (
+                                                                                                <button key={k.id} onClick={()=>setCellSlot(dayIdx,shift.id,loc.id,slotIdx,k.id)}
+                                                                                                    className="w-full text-left px-2.5 py-1.5 rounded-xl mb-0.5 text-[12px] font-bold hover:bg-violet-50 hover:text-violet-700 transition-all">
+                                                                                                    {k.nama}
+                                                                                                    <span className="text-[9px] text-slate-400 font-normal block">{k.jabatan}</span>
+                                                                                                </button>
+                                                                                            ))}
+                                                                                            {karyawanList.filter(k=>!pickerSearch||k.nama.toLowerCase().includes(pickerSearch.toLowerCase())).length===0 && (
+                                                                                                <p className="text-xs text-slate-400 text-center py-2">Tidak ditemukan</p>
+                                                                                            )}
+                                                                                        </div>
+                                                                                        <div className="border-t border-slate-100 mt-1 pt-1">
+                                                                                            <button onClick={()=>setCellSlot(dayIdx,shift.id,loc.id,slotIdx,null)}
+                                                                                                className="w-full text-center px-2.5 py-1.5 rounded-xl text-[11px] text-red-400 font-bold hover:bg-red-50 transition-all">
+                                                                                                <Icon name="eraser" className="mr-1" /> Kosongkan
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    </div>
                                                                                 )}
                                                                             </div>
-                                                                            <div className="border-t border-slate-100 mt-1 pt-1">
-                                                                                <button onClick={()=>setCell(dayIdx,shift.id,loc.id,null)}
-                                                                                    className="w-full text-center px-2.5 py-1.5 rounded-xl text-[11px] text-red-400 font-bold hover:bg-red-50 transition-all">
-                                                                                    <Icon name="eraser" className="mr-1" /> Kosongkan
-                                                                                </button>
-                                                                            </div>
-                                                                        </div>
-                                                                    )}
+                                                                        );
+                                                                    })}
                                                                 </td>
                                                             );
                                                         })}
@@ -10034,9 +10566,349 @@
                         </div>
                         </>
                     )}
+                    </>
+                    )} {/* END activeView === 'jadwal' */}
+
+                    {/* ===== TAB ABSENSI ===== */}
+                    {activeView === 'absensi' && (
+                    <div className="space-y-3">
+                        {/* CANVAS hidden untuk capture */}
+                        <canvas ref={canvasRef} style={{display:'none'}} />
+
+                        {/* ---- FORM ABSEN ---- */}
+                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div className="bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-3">
+                                <p className="text-white font-extrabold text-sm flex items-center gap-2"><Icon name="camera" /> Form Absensi Kehadiran</p>
+                                <p className="text-emerald-100 text-[10px] mt-0.5">Foto selfie wajib untuk konfirmasi kehadiran</p>
+                            </div>
+                            <div className="p-4 space-y-3">
+                                {/* Info Pengguna — otomatis dari akun */}
+                                <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5">
+                                    <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-extrabold text-sm flex-shrink-0 overflow-hidden shadow-sm"
+                                        style={{background: authSession?.profilePhoto ? 'transparent' : getAvatarColor(authSession?.namaLengkap||authSession?.username)}}>
+                                        {authSession?.profilePhoto
+                                            ? <img src={authSession.profilePhoto} alt="" className="w-full h-full object-cover" />
+                                            : (authSession?.namaLengkap||authSession?.username||'?').charAt(0).toUpperCase()
+                                        }
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1.5">
+                                            <p className="font-extrabold text-slate-800 text-sm truncate">{authSession?.namaLengkap || authSession?.username}</p>
+                                            {isOwner && <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full border border-amber-200 flex-shrink-0">👑 Owner</span>}
+                                        </div>
+                                        <p className="text-[10px] text-slate-400">{isOwner ? 'Pemilik Toko' : (authSession?.jabatan || 'Karyawan')}</p>
+                                    </div>
+                                    <Icon name="lock" className="text-slate-300 text-xs flex-shrink-0" />
+                                </div>
+                                {/* Pilih Shift */}
+                                <div>
+                                    <label className="text-[11px] font-bold text-slate-600 block mb-1">⏰ Shift</label>
+                                    <div className="flex gap-2">
+                                        {SHIFTS.filter(s=>s.id!=='libur').map(s => (
+                                            <button key={s.id} onClick={()=>setAbsensiShift(s.id)}
+                                                className={`flex-1 py-2.5 rounded-xl text-[11px] font-extrabold border-2 transition-all ${absensiShift===s.id ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm' : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'}`}>
+                                                {s.label}
+                                                <span className="block text-[9px] font-normal mt-0.5 opacity-70">{s.jamMulai}–{s.jamSelesai}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                {/* Catatan opsional */}
+                                <div>
+                                    <label className="text-[11px] font-bold text-slate-600 block mb-1">📝 Catatan (opsional)</label>
+                                    <input value={absensiCatatan} onChange={e=>setAbsensiCatatan(e.target.value)} placeholder="Misal: terlambat 10 menit..."
+                                        className="w-full border-2 border-slate-200 focus:border-emerald-400 rounded-xl px-3 py-2.5 text-sm outline-none text-slate-700" />
+                                </div>
+
+                                {/* ---- LOKASI GPS ---- */}
+                                <div>
+                                    <label className="text-[11px] font-bold text-slate-600 block mb-1.5">📍 Lokasi GPS <span className="text-red-500">*</span></label>
+                                    {locationStatus === 'idle' && (
+                                        <button onClick={requestLocation}
+                                            className="w-full py-3 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-95">
+                                            <Icon name="location-dot" className="text-base" />
+                                            <span>Izinkan Akses Lokasi</span>
+                                            <span className="text-[10px] font-normal text-blue-400">Wajib untuk absensi</span>
+                                        </button>
+                                    )}
+                                    {locationStatus === 'requesting' && (
+                                        <div className="w-full py-3 rounded-xl border-2 border-yellow-300 bg-yellow-50 text-yellow-600 font-bold text-xs flex items-center justify-center gap-2">
+                                            <Icon name="spinner" className="animate-spin text-base" />
+                                            <span>Mendapatkan lokasi...</span>
+                                        </div>
+                                    )}
+                                    {locationStatus === 'granted' && locationData && (
+                                        <div className="w-full py-2.5 px-3 rounded-xl border-2 border-emerald-300 bg-emerald-50 flex items-center gap-2.5">
+                                            <span className="text-emerald-500 text-base flex-shrink-0">✅</span>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-[11px] font-extrabold text-emerald-700">Lokasi Terdeteksi</p>
+                                                <p className="text-[10px] text-emerald-500 truncate">
+                                                    {locationData.lat.toFixed(5)}, {locationData.lng.toFixed(5)}
+                                                    <span className="ml-1.5 opacity-70">±{locationData.accuracy}m</span>
+                                                </p>
+                                            </div>
+                                            <button onClick={requestLocation} title="Perbarui lokasi"
+                                                className="text-emerald-400 hover:text-emerald-600 text-xs flex-shrink-0 transition-all active:scale-90">
+                                                <Icon name="rotate" />
+                                            </button>
+                                        </div>
+                                    )}
+                                    {locationStatus === 'denied' && (
+                                        <div className="space-y-1.5">
+                                            <div className="w-full py-2.5 px-3 rounded-xl border-2 border-red-300 bg-red-50 flex items-center gap-2.5">
+                                                <span className="text-red-500 text-base flex-shrink-0">❌</span>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-[11px] font-extrabold text-red-700">Lokasi Ditolak</p>
+                                                    <p className="text-[10px] text-red-400 leading-tight">{locationError || 'Izin lokasi tidak diberikan'}</p>
+                                                </div>
+                                                <button onClick={requestLocation} title="Coba lagi"
+                                                    className="bg-red-500 hover:bg-red-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg flex-shrink-0 transition-all active:scale-90">
+                                                    Coba Lagi
+                                                </button>
+                                            </div>
+                                            <p className="text-[10px] text-slate-400 text-center">⚠️ Aktifkan izin lokasi di pengaturan browser, lalu tekan <b>Coba Lagi</b></p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* ---- KAMERA SELFIE ---- */}
+                                <div>
+                                    <label className="text-[11px] font-bold text-slate-600 block mb-2">📸 Foto Selfie <span className="text-red-500">*</span></label>
+                                    {!cameraActive && !capturedPhoto && (
+                                        <button onClick={startCamera}
+                                            className="w-full py-10 rounded-2xl border-2 border-dashed border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 font-bold text-sm flex flex-col items-center justify-center gap-2 transition-all active:scale-95">
+                                            <span className="text-4xl">📷</span>
+                                            <span>Buka Kamera Selfie</span>
+                                            <span className="text-[10px] text-emerald-400 font-normal">Kamera depan akan diaktifkan</span>
+                                        </button>
+                                    )}
+                                    {cameraActive && !capturedPhoto && (
+                                        <div className="relative rounded-2xl overflow-hidden bg-black shadow-lg">
+                                            <video ref={videoRef} autoPlay playsInline muted className="w-full rounded-2xl" style={{transform:'scaleX(-1)', maxHeight:'300px', objectFit:'cover'}} />
+                                            <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-3">
+                                                <button onClick={capturePhoto}
+                                                    className="w-16 h-16 bg-white rounded-full shadow-2xl border-4 border-emerald-500 flex items-center justify-center text-2xl hover:scale-105 active:scale-95 transition-all">
+                                                    📸
+                                                </button>
+                                                <button onClick={stopCamera}
+                                                    className="w-10 h-10 bg-red-500 rounded-full shadow-lg flex items-center justify-center text-white text-xs font-bold hover:bg-red-600 active:scale-95 transition-all self-center">
+                                                    <Icon name="xmark" />
+                                                </button>
+                                            </div>
+                                            <div className="absolute top-3 left-0 right-0 flex justify-center">
+                                                <span className="bg-black/50 text-white text-[10px] font-bold px-3 py-1 rounded-full">📷 Posisikan wajah di tengah, lalu tekan tombol</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {capturedPhoto && (
+                                        <div className="relative rounded-2xl overflow-hidden shadow-lg">
+                                            <img src={capturedPhoto} alt="selfie" className="w-full rounded-2xl" style={{maxHeight:'280px', objectFit:'cover'}} onClick={()=>setLightboxAbsensi(capturedPhoto)} />
+                                            <div className="absolute top-2 right-2">
+                                                <button onClick={retakePhoto}
+                                                    className="bg-black/60 hover:bg-black/80 text-white text-[10px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1 transition-all active:scale-95">
+                                                    <Icon name="rotate-left" /> Foto Ulang
+                                                </button>
+                                            </div>
+                                            <div className="absolute bottom-2 left-2">
+                                                <span className="bg-emerald-500 text-white text-[9px] font-bold px-2.5 py-1 rounded-full">✅ Foto siap</span>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Submit */}
+                                {locationStatus === 'denied' && (
+                                    <div className="text-[11px] text-center text-red-500 font-bold bg-red-50 rounded-xl py-2 border border-red-200">
+                                        ❌ Izin lokasi wajib diaktifkan sebelum simpan absensi
+                                    </div>
+                                )}
+                                <button
+                                    onClick={submitAbsensi}
+                                    disabled={submittingAbsensi || !capturedPhoto || locationStatus === 'denied'}
+                                    className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-40 text-white font-extrabold text-sm rounded-2xl shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+                                    {submittingAbsensi ? <><Icon name="spinner" className="animate-spin" /> Menyimpan...</>
+                                    : locationStatus === 'requesting' ? <><Icon name="spinner" className="animate-spin" /> Mendapatkan lokasi...</>
+                                    : <><Icon name="check" /> Simpan Absensi</>}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* ---- RIWAYAT ABSENSI ---- */}
+                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                                <p className="font-extrabold text-slate-700 text-sm flex items-center gap-2">
+                                    <Icon name="clock-rotate-left" className="text-emerald-500" /> Riwayat Absensi
+                                    <span className="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-0.5 rounded-full">{filteredAbsensi.length}</span>
+                                </p>
+                                <input type="date" value={filterAbsensiDate} onChange={e=>setFilterAbsensiDate(e.target.value)}
+                                    className="border border-slate-200 rounded-lg px-2.5 py-1.5 text-[11px] outline-none focus:border-emerald-400 text-slate-600" />
+                            </div>
+                            {loadingAbsensi ? (
+                                <div className="flex items-center justify-center py-12 gap-2">
+                                    <div className="w-6 h-6 border-3 border-emerald-200 border-t-emerald-500 rounded-full animate-spin"></div>
+                                    <p className="text-xs text-slate-400">Memuat absensi...</p>
+                                </div>
+                            ) : filteredAbsensi.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-16 gap-3">
+                                    <span className="text-5xl">📋</span>
+                                    <p className="text-sm font-bold text-slate-400">Belum ada data absensi</p>
+                                    <p className="text-xs text-slate-300">{filterAbsensiDate ? 'Tidak ada absensi pada tanggal ini' : 'Mulai absen dengan kamera di atas'}</p>
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-slate-50">
+                                    {filteredAbsensi.map(a => (
+                                        <div key={a.id} className="flex items-start gap-3 px-4 py-3 hover:bg-slate-50 transition-all">
+                                            {/* Foto */}
+                                            <div className="flex-shrink-0 cursor-pointer" onClick={()=>setLightboxAbsensi(a.photo)}>
+                                                <div className="w-14 h-14 rounded-2xl overflow-hidden border-2 border-slate-200 shadow-sm relative">
+                                                    {a.photo
+                                                        ? <img src={a.photo} alt="selfie" className="w-full h-full object-cover" />
+                                                        : <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-300 text-2xl">👤</div>
+                                                    }
+                                                    <div className="absolute bottom-0 right-0 w-4 h-4 bg-emerald-500 rounded-tl-lg flex items-center justify-center">
+                                                        <Icon name="camera" className="text-white" style={{fontSize:'7px'}} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {/* Info */}
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                    <p className="font-extrabold text-slate-800 text-sm truncate">{a.karyawanNama}</p>
+                                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full border"
+                                                        style={{background: shiftColor[a.shift]?.bg || '#f1f5f9', color: shiftColor[a.shift]?.text || '#64748b', borderColor: shiftColor[a.shift]?.border || '#e2e8f0'}}>
+                                                        {a.shift?.charAt(0).toUpperCase() + a.shift?.slice(1)}
+                                                    </span>
+                                                </div>
+                                                <p className="text-[10px] text-slate-400 mt-0.5">{a.karyawanJabatan}</p>
+                                                <div className="flex items-center gap-3 mt-1 text-[10px] text-slate-500">
+                                                    <span className="flex items-center gap-1"><Icon name="calendar" /> {fmtAbsDate(a.tanggal)}</span>
+                                                    <span className="flex items-center gap-1"><Icon name="clock" /> {a.waktu}</span>
+                                                </div>
+                                                {a.lokasi && (
+                                                    <a href={`https://maps.google.com/?q=${a.lokasi.lat},${a.lokasi.lng}`} target="_blank" rel="noopener noreferrer"
+                                                        className="inline-flex items-center gap-1 mt-1 text-[10px] text-blue-500 hover:text-blue-700 hover:underline">
+                                                        <Icon name="location-dot" /> {a.lokasi.lat.toFixed(4)}, {a.lokasi.lng.toFixed(4)}
+                                                        <span className="text-slate-300">±{a.lokasi.accuracy}m</span>
+                                                    </a>
+                                                )}
+                                                {!a.lokasi && <p className="text-[9px] text-slate-300 mt-0.5">📍 Lokasi tidak tersedia</p>}
+                                                {a.catatan && <p className="text-[10px] text-slate-400 mt-1 italic">"{a.catatan}"</p>}
+                                            </div>
+                                            {/* Tombol hapus (owner only) */}
+                                            {isOwner && (
+                                                <button onClick={()=>setConfirmDelOne(a.id)}
+                                                    className="flex-shrink-0 w-8 h-8 bg-red-50 hover:bg-red-100 text-red-400 rounded-xl flex items-center justify-center text-xs transition-all active:scale-95">
+                                                    <Icon name="trash" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    )} {/* END activeView === 'absensi' */}
 
                     {/* OVERLAY tutup picker */}
                     {isOpen && <div className="fixed inset-0 z-30" onClick={()=>setPickerTarget(null)} />}
+
+                    {/* ===== MODAL KELOLA SHIFT (JAM) ===== */}
+                    {modalShift && (
+                        <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4" style={{background:'rgba(0,0,0,0.5)'}}>
+                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-5 slide-up">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="w-9 h-9 rounded-2xl bg-amber-500 text-white flex items-center justify-center"><Icon name="clock" /></div>
+                                    <div className="flex-1">
+                                        <p className="font-extrabold text-slate-800">Kelola Jam Shift</p>
+                                        <p className="text-[10px] text-slate-400">Edit jam mulai & selesai tiap shift</p>
+                                    </div>
+                                    <button onClick={()=>{ setModalShift(false); setEditShiftRow(null); }} className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center"><Icon name="xmark" /></button>
+                                </div>
+                                {/* TOGGLE MODE 2 ORANG */}
+                                <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 mb-3">
+                                    <div>
+                                        <p className="font-bold text-slate-700 text-sm">Mode 2 Orang per Shift</p>
+                                        <p className="text-[10px] text-slate-400">Tampilkan slot orang ke-2 di tabel jadwal</p>
+                                    </div>
+                                    <button
+                                        onClick={async () => {
+                                            const newVal = !(shiftConfig?.doubleSlot);
+                                            const ref = docShiftCfg();
+                                            try {
+                                                await window.setDoc(ref, { doubleSlot: newVal, updatedAt: window.serverTimestamp() }, {merge:true});
+                                            } catch(e) {
+                                                console.error('toggle doubleSlot error:', e);
+                                                showToast('Gagal menyimpan','error');
+                                            }
+                                        }}
+                                        className={`relative w-11 h-6 rounded-full transition-all flex-shrink-0 ${shiftConfig?.doubleSlot ? 'bg-violet-500' : 'bg-slate-300'}`}
+                                    >
+                                        <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${shiftConfig?.doubleSlot ? 'left-5' : 'left-0.5'}`}></span>
+                                    </button>
+                                </div>
+                                <div className="space-y-2">
+                                    {SHIFTS.filter(s=>s.id!=='libur').map(s => (
+                                        <div key={s.id} className="rounded-xl border-2 overflow-hidden" style={{borderColor: s.border}}>
+                                            {editShiftRow?.id === s.id ? (
+                                                <div className="px-3 py-3 space-y-2.5" style={{background: s.bg + '80'}}>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="font-extrabold text-sm w-14 flex-shrink-0" style={{color: s.text}}>{s.label}</div>
+                                                        <div className="flex items-center gap-2 flex-1">
+                                                            <div className="flex-1">
+                                                                <label className="text-[10px] font-bold text-slate-500 block mb-1">Jam Mulai</label>
+                                                                <input
+                                                                    type="time"
+                                                                    value={editShiftRow.jamMulai}
+                                                                    onChange={e=>setEditShiftRow({...editShiftRow, jamMulai: e.target.value})}
+                                                                    className="w-full border-2 border-slate-200 focus:border-amber-400 rounded-lg px-2 py-1.5 text-sm outline-none font-bold"
+                                                                />
+                                                            </div>
+                                                            <span className="text-slate-400 font-bold text-sm mt-4">–</span>
+                                                            <div className="flex-1">
+                                                                <label className="text-[10px] font-bold text-slate-500 block mb-1">Jam Selesai</label>
+                                                                <input
+                                                                    type="time"
+                                                                    value={editShiftRow.jamSelesai}
+                                                                    onChange={e=>setEditShiftRow({...editShiftRow, jamSelesai: e.target.value})}
+                                                                    className="w-full border-2 border-slate-200 focus:border-amber-400 rounded-lg px-2 py-1.5 text-sm outline-none font-bold"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button onClick={()=>setEditShiftRow(null)}
+                                                            className="flex-1 py-2 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-xl text-sm font-bold transition-all active:scale-95">
+                                                            Batal
+                                                        </button>
+                                                        <button onClick={()=>saveShiftConfig(s.id, editShiftRow.jamMulai, editShiftRow.jamSelesai)}
+                                                            className="flex-1 py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl text-sm font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow">
+                                                            <Icon name="check" /> Simpan
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-center gap-3 px-3 py-3" style={{background: s.bg + '50'}}>
+                                                    <div className="w-8 h-8 rounded-xl flex items-center justify-center font-extrabold text-xs flex-shrink-0" style={{background: s.bg, color: s.text, border: `2px solid ${s.border}`}}>{s.label.charAt(0)}</div>
+                                                    <div className="flex-1">
+                                                        <p className="font-extrabold text-sm" style={{color: s.text}}>{s.label}</p>
+                                                        <p className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
+                                                            <Icon name="clock" className="text-[10px]" />
+                                                            {s.jamMulai} – {s.jamSelesai}
+                                                        </p>
+                                                    </div>
+                                                    <button onClick={()=>setEditShiftRow({id:s.id, jamMulai:s.jamMulai, jamSelesai:s.jamSelesai})}
+                                                        className="w-8 h-8 bg-amber-50 hover:bg-amber-100 text-amber-500 rounded-lg flex items-center justify-center text-xs transition-all active:scale-95 flex-shrink-0">
+                                                        <Icon name="pen" />
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                                <p className="text-[10px] text-slate-400 mt-3 text-center">Perubahan langsung tersimpan & berlaku untuk semua</p>
+                            </div>
+                        </div>
+                    )}
 
                     {/* ===== MODAL KELOLA KARYAWAN ===== */}
                     {modalKaryawan && (
@@ -10150,6 +11022,48 @@
                                     <button onClick={()=>setDelLokasi(null)} className="flex-1 py-2.5 border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-600">Batal</button>
                                     <button onClick={()=>doDelLokasi(delLokasi.id)} className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-bold">Hapus</button>
                                 </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* KONFIRMASI HAPUS SATU ABSENSI */}
+                    {confirmDelOne && (
+                        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.55)'}}>
+                            <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-xs text-center slide-up">
+                                <div className="w-12 h-12 bg-red-100 rounded-2xl text-red-500 flex items-center justify-center mx-auto mb-3 text-xl"><Icon name="triangle-exclamation" /></div>
+                                <p className="font-extrabold text-slate-800 mb-1">Hapus Data Absensi?</p>
+                                <p className="text-xs text-slate-500 mb-4">Data absensi ini akan dihapus permanen dan tidak bisa dipulihkan.</p>
+                                <div className="flex gap-2">
+                                    <button onClick={()=>setConfirmDelOne(null)} className="flex-1 py-2.5 border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-600">Batal</button>
+                                    <button onClick={()=>doDelAbsensi(confirmDelOne)} className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-bold">Hapus</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* KONFIRMASI HAPUS SEMUA ABSENSI */}
+                    {confirmClearAll && (
+                        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.55)'}}>
+                            <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-xs text-center slide-up">
+                                <div className="w-14 h-14 bg-red-100 rounded-2xl text-red-500 flex items-center justify-center mx-auto mb-3 text-2xl"><Icon name="trash" /></div>
+                                <p className="font-extrabold text-slate-800 mb-1">Hapus Semua Absensi?</p>
+                                <p className="text-xs text-slate-500 mb-1">{filterAbsensiDate ? `Menghapus ${filteredAbsensi.length} data absensi pada ${fmtAbsDate(filterAbsensiDate)}.` : `Menghapus semua ${absensiList.length} data absensi.`}</p>
+                                <p className="text-xs text-red-400 font-bold mb-4">⚠️ Tindakan ini tidak bisa dibatalkan!</p>
+                                <div className="flex gap-2">
+                                    <button onClick={()=>setConfirmClearAll(false)} className="flex-1 py-2.5 border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-600">Batal</button>
+                                    <button onClick={doClearAllAbsensi} className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-bold">Hapus Semua</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* LIGHTBOX FOTO ABSENSI */}
+                    {lightboxAbsensi && (
+                        <div onClick={()=>setLightboxAbsensi(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.9)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px'}}>
+                            <div style={{position:'relative',maxWidth:'95vw',maxHeight:'90vh'}} onClick={e=>e.stopPropagation()}>
+                                <img src={lightboxAbsensi} alt="selfie besar" style={{maxWidth:'90vw',maxHeight:'85vh',borderRadius:'16px',objectFit:'contain',boxShadow:'0 8px 40px rgba(0,0,0,0.6)'}} />
+                                <button onClick={()=>setLightboxAbsensi(null)} style={{position:'absolute',top:'-12px',right:'-12px',width:'32px',height:'32px',background:'#ef4444',border:'none',borderRadius:'50%',color:'#fff',fontWeight:900,fontSize:'14px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 2px 8px rgba(0,0,0,0.4)'}}>✕</button>
+                                <div style={{position:'absolute',bottom:'-30px',left:0,right:0,textAlign:'center'}}><span style={{color:'rgba(255,255,255,0.6)',fontSize:'11px'}}>Foto Selfie Absensi — klik di luar untuk tutup</span></div>
                             </div>
                         </div>
                     )}
@@ -10784,6 +11698,7 @@
             const [notifCounts, setNotifCounts] = useState({ pendingCarts: 0, activeCarts: 0 });
             const [authSession, setAuthSession] = useState(() => getStoredSession());
             const [personalMenuAccess, setPersonalMenuAccess] = useState(null); // null = follow global
+            const [allowedStores, setAllowedStores] = useState(null); // null = semua toko boleh diakses
             const [showNotifPanel, setShowNotifPanel] = useState(false);
             const [readChangelogs, setReadChangelogs] = useState(() => {
                 try { return JSON.parse(localStorage.getItem(CHANGELOG_STORAGE_KEY) || '[]'); } catch { return []; }
@@ -11010,10 +11925,26 @@
                             return;
                         }
                         setPersonalMenuAccess(data.menuAccess || null);
+                        setAllowedStores(data.allowedStores || null);
                     }
                 });
                 return () => unsub();
             }, [authSession?.id, user]);
+
+            // Jika toko aktif tidak termasuk dalam allowedStores user, pindahkan ke toko pertama yang diizinkan
+            useEffect(() => {
+                if (!allowedStores || allowedStores.length === 0) return;
+                if (isOwnerEmail(authSession?.email)) return;
+                const allProfiles = settingsData.storeProfiles || [{ id: 'default' }];
+                const allowed = allProfiles.filter(p => allowedStores.includes(p.id));
+                if (allowed.length === 0) return;
+                const currentOk = allowed.find(p => p.id === activeStoreId);
+                if (!currentOk) {
+                    setActiveStoreId(allowed[0].id);
+                    localStorage.setItem('activeStoreId', allowed[0].id);
+                    showToast(`Toko diganti ke "${allowed[0].name}" sesuai hak akses`);
+                }
+            }, [allowedStores, settingsData.storeProfiles]);
 
             useEffect(() => {
                 const initAuth = async () => { if (window.initialAuthToken) { await window.signInWithCustomToken(window.auth, window.initialAuthToken); } else { await window.signInAnonymously(window.auth); } };
@@ -11256,6 +12187,14 @@
             
             const isOwner = isOwnerEmail(authSession?.email);
 
+            // Daftar toko yang boleh diakses user (owner selalu bisa akses semua)
+            const allStoreProfiles = settingsData.storeProfiles || [{ id: 'default', name: settingsData.storeName || APP_NAME }];
+            const visibleStoreProfiles = (() => {
+                if (isOwner || !allowedStores || allowedStores.length === 0) return allStoreProfiles;
+                const filtered = allStoreProfiles.filter(p => allowedStores.includes(p.id));
+                return filtered.length > 0 ? filtered : allStoreProfiles.slice(0, 1);
+            })();
+
             // Resolve a menu key: owner always true, else user-specific override → global setting
             const menuOn = (key, globalVal) => {
                 if (isOwner) return true;
@@ -11355,12 +12294,12 @@
                                             <div className="absolute top-full left-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden fade-in z-[60]">
                                                 <div className="p-2 border-b border-slate-50 bg-slate-50/50"><span className="text-[10px] font-bold text-slate-500 uppercase px-2">Pilih Profil Toko</span></div>
                                                 <div className="max-h-48 overflow-y-auto">
-                                                    {(settingsData.storeProfiles || [{id:'default', name: APP_NAME}]).map(profile => (
+                                                    {visibleStoreProfiles.map(profile => (
                                                         <button key={profile.id} onClick={() => handleSwitchStore(profile.id)} className={`w-full text-left px-4 py-3 text-sm font-bold flex items-center justify-between hover:bg-sky-50 transition-colors ${activeStoreId === profile.id ? 'text-sky-600 bg-sky-50' : 'text-slate-700'}`}>
                                                             <span className="truncate">{profile.name}</span>{activeStoreId === profile.id && <Icon name="check" className="text-xs" />}
                                                         </button>
                                                     ))}
-                                                    {(settingsData.storeProfiles && settingsData.storeProfiles.length > 1) && (
+                                                    {isOwner && (visibleStoreProfiles.length > 1) && (
                                                         <button onClick={() => handleSwitchStore('all_stores')} className={`w-full text-left px-4 py-3 text-sm font-bold flex items-center justify-between hover:bg-indigo-50 transition-colors border-t border-slate-100 ${activeStoreId === 'all_stores' ? 'text-indigo-600 bg-indigo-50' : 'text-slate-700'}`}>
                                                             <span className="truncate">Semua Toko (Gabungan)</span>{activeStoreId === 'all_stores' && <Icon name="check" className="text-xs" />}
                                                         </button>
@@ -11600,7 +12539,7 @@
                         {activeTab === 'settings' && (<SettingsView settings={settingsData} onSave={handleSaveSettings} loading={submitting} authSession={authSession} onUpdateSession={(newSession) => { setAuthSession(newSession); saveSession(newSession); }} />)}
                         {activeTab === 'pengguna_akun' && (<PenggunaAkunView authSession={authSession} onUpdateSession={(newSession) => { setAuthSession(newSession); saveSession(newSession); }} showToast={showToast} />)}
                         {activeTab === 'catatan' && (<PapanCatatan user={user} readOnly={menuItems.find(m=>m.id==='catatan')?.readOnly} />)}
-                        {activeTab === 'jadwal_shift' && (<JadwalShiftView user={user} showToast={showToast} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='jadwal_shift')?.readOnly} />)}
+                        {activeTab === 'jadwal_shift' && (<JadwalShiftView user={user} showToast={showToast} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='jadwal_shift')?.readOnly} isOwner={isOwner} authSession={authSession} />)}
                         {activeTab === 'transfer_barang' && (<TransferBarangView user={user} showToast={showToast} rawInventory={rawInventory} settings={settingsData} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='transfer_barang')?.readOnly} authSession={authSession} />)}
                     </main>
                     <ConfirmModal isOpen={deleteModal.show} title="Hapus Barang?" message={`Yakin ingin menghapus permanen "${deleteModal.item?.name}"? Barang ini akan hilang dari SEMUA toko.`} onConfirm={handleDelete} onCancel={() => setDeleteModal({ show: false, item: null })} />
