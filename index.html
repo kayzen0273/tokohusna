@@ -10086,7 +10086,17 @@
             const weekJadwal = jadwal[weekKey] || {};
             const cellKey    = (dayIdx, shiftId, lokasiId) => `${dayIdx}_${shiftId}_${lokasiId}`;
 
-            // ---- Tanggal Merah ----
+            // doubleSlot per-pekan (bukan global)
+            const doubleSlot = weekJadwal._doubleSlot || false;
+            const toggleDoubleSlot = async () => {
+                if (readOnly) { showToast('Tidak ada akses edit','error'); return; }
+                const ref = window.doc(colJadwal(), weekKey);
+                try {
+                    await window.setDoc(ref, { _doubleSlot: !doubleSlot, updatedAt: window.serverTimestamp() }, {merge:true});
+                } catch(e) { showToast('Gagal menyimpan','error'); }
+            };
+
+            // Tanggal Merah
             const redDays = weekJadwal._redDays || [];
             const toggleRedDay = async (dayIdx) => {
                 if (readOnly) { showToast('Tidak ada akses edit','error'); return; }
@@ -10522,7 +10532,7 @@
                                                             return (
                                                                 <td key={loc.id} className="px-1 py-0.5 text-center border border-slate-200 relative" style={{background: isRedDay ? (isLibur ? '#FEE2E2' : '#FEF2F2') : (isLibur ? '#f8fafc' : shift.bg + '60')}}>
                                                                     {/* SLOT 0 */}
-                                                                    {[0, 1].filter(idx => idx === 0 || shiftConfig?.doubleSlot).map(slotIdx => {
+                                                                    {[0, 1].filter(idx => idx === 0 || doubleSlot).map(slotIdx => {
                                                                         const kId = ids[slotIdx] || null;
                                                                         const k   = kId ? getKaryawan(kId) : null;
                                                                         const isT = pickerTarget?.dayIdx===dayIdx && pickerTarget?.shiftId===shift.id && pickerTarget?.lokasiId===loc.id && pickerTarget?.slotIdx===slotIdx;
@@ -10852,26 +10862,16 @@
                                     <button onClick={()=>{ setModalShift(false); setEditShiftRow(null); setAddingShift(false); }} className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center"><Icon name="xmark" /></button>
                                 </div>
                                 <div className="overflow-y-auto flex-1 space-y-3 pr-1">
-                                {/* TOGGLE MODE 2 ORANG */}
                                 <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5">
                                     <div>
                                         <p className="font-bold text-slate-700 text-sm">Mode 2 Orang per Shift</p>
-                                        <p className="text-[10px] text-slate-400">Tampilkan slot orang ke-2 di tabel jadwal</p>
+                                        <p className="text-[10px] text-slate-400">Hanya berlaku untuk pekan ini</p>
                                     </div>
                                     <button
-                                        onClick={async () => {
-                                            const newVal = !(shiftConfig?.doubleSlot);
-                                            const ref = docShiftCfg();
-                                            try {
-                                                await window.setDoc(ref, { doubleSlot: newVal, updatedAt: window.serverTimestamp() }, {merge:true});
-                                            } catch(e) {
-                                                console.error('toggle doubleSlot error:', e);
-                                                showToast('Gagal menyimpan','error');
-                                            }
-                                        }}
-                                        className={`relative w-11 h-6 rounded-full transition-all flex-shrink-0 ${shiftConfig?.doubleSlot ? 'bg-violet-500' : 'bg-slate-300'}`}
+                                        onClick={toggleDoubleSlot}
+                                        className={`relative w-11 h-6 rounded-full transition-all flex-shrink-0 ${doubleSlot ? 'bg-violet-500' : 'bg-slate-300'}`}
                                     >
-                                        <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${shiftConfig?.doubleSlot ? 'left-5' : 'left-0.5'}`}></span>
+                                        <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${doubleSlot ? 'left-5' : 'left-0.5'}`}></span>
                                     </button>
                                 </div>
 
