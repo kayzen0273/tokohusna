@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistem Kasir Toko Husna (V45 - Toggle WA & Excel di Panel Owner)</title>
+    <title>Sistem Kasir Toko Husna (V52 - Tambah Shift & Tanggal Merah)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -246,40 +246,6 @@
 
         // --- CHANGELOG / NOTIFIKASI UPDATE ---
         const CHANGELOG = [
-            {
-                id: 'v53_1',
-                version: 'v53.1',
-                date: '14 Mar 2026',
-                title: 'Akses Toko per Karyawan',
-                tag: 'Fitur Baru',
-                tagColor: 'bg-green-100 text-green-700',
-                icon: 'shop',
-                isNew: true,
-                items: [
-                    '🏪 Owner bisa atur toko mana saja yang boleh diakses tiap karyawan',
-                    '🔒 Mode Terbatas: pilih satu atau beberapa toko saja yang diizinkan',
-                    '🌐 Mode Semua Toko: karyawan bebas berpindah ke semua toko',
-                    '📍 Toko yang tidak diizinkan otomatis tersembunyi dari tampilan karyawan',
-                    '⚙️ Dikelola di Panel Owner → Tab "Akses Toko"',
-                ]
-            },
-            {
-                id: 'v52_1',
-                version: 'v52.1',
-                date: '14 Mar 2026',
-                title: 'Jadwal Shift: Jam Dinamis & 2 Orang per Slot',
-                tag: 'Fitur Baru',
-                tagColor: 'bg-green-100 text-green-700',
-                icon: 'calendar-days',
-                isNew: true,
-                items: [
-                    '🕐 Tombol "Shift" baru untuk edit jam mulai & selesai tiap shift (Pagi/Siang)',
-                    '⏱️ Jam shift tampil langsung di tabel jadwal & form absensi',
-                    '👥 Mode 2 Orang per Shift — aktifkan toggle di pengaturan Shift',
-                    '✅ Setiap slot bisa diisi 2 karyawan berbeda sekaligus',
-                    '🔧 Perbaikan: jam yang diedit kini tersimpan & langsung tercermin di tabel',
-                ]
-            },
             {
                 id: 'v50_1',
                 version: 'v50.1',
@@ -10014,17 +9980,32 @@
             const [shiftConfig, setShiftConfig]       = useState({});
             const [modalShift, setModalShift]         = useState(false);
             const [editShiftRow, setEditShiftRow]     = useState(null); // {id, label, jamMulai, jamSelesai}
+            // ---- Custom Shift Tambah states ----
+            const [addingShift, setAddingShift]       = useState(false);
+            const [newShiftData, setNewShiftData]     = useState({ label: '', jamMulai: '09:00', jamSelesai: '17:00', colorKey: 'orange' });
+            const SHIFT_COLOR_PRESETS = {
+                orange: { bg:'#FFE0B2', text:'#E65100', border:'#FF9800', label:'Oranye' },
+                green:  { bg:'#C8E6C9', text:'#1B5E20', border:'#43A047', label:'Hijau' },
+                pink:   { bg:'#FCE4EC', text:'#880E4F', border:'#E91E63', label:'Pink' },
+                purple: { bg:'#EDE7F6', text:'#4A148C', border:'#7E57C2', label:'Ungu' },
+                teal:   { bg:'#E0F2F1', text:'#004D40', border:'#26A69A', label:'Teal' },
+                indigo: { bg:'#E8EAF6', text:'#1A237E', border:'#5C6BC0', label:'Indigo' },
+            };
 
             // ---- SHIFTS dihitung SETELAH shiftConfig state (agar reaktif) ----
             const DEFAULT_SHIFTS = [
                 { id: 'pagi',  label: 'Pagi',  jamMulai: '08:00', jamSelesai: '14:00', bg: '#FFF176', text: '#5D4037', border: '#F9A825' },
                 { id: 'siang', label: 'Siang', jamMulai: '14:00', jamSelesai: '21:00', bg: '#80DEEA', text: '#006064', border: '#00ACC1' },
-                { id: 'libur', label: 'Libur', jamMulai: '',      jamSelesai: '',      bg: '#F8FAFC', text: '#94a3b8', border: '#e2e8f0' },
             ];
-            const SHIFTS = DEFAULT_SHIFTS.map(s => {
-                const cfg = shiftConfig?.[s.id];
-                return { ...s, jamMulai: cfg?.jamMulai ?? s.jamMulai, jamSelesai: cfg?.jamSelesai ?? s.jamSelesai };
-            });
+            const LIBUR_SHIFT = { id: 'libur', label: 'Libur', jamMulai: '', jamSelesai: '', bg: '#F8FAFC', text: '#94a3b8', border: '#e2e8f0' };
+            const SHIFTS = [
+                ...DEFAULT_SHIFTS.map(s => {
+                    const cfg = shiftConfig?.[s.id];
+                    return { ...s, jamMulai: cfg?.jamMulai ?? s.jamMulai, jamSelesai: cfg?.jamSelesai ?? s.jamSelesai };
+                }),
+                ...(shiftConfig?.customShifts || []),
+                LIBUR_SHIFT,
+            ];
             // ---- Lokasi states ----
             const [locationStatus, setLocationStatus]   = useState('idle'); // 'idle' | 'requesting' | 'granted' | 'denied'
             const [locationData, setLocationData]       = useState(null);   // {lat, lng, accuracy}
@@ -10104,6 +10085,44 @@
 
             const weekJadwal = jadwal[weekKey] || {};
             const cellKey    = (dayIdx, shiftId, lokasiId) => `${dayIdx}_${shiftId}_${lokasiId}`;
+
+            // ---- Tanggal Merah ----
+            const redDays = weekJadwal._redDays || [];
+            const toggleRedDay = async (dayIdx) => {
+                if (readOnly) { showToast('Tidak ada akses edit','error'); return; }
+                const ref = window.doc(colJadwal(), weekKey);
+                const current = [...redDays];
+                const idx = current.indexOf(dayIdx);
+                if (idx >= 0) current.splice(idx, 1); else current.push(dayIdx);
+                try {
+                    await window.setDoc(ref, { _redDays: current, updatedAt: window.serverTimestamp() }, {merge:true});
+                } catch(e) { showToast('Gagal menyimpan','error'); }
+            };
+
+            // ---- Custom Shift CRUD ----
+            const addCustomShift = async () => {
+                if (!newShiftData.label.trim()) return;
+                const id = 'custom_' + Date.now();
+                const preset = SHIFT_COLOR_PRESETS[newShiftData.colorKey] || SHIFT_COLOR_PRESETS.orange;
+                const newShift = { id, label: newShiftData.label.trim(), jamMulai: newShiftData.jamMulai, jamSelesai: newShiftData.jamSelesai, bg: preset.bg, text: preset.text, border: preset.border };
+                const current = shiftConfig?.customShifts || [];
+                const ref = docShiftCfg();
+                try {
+                    await window.setDoc(ref, { customShifts: [...current, newShift], updatedAt: window.serverTimestamp() }, {merge:true});
+                    setNewShiftData({ label: '', jamMulai: '09:00', jamSelesai: '17:00', colorKey: 'orange' });
+                    setAddingShift(false);
+                    showToast('✅ Shift ditambahkan');
+                } catch(e) { showToast('Gagal tambah shift','error'); }
+            };
+            const deleteCustomShift = async (shiftId) => {
+                const current = shiftConfig?.customShifts || [];
+                const updated = current.filter(s => s.id !== shiftId);
+                const ref = docShiftCfg();
+                try {
+                    await window.setDoc(ref, { customShifts: updated, updatedAt: window.serverTimestamp() }, {merge:true});
+                    showToast('Shift dihapus');
+                } catch(e) { showToast('Gagal hapus','error'); }
+            };
             const getCell    = (dayIdx, shiftId, lokasiId) => {
                 const v = weekJadwal[cellKey(dayIdx,shiftId,lokasiId)];
                 if (!v) return [];
@@ -10471,13 +10490,22 @@
                                         <tbody>
                                             {HARI.map((hari, dayIdx) => {
                                                 const isWeekend = dayIdx >= 5;
+                                                const isRedDay  = redDays.includes(dayIdx);
                                                 return SHIFTS.map((shift, si) => (
                                                     <tr key={`${dayIdx}_${shift.id}`} className={si === 0 ? 'border-t-2 border-slate-300' : ''}>
-                                                        {/* HARI (merged 3 baris via rowspan) */}
+                                                        {/* HARI (merged via rowspan) */}
                                                         {si === 0 && (
-                                                            <td rowSpan={3} className={`px-1.5 py-1 font-extrabold text-center border border-slate-200 align-middle ${isWeekend ? 'bg-orange-50 text-orange-700' : 'bg-slate-50 text-slate-800'}`}>
+                                                            <td rowSpan={SHIFTS.length} className={`px-1.5 py-1 font-extrabold text-center border border-slate-200 align-middle relative ${isRedDay ? 'bg-red-50 text-red-700' : isWeekend ? 'bg-orange-50 text-orange-700' : 'bg-slate-50 text-slate-800'}`}>
                                                                 <div style={{fontSize:'11px'}} className="font-extrabold">{hari.toUpperCase()}</div>
-                                                                <div style={{fontSize:'9px'}} className="font-normal text-slate-400 mt-0.5 leading-tight">{fmtTgl(dayDates[dayIdx])}</div>
+                                                                <div style={{fontSize:'9px'}} className={`font-normal mt-0.5 leading-tight ${isRedDay ? 'text-red-400' : 'text-slate-400'}`}>{fmtTgl(dayDates[dayIdx])}</div>
+                                                                {isRedDay && <div style={{fontSize:'9px'}} className="text-red-500 font-bold mt-0.5">🔴</div>}
+                                                                {!readOnly && (
+                                                                    <button
+                                                                        onClick={() => toggleRedDay(dayIdx)}
+                                                                        title={isRedDay ? 'Hapus tandai merah' : 'Tandai tanggal merah'}
+                                                                        className={`absolute top-0.5 right-0.5 w-3.5 h-3.5 rounded-full text-[7px] flex items-center justify-center font-black transition-all ${isRedDay ? 'bg-red-500 text-white' : 'bg-transparent text-slate-300 hover:bg-red-100 hover:text-red-400'}`}
+                                                                    >●</button>
+                                                                )}
                                                             </td>
                                                         )}
                                                         {/* SHIFT LABEL */}
@@ -10492,7 +10520,7 @@
                                                             const ids  = getCell(dayIdx, shift.id, loc.id);
                                                             const isLibur = shift.id === 'libur';
                                                             return (
-                                                                <td key={loc.id} className="px-1 py-0.5 text-center border border-slate-200 relative" style={{background: isLibur ? '#f8fafc' : shift.bg + '60'}}>
+                                                                <td key={loc.id} className="px-1 py-0.5 text-center border border-slate-200 relative" style={{background: isRedDay ? (isLibur ? '#FEE2E2' : '#FEF2F2') : (isLibur ? '#f8fafc' : shift.bg + '60')}}>
                                                                     {/* SLOT 0 */}
                                                                     {[0, 1].filter(idx => idx === 0 || shiftConfig?.doubleSlot).map(slotIdx => {
                                                                         const kId = ids[slotIdx] || null;
@@ -10812,20 +10840,20 @@
                     {/* OVERLAY tutup picker */}
                     {isOpen && <div className="fixed inset-0 z-30" onClick={()=>setPickerTarget(null)} />}
 
-                    {/* ===== MODAL KELOLA SHIFT (JAM) ===== */}
                     {modalShift && (
                         <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-4" style={{background:'rgba(0,0,0,0.5)'}}>
-                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-5 slide-up">
-                                <div className="flex items-center gap-3 mb-4">
+                            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-5 slide-up max-h-[90vh] flex flex-col">
+                                <div className="flex items-center gap-3 mb-4 flex-shrink-0">
                                     <div className="w-9 h-9 rounded-2xl bg-amber-500 text-white flex items-center justify-center"><Icon name="clock" /></div>
                                     <div className="flex-1">
-                                        <p className="font-extrabold text-slate-800">Kelola Jam Shift</p>
-                                        <p className="text-[10px] text-slate-400">Edit jam mulai & selesai tiap shift</p>
+                                        <p className="font-extrabold text-slate-800">Kelola Shift</p>
+                                        <p className="text-[10px] text-slate-400">Edit jam & tambah shift baru</p>
                                     </div>
-                                    <button onClick={()=>{ setModalShift(false); setEditShiftRow(null); }} className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center"><Icon name="xmark" /></button>
+                                    <button onClick={()=>{ setModalShift(false); setEditShiftRow(null); setAddingShift(false); }} className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center"><Icon name="xmark" /></button>
                                 </div>
+                                <div className="overflow-y-auto flex-1 space-y-3 pr-1">
                                 {/* TOGGLE MODE 2 ORANG */}
-                                <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 mb-3">
+                                <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5">
                                     <div>
                                         <p className="font-bold text-slate-700 text-sm">Mode 2 Orang per Shift</p>
                                         <p className="text-[10px] text-slate-400">Tampilkan slot orang ke-2 di tabel jadwal</p>
@@ -10846,8 +10874,12 @@
                                         <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${shiftConfig?.doubleSlot ? 'left-5' : 'left-0.5'}`}></span>
                                     </button>
                                 </div>
-                                <div className="space-y-2">
-                                    {SHIFTS.filter(s=>s.id!=='libur').map(s => (
+
+                                {/* SHIFT BAWAAN (Pagi, Siang) */}
+                                <div>
+                                    <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider mb-2 px-1">Shift Bawaan</p>
+                                    <div className="space-y-2">
+                                    {SHIFTS.filter(s => s.id !== 'libur' && !s.id.startsWith('custom_')).map(s => (
                                         <div key={s.id} className="rounded-xl border-2 overflow-hidden" style={{borderColor: s.border}}>
                                             {editShiftRow?.id === s.id ? (
                                                 <div className="px-3 py-3 space-y-2.5" style={{background: s.bg + '80'}}>
@@ -10856,34 +10888,18 @@
                                                         <div className="flex items-center gap-2 flex-1">
                                                             <div className="flex-1">
                                                                 <label className="text-[10px] font-bold text-slate-500 block mb-1">Jam Mulai</label>
-                                                                <input
-                                                                    type="time"
-                                                                    value={editShiftRow.jamMulai}
-                                                                    onChange={e=>setEditShiftRow({...editShiftRow, jamMulai: e.target.value})}
-                                                                    className="w-full border-2 border-slate-200 focus:border-amber-400 rounded-lg px-2 py-1.5 text-sm outline-none font-bold"
-                                                                />
+                                                                <input type="time" value={editShiftRow.jamMulai} onChange={e=>setEditShiftRow({...editShiftRow, jamMulai: e.target.value})} className="w-full border-2 border-slate-200 focus:border-amber-400 rounded-lg px-2 py-1.5 text-sm outline-none font-bold" />
                                                             </div>
                                                             <span className="text-slate-400 font-bold text-sm mt-4">–</span>
                                                             <div className="flex-1">
                                                                 <label className="text-[10px] font-bold text-slate-500 block mb-1">Jam Selesai</label>
-                                                                <input
-                                                                    type="time"
-                                                                    value={editShiftRow.jamSelesai}
-                                                                    onChange={e=>setEditShiftRow({...editShiftRow, jamSelesai: e.target.value})}
-                                                                    className="w-full border-2 border-slate-200 focus:border-amber-400 rounded-lg px-2 py-1.5 text-sm outline-none font-bold"
-                                                                />
+                                                                <input type="time" value={editShiftRow.jamSelesai} onChange={e=>setEditShiftRow({...editShiftRow, jamSelesai: e.target.value})} className="w-full border-2 border-slate-200 focus:border-amber-400 rounded-lg px-2 py-1.5 text-sm outline-none font-bold" />
                                                             </div>
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-2">
-                                                        <button onClick={()=>setEditShiftRow(null)}
-                                                            className="flex-1 py-2 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-xl text-sm font-bold transition-all active:scale-95">
-                                                            Batal
-                                                        </button>
-                                                        <button onClick={()=>saveShiftConfig(s.id, editShiftRow.jamMulai, editShiftRow.jamSelesai)}
-                                                            className="flex-1 py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl text-sm font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow">
-                                                            <Icon name="check" /> Simpan
-                                                        </button>
+                                                        <button onClick={()=>setEditShiftRow(null)} className="flex-1 py-2 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-xl text-sm font-bold transition-all active:scale-95">Batal</button>
+                                                        <button onClick={()=>saveShiftConfig(s.id, editShiftRow.jamMulai, editShiftRow.jamSelesai)} className="flex-1 py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl text-sm font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow"><Icon name="check" /> Simpan</button>
                                                     </div>
                                                 </div>
                                             ) : (
@@ -10891,21 +10907,83 @@
                                                     <div className="w-8 h-8 rounded-xl flex items-center justify-center font-extrabold text-xs flex-shrink-0" style={{background: s.bg, color: s.text, border: `2px solid ${s.border}`}}>{s.label.charAt(0)}</div>
                                                     <div className="flex-1">
                                                         <p className="font-extrabold text-sm" style={{color: s.text}}>{s.label}</p>
-                                                        <p className="text-[11px] font-bold text-slate-500 flex items-center gap-1">
-                                                            <Icon name="clock" className="text-[10px]" />
-                                                            {s.jamMulai} – {s.jamSelesai}
-                                                        </p>
+                                                        <p className="text-[11px] font-bold text-slate-500 flex items-center gap-1"><Icon name="clock" className="text-[10px]" />{s.jamMulai} – {s.jamSelesai}</p>
                                                     </div>
-                                                    <button onClick={()=>setEditShiftRow({id:s.id, jamMulai:s.jamMulai, jamSelesai:s.jamSelesai})}
-                                                        className="w-8 h-8 bg-amber-50 hover:bg-amber-100 text-amber-500 rounded-lg flex items-center justify-center text-xs transition-all active:scale-95 flex-shrink-0">
-                                                        <Icon name="pen" />
-                                                    </button>
+                                                    <button onClick={()=>setEditShiftRow({id:s.id, jamMulai:s.jamMulai, jamSelesai:s.jamSelesai})} className="w-8 h-8 bg-amber-50 hover:bg-amber-100 text-amber-500 rounded-lg flex items-center justify-center text-xs transition-all active:scale-95 flex-shrink-0"><Icon name="pen" /></button>
                                                 </div>
                                             )}
                                         </div>
                                     ))}
+                                    </div>
                                 </div>
-                                <p className="text-[10px] text-slate-400 mt-3 text-center">Perubahan langsung tersimpan & berlaku untuk semua</p>
+
+                                {/* SHIFT KUSTOM */}
+                                <div>
+                                    <div className="flex items-center justify-between mb-2 px-1">
+                                        <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Shift Tambahan</p>
+                                        {!addingShift && (
+                                            <button onClick={()=>setAddingShift(true)} className="flex items-center gap-1 px-2.5 py-1 bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-bold rounded-lg shadow transition-all active:scale-95">
+                                                <Icon name="plus" /> Tambah Shift
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Daftar custom shifts */}
+                                    <div className="space-y-2">
+                                    {(shiftConfig?.customShifts || []).map(s => (
+                                        <div key={s.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl border-2" style={{background: s.bg + '50', borderColor: s.border}}>
+                                            <div className="w-8 h-8 rounded-xl flex items-center justify-center font-extrabold text-xs flex-shrink-0" style={{background: s.bg, color: s.text, border: `2px solid ${s.border}`}}>{(s.label||'S').charAt(0)}</div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-extrabold text-sm truncate" style={{color: s.text}}>{s.label}</p>
+                                                <p className="text-[11px] font-bold text-slate-500 flex items-center gap-1"><Icon name="clock" className="text-[10px]" />{s.jamMulai} – {s.jamSelesai}</p>
+                                            </div>
+                                            <button onClick={()=>deleteCustomShift(s.id)} className="w-8 h-8 bg-red-50 hover:bg-red-100 text-red-400 rounded-lg flex items-center justify-center text-xs transition-all active:scale-95 flex-shrink-0"><Icon name="trash" /></button>
+                                        </div>
+                                    ))}
+                                    {(shiftConfig?.customShifts||[]).length === 0 && !addingShift && (
+                                        <p className="text-[11px] text-slate-400 text-center py-3 bg-slate-50 rounded-xl border border-dashed border-slate-200">Belum ada shift tambahan</p>
+                                    )}
+                                    </div>
+
+                                    {/* Form tambah shift baru */}
+                                    {addingShift && (
+                                        <div className="mt-2 bg-emerald-50 border-2 border-emerald-200 rounded-xl p-3 space-y-2.5">
+                                            <p className="text-xs font-extrabold text-emerald-700 flex items-center gap-1.5"><Icon name="plus-circle" /> Shift Baru</p>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-slate-500 block mb-1">Nama Shift</label>
+                                                <input value={newShiftData.label} onChange={e=>setNewShiftData({...newShiftData,label:e.target.value})} placeholder="Contoh: Malam, Tengah Malam..." className="w-full border-2 border-slate-200 focus:border-emerald-400 rounded-xl px-3 py-2 text-sm outline-none font-bold" autoFocus />
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <div className="flex-1">
+                                                    <label className="text-[10px] font-bold text-slate-500 block mb-1">Jam Mulai</label>
+                                                    <input type="time" value={newShiftData.jamMulai} onChange={e=>setNewShiftData({...newShiftData,jamMulai:e.target.value})} className="w-full border-2 border-slate-200 focus:border-emerald-400 rounded-xl px-2 py-2 text-sm outline-none font-bold" />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <label className="text-[10px] font-bold text-slate-500 block mb-1">Jam Selesai</label>
+                                                    <input type="time" value={newShiftData.jamSelesai} onChange={e=>setNewShiftData({...newShiftData,jamSelesai:e.target.value})} className="w-full border-2 border-slate-200 focus:border-emerald-400 rounded-xl px-2 py-2 text-sm outline-none font-bold" />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-bold text-slate-500 block mb-1.5">Warna</label>
+                                                <div className="flex gap-1.5 flex-wrap">
+                                                    {Object.entries(SHIFT_COLOR_PRESETS).map(([key, preset]) => (
+                                                        <button key={key} onClick={()=>setNewShiftData({...newShiftData,colorKey:key})}
+                                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border-2 transition-all ${newShiftData.colorKey===key ? 'ring-2 ring-offset-1 ring-slate-400 scale-105' : ''}`}
+                                                            style={{background:preset.bg, color:preset.text, borderColor:preset.border}}>
+                                                            {preset.label}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2 pt-1">
+                                                <button onClick={()=>{setAddingShift(false);setNewShiftData({label:'',jamMulai:'09:00',jamSelesai:'17:00',colorKey:'orange'});}} className="flex-1 py-2 bg-slate-200 hover:bg-slate-300 text-slate-600 rounded-xl text-sm font-bold transition-all active:scale-95">Batal</button>
+                                                <button onClick={addCustomShift} disabled={!newShiftData.label.trim()} className="flex-1 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 text-white rounded-xl text-sm font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow"><Icon name="check" /> Simpan</button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                                </div>
+                                <p className="text-[10px] text-slate-400 mt-3 text-center flex-shrink-0">Perubahan langsung tersimpan & berlaku untuk semua</p>
                             </div>
                         </div>
                     )}
