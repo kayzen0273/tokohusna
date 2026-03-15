@@ -6969,9 +6969,14 @@
             const [historySearch, setHistorySearch] = useState('');
             const [racikanInfoModal, setRacikanInfoModal] = useState(null);
             const [filterStatus, setFilterStatus] = useState('all'); 
-            const [filterKasir, setFilterKasir] = useState('all');
+            const [filterKasir, setFilterKasir] = useState([]); // array untuk multi-select
             const [filterPayment, setFilterPayment] = useState('all');
             const [sortOrder, setSortOrder] = useState('newest');
+            const [histFilterModalOpen, setHistFilterModalOpen] = useState(false);
+            const [tempFilterStatus, setTempFilterStatus] = useState('all');
+            const [tempFilterKasir, setTempFilterKasir] = useState([]); // array
+            const [tempFilterPayment, setTempFilterPayment] = useState('all');
+            const [histFilterActiveSection, setHistFilterActiveSection] = useState(null);
             const [registeredUsers, setRegisteredUsers] = useState([]);
 
             const [uploadingProof, setUploadingProof] = useState(false);
@@ -7199,7 +7204,7 @@
                     });
                 }
                 if (filterStatus !== 'all') { data = data.filter(tx => tx.status === filterStatus); }
-                if (filterKasir !== 'all') { data = data.filter(tx => tx.cashierName === filterKasir); }
+                if (filterKasir.length > 0) { data = data.filter(tx => filterKasir.includes(tx.cashierName)); }
                 if (filterPayment !== 'all') { data = data.filter(tx => (tx.paymentMethod || 'tunai') === filterPayment); }
                 data.sort((a, b) => {
                     const dateA = a.date.seconds ? a.date.toDate() : new Date(a.date);
@@ -7501,13 +7506,149 @@
                     </div>
                     <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm mb-4 space-y-3">
                          <div className="relative"><input type="text" placeholder="Cari transaksi, barang, dokter, pasien..." className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-200 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none text-sm font-medium" value={historySearch} onChange={(e) => setHistorySearch(e.target.value)} /><Icon name="magnifying-glass" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm" /></div>
-                        <div className="flex gap-2 flex-wrap">
-                        <div className="relative flex-1 min-w-[120px]"><select className="w-full appearance-none pl-3 pr-8 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-sky-500" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} ><option value="all">Semua Status</option><option value="success">Sukses</option><option value="partial">Retur Sebagian</option><option value="returned">Retur Full (Batal)</option></select><Icon name="filter" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" /></div>
-                        <div className="relative flex-1 min-w-[120px]"><select className="w-full appearance-none pl-3 pr-8 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-sky-500" value={filterPayment} onChange={(e) => setFilterPayment(e.target.value)}><option value="all">Semua Pembayaran</option><option value="tunai">💵 Tunai</option><option value="qris">💳 QRIS</option><option value="transfer">🏦 Transfer</option></select><Icon name="credit-card" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" /></div>
-                        {uniqueKasirList.length > 0 && (<div className="relative flex-1 min-w-[120px]"><select className="w-full appearance-none pl-3 pr-8 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-sky-500" value={filterKasir} onChange={(e) => setFilterKasir(e.target.value)}><option value="all">Semua Kasir</option>{uniqueKasirList.map(u => (<option key={u.name} value={u.name}>{u.isActive ? u.name : `${u.name} (nonaktif)`}</option>))}</select><Icon name="user-tie" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" /></div>)}
+                        <div className="flex gap-2 flex-wrap items-center">
+                        {/* Tombol Filter */}
+                        {(() => {
+                            const activeCount = [filterStatus !== 'all', filterKasir.length > 0, filterPayment !== 'all'].filter(Boolean).length;
+                            return (
+                                <button
+                                    onClick={() => {
+                                        setTempFilterStatus(filterStatus);
+                                        setTempFilterKasir([...filterKasir]);
+                                        setTempFilterPayment(filterPayment);
+                                        setHistFilterActiveSection(null);
+                                        setHistFilterModalOpen(true);
+                                    }}
+                                    className={`relative flex items-center gap-1.5 px-4 py-2.5 rounded-lg border text-xs font-bold transition-all shadow-sm ${activeCount > 0 ? 'bg-teal-600 border-teal-600 text-white' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'}`}
+                                >
+                                    <Icon name="filter" className="text-xs" />
+                                    <span>Filter</span>
+                                    {activeCount > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">{activeCount}</span>}
+                                </button>
+                            );
+                        })()}
+                        {/* Sort */}
                         <div className="relative flex-1 min-w-[120px]"><select className="w-full appearance-none pl-3 pr-8 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-xs font-bold text-slate-600 outline-none focus:ring-2 focus:ring-sky-500" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} ><option value="newest">Terbaru</option><option value="oldest">Terlama</option><option value="highest">Total Terbanyak</option><option value="lowest">Total Tersedikit</option></select><Icon name="arrow-down-wide-short" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none" /></div>
-                        {(filterKasir !== 'all' || filterPayment !== 'all' || filterStatus !== 'all') && (<button onClick={() => { setFilterKasir('all'); setFilterPayment('all'); setFilterStatus('all'); }} className="px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-600 text-xs font-bold hover:bg-red-100 transition-all flex items-center gap-1 whitespace-nowrap"><Icon name="xmark" /> Reset Filter</button>)}
                     </div>
+                    {/* Active filter chips/tags */}
+                    {(filterStatus !== 'all' || filterKasir.length > 0 || filterPayment !== 'all') && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                            {filterStatus !== 'all' && (
+                                <span className="flex items-center gap-1 bg-teal-50 border border-teal-200 text-teal-700 text-xs font-bold px-2.5 py-1 rounded-full">
+                                    {{success:'✅ Sukses',partial:'⚠️ Retur Sebagian',returned:'❌ Batal'}[filterStatus]}
+                                    <button onClick={() => setFilterStatus('all')} className="ml-0.5 text-teal-400 hover:text-teal-700 leading-none font-black">✕</button>
+                                </span>
+                            )}
+                            {filterKasir.map(k => (
+                                <span key={k} className="flex items-center gap-1 bg-teal-50 border border-teal-200 text-teal-700 text-xs font-bold px-2.5 py-1 rounded-full">
+                                    <Icon name="user-tie" className="text-[9px]" /> {k}
+                                    <button onClick={() => setFilterKasir(filterKasir.filter(x => x !== k))} className="ml-0.5 text-teal-400 hover:text-teal-700 leading-none font-black">✕</button>
+                                </span>
+                            ))}
+                            {filterPayment !== 'all' && (
+                                <span className="flex items-center gap-1 bg-teal-50 border border-teal-200 text-teal-700 text-xs font-bold px-2.5 py-1 rounded-full">
+                                    {{tunai:'💵 Tunai',qris:'💳 QRIS',transfer:'🏦 Transfer'}[filterPayment]}
+                                    <button onClick={() => setFilterPayment('all')} className="ml-0.5 text-teal-400 hover:text-teal-700 leading-none font-black">✕</button>
+                                </span>
+                            )}
+                            <button onClick={() => { setFilterStatus('all'); setFilterKasir([]); setFilterPayment('all'); }} className="flex items-center gap-1 bg-red-50 border border-red-200 text-red-500 text-xs font-bold px-2.5 py-1 rounded-full hover:bg-red-100 transition-all">
+                                <Icon name="xmark" /> Reset
+                            </button>
+                        </div>
+                    )}
+                    {/* Filter Modal - bottom sheet style sama seperti faktur pembelian */}
+                    {histFilterModalOpen && (
+                        <div className="fixed inset-0 z-50 flex flex-col justify-end" style={{background:'rgba(0,0,0,0.45)'}}>
+                            <div onClick={() => setHistFilterModalOpen(false)} className="absolute inset-0" />
+                            <div className="relative bg-white rounded-t-2xl shadow-2xl w-full max-w-lg mx-auto" style={{maxHeight:'90vh',overflowY:'auto'}}>
+                                {/* Header */}
+                                <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-slate-100">
+                                    <div className="flex items-center gap-3">
+                                        <button onClick={() => setHistFilterModalOpen(false)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-500"><Icon name="xmark" /></button>
+                                        <h3 className="text-xl font-extrabold text-slate-800">Filter</h3>
+                                    </div>
+                                    <button onClick={() => { setFilterStatus(tempFilterStatus); setFilterKasir([...tempFilterKasir]); setFilterPayment(tempFilterPayment); setHistFilterModalOpen(false); }} className="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm rounded-xl transition-all active:scale-95">Pasang</button>
+                                </div>
+                                {/* Filter rows */}
+                                <div className="px-5 py-2">
+                                    {/* Kasir - multi select */}
+                                    {uniqueKasirList.length > 0 && (
+                                        <div className="border-b border-slate-100">
+                                            <button onClick={() => setHistFilterActiveSection(histFilterActiveSection === 'kasir' ? null : 'kasir')} className="w-full flex items-center justify-between py-4 text-left">
+                                                <span className="font-bold text-slate-800 text-sm">Kasir</span>
+                                                <span className={`flex items-center gap-1.5 text-xs font-bold border rounded-lg px-3 py-1.5 transition-all ${tempFilterKasir.length > 0 ? 'border-teal-500 text-teal-600 bg-teal-50' : 'border-slate-200 text-teal-600'}`}>
+                                                    <Icon name="pen" className="text-[10px]" /> {tempFilterKasir.length > 0 ? `${tempFilterKasir.length} dipilih` : 'Ubah'}
+                                                </span>
+                                            </button>
+                                            {histFilterActiveSection === 'kasir' && (
+                                                <div className="pb-4 flex flex-col gap-1">
+                                                    {uniqueKasirList.map(u => {
+                                                        const checked = tempFilterKasir.includes(u.name);
+                                                        return (
+                                                            <button key={u.name} onClick={() => setTempFilterKasir(checked ? tempFilterKasir.filter(x=>x!==u.name) : [...tempFilterKasir, u.name])}
+                                                                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold border transition-all text-left ${checked ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                                                                <span className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 ${checked ? 'border-white bg-white' : 'border-slate-300'}`}>
+                                                                    {checked && <Icon name="check" className="text-teal-600 text-[9px]" />}
+                                                                </span>
+                                                                {u.isActive ? u.name : `${u.name} (nonaktif)`}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                    {tempFilterKasir.length > 0 && (
+                                                        <button onClick={() => setTempFilterKasir([])} className="mt-1 text-xs text-red-500 font-bold hover:text-red-700 text-left px-1">✕ Hapus semua pilihan kasir</button>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    {/* Tipe Transaksi */}
+                                    <div className="border-b border-slate-100">
+                                        <button onClick={() => setHistFilterActiveSection(histFilterActiveSection === 'status' ? null : 'status')} className="w-full flex items-center justify-between py-4 text-left">
+                                            <span className="font-bold text-slate-800 text-sm">Tipe transaksi</span>
+                                            <span className={`flex items-center gap-1.5 text-xs font-bold border rounded-lg px-3 py-1.5 transition-all ${tempFilterStatus !== 'all' ? 'border-teal-500 text-teal-600 bg-teal-50' : 'border-slate-200 text-teal-600'}`}>
+                                                <Icon name="pen" className="text-[10px]" /> {tempFilterStatus !== 'all' ? ({success:'Sukses',partial:'Retur Sebagian',returned:'Retur Full'}[tempFilterStatus]) : 'Ubah'}
+                                            </span>
+                                        </button>
+                                        {histFilterActiveSection === 'status' && (
+                                            <div className="pb-4 flex flex-wrap gap-2">
+                                                {[{value:'all',label:'Semua'},{value:'success',label:'Sukses'},{value:'partial',label:'Retur Sebagian'},{value:'returned',label:'Retur Full (Batal)'}].map(opt => (
+                                                    <button key={opt.value} onClick={() => { setTempFilterStatus(opt.value); setHistFilterActiveSection(null); }}
+                                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${tempFilterStatus === opt.value ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                                                        {opt.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {/* Bayar */}
+                                    <div className="border-b border-slate-100">
+                                        <button onClick={() => setHistFilterActiveSection(histFilterActiveSection === 'payment' ? null : 'payment')} className="w-full flex items-center justify-between py-4 text-left">
+                                            <span className="font-bold text-slate-800 text-sm">Bayar</span>
+                                            <span className={`flex items-center gap-1.5 text-xs font-bold border rounded-lg px-3 py-1.5 transition-all ${tempFilterPayment !== 'all' ? 'border-teal-500 text-teal-600 bg-teal-50' : 'border-slate-200 text-teal-600'}`}>
+                                                <Icon name="pen" className="text-[10px]" /> {tempFilterPayment !== 'all' ? ({tunai:'💵 Tunai',qris:'💳 QRIS',transfer:'🏦 Transfer'}[tempFilterPayment]) : 'Ubah'}
+                                            </span>
+                                        </button>
+                                        {histFilterActiveSection === 'payment' && (
+                                            <div className="pb-4 flex flex-wrap gap-2">
+                                                {[{value:'all',label:'Semua'},{value:'tunai',label:'💵 Tunai'},{value:'qris',label:'💳 QRIS'},{value:'transfer',label:'🏦 Transfer'}].map(opt => (
+                                                    <button key={opt.value} onClick={() => { setTempFilterPayment(opt.value); setHistFilterActiveSection(null); }}
+                                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${tempFilterPayment === opt.value ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                                                        {opt.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    {/* Reset */}
+                                    {(tempFilterStatus !== 'all' || tempFilterKasir.length > 0 || tempFilterPayment !== 'all') && (
+                                        <button onClick={() => { setTempFilterStatus('all'); setTempFilterKasir([]); setTempFilterPayment('all'); }} className="mt-4 mb-2 w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-red-200 text-red-500 text-sm font-bold hover:bg-red-50 transition-all">
+                                            <Icon name="xmark" /> Reset Filter
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     </div>
                     <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1">
                         {loading ? <div className="text-center py-10 text-slate-400"><div className="typing-dot bg-sky-500"></div> Loading...</div> : processedTransactions.length === 0 ? (<div className="text-center py-12 flex flex-col items-center opacity-60"><div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3"><Icon name="calendar-xmark" className="text-2xl text-slate-400" /></div><p className="font-semibold text-slate-500">Tidak ada transaksi</p><p className="text-xs text-slate-400">Sesuai filter pencarian</p></div>) : processedTransactions.map(tx => (<div key={tx.id} onClick={() => setSelectedTx(tx)} className={`p-4 rounded-2xl border shadow-sm cursor-pointer transition-all hover:shadow-md ${tx.status === 'returned' ? 'bg-red-50 border-red-100 opacity-80' : 'bg-white border-slate-100 hover:border-sky-300'}`}><div className="flex justify-between items-start mb-2"><div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{(() => { const d = new Date(tx.date.seconds ? tx.date.toDate() : tx.date); const hari = d.toLocaleDateString('id-ID', {weekday:'short'}); const tgl = d.toLocaleDateString('id-ID', {day:'numeric', month:'short'}); const jam = d.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}); return `${hari}, ${tgl}  •  ${jam} WIB${tx.storeName ? ` • ${tx.storeName}` : ''}`; })()}</p><h4 className={`font-black text-lg ${tx.status === 'returned' ? 'text-red-500 line-through' : 'text-slate-800'}`}>{formatRupiah(tx.total)}</h4></div>{tx.status === 'returned' ? <span className="bg-red-100 text-red-600 text-[10px] font-bold px-2 py-1 rounded-full">BATAL</span> : (tx.status === 'partial' ? <span className="bg-amber-100 text-amber-600 text-[10px] font-bold px-2 py-1 rounded-full">SEBAGIAN</span> : <span className="bg-green-100 text-green-600 text-[10px] font-bold px-2 py-1 rounded-full">SUKSES</span>)}</div><div className="text-xs text-slate-500 truncate">{tx.items.map(i => i.name).join(', ')}</div><div className="mt-3 flex justify-between items-center border-t border-dashed border-slate-200 pt-2"><div className="flex items-center gap-2 flex-wrap"><span className="text-[10px] font-bold text-slate-400">{tx.items.length} Barang</span>{tx.cashierName && <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1"><Icon name="user-tie" className="text-[9px]" /> {tx.cashierName}</span>}{tx.items.some(i=>i.isRacikanGroup) && (() => { const ri = tx.items.find(i=>i.isRacikanGroup)?.racikanInfo; return (<span className="text-[10px] bg-teal-100 text-teal-700 font-black px-1.5 py-0.5 rounded-full flex items-center gap-1">R/ {ri?.pasien ? ri.pasien.split(',')[0] : ''}</span>); })()}</div><div className="flex items-center gap-2">{tx.paymentProofImage && <span className="text-[10px] bg-teal-100 text-teal-700 font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1"><Icon name="camera" /> Bukti</span>}{tx.paymentMethod && tx.paymentMethod !== 'tunai' && <span className="text-[10px] bg-sky-100 text-sky-700 font-bold px-1.5 py-0.5 rounded-full">{tx.paymentMethod === 'qris' ? 'QRIS' : 'Transfer'}</span>}<span className="text-[10px] text-sky-600 font-bold flex items-center gap-1">Lihat Detail <Icon name="chevron-right" /></span></div></div></div>))}
