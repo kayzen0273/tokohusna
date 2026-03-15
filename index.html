@@ -3730,7 +3730,7 @@
                         <button onClick={openFilterModal} className={`relative flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-bold transition-all shadow-sm ${activeFilterCount > 0 ? 'bg-teal-600 border-teal-600 text-white' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
                             <Icon name="sliders" />
                             <span>Filter</span>
-                            {activeFilterCount > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">{activeFilterCount}</span>}
+
                         </button>
                     </div>
                     {/* Filter active chips */}
@@ -7523,7 +7523,7 @@
                                 >
                                     <Icon name="filter" className="text-xs" />
                                     <span>Filter</span>
-                                    {activeCount > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">{activeCount}</span>}
+
                                 </button>
                             );
                         })()}
@@ -7551,9 +7551,7 @@
                                     <button onClick={() => setFilterPayment('all')} className="ml-0.5 text-teal-400 hover:text-teal-700 leading-none font-black">✕</button>
                                 </span>
                             )}
-                            <button onClick={() => { setFilterStatus('all'); setFilterKasir([]); setFilterPayment('all'); }} className="flex items-center gap-1 bg-red-50 border border-red-200 text-red-500 text-xs font-bold px-2.5 py-1 rounded-full hover:bg-red-100 transition-all">
-                                <Icon name="xmark" /> Reset
-                            </button>
+
                         </div>
                     )}
                     {/* Filter Modal - bottom sheet style sama seperti faktur pembelian */}
