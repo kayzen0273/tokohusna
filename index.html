@@ -422,6 +422,8 @@
             // Fitur Daftar Barang
             enableCopyWA: true,
             enableExportExcel: true,
+            // Fitur Absensi
+            requireAbsensiGps: true,
         };
 
         // --- BLUETOOTH PRINTER HELPERS ---
@@ -1244,6 +1246,7 @@
                 { key: 'enableTransferBarang', label: 'Transfer Barang', icon: 'right-left', desc: 'Transfer stok antar toko' },
                 { key: 'enableCopyWA', label: 'Salin WhatsApp', icon: 'whatsapp', desc: 'Tombol salin daftar barang ke WA' },
                 { key: 'enableExportExcel', label: 'Export Excel', icon: 'file-excel', desc: 'Tombol export daftar barang ke Excel' },
+                { key: 'requireAbsensiGps', label: 'GPS Wajib Absensi', icon: 'location-dot', desc: 'Wajibkan GPS saat karyawan melakukan absensi' },
             ];
             const settingsAccessList = [
                 { key: 'enableSettingsToko', label: 'Profil & Cabang Toko', icon: 'shop', desc: 'Edit nama, alamat toko' },
@@ -10427,14 +10430,17 @@
             /* ---------- Absensi: Submit ---------- */
             const submitAbsensi = async () => {
                 if (!capturedPhoto) { showToast('Foto selfie wajib diambil!', 'error'); return; }
-                // Minta lokasi jika belum granted
+                const gpsRequired = settings?.requireAbsensiGps !== false;
+                // Minta lokasi jika GPS diwajibkan dan belum granted
                 let locData = locationData;
-                if (locationStatus !== 'granted' || !locData) {
-                    try {
-                        locData = await requestLocation();
-                    } catch(e) {
-                        showToast('❌ Aktifkan izin lokasi untuk menyimpan absensi!', 'error');
-                        return;
+                if (gpsRequired) {
+                    if (locationStatus !== 'granted' || !locData) {
+                        try {
+                            locData = await requestLocation();
+                        } catch(e) {
+                            showToast('❌ Aktifkan izin lokasi untuk menyimpan absensi!', 'error');
+                            return;
+                        }
                     }
                 }
                 setSubmittingAbsensi(true);
@@ -10797,7 +10803,8 @@
                                         className="w-full border-2 border-slate-200 focus:border-emerald-400 rounded-xl px-3 py-2.5 text-sm outline-none text-slate-700" />
                                 </div>
 
-                                {/* ---- LOKASI GPS ---- */}
+                                {/* ---- LOKASI GPS (hanya jika diwajibkan admin) ---- */}
+                                {settings?.requireAbsensiGps !== false && (
                                 <div>
                                     <label className="text-[11px] font-bold text-slate-600 block mb-1.5">📍 Lokasi GPS <span className="text-red-500">*</span></label>
                                     {locationStatus === 'idle' && (
@@ -10847,6 +10854,7 @@
                                         </div>
                                     )}
                                 </div>
+                                )}
 
                                 {/* ---- KAMERA SELFIE ---- */}
                                 <div>
@@ -10894,17 +10902,17 @@
                                 </div>
 
                                 {/* Submit */}
-                                {locationStatus === 'denied' && (
+                                {settings?.requireAbsensiGps !== false && locationStatus === 'denied' && (
                                     <div className="text-[11px] text-center text-red-500 font-bold bg-red-50 rounded-xl py-2 border border-red-200">
                                         ❌ Izin lokasi wajib diaktifkan sebelum simpan absensi
                                     </div>
                                 )}
                                 <button
                                     onClick={submitAbsensi}
-                                    disabled={submittingAbsensi || !capturedPhoto || locationStatus === 'denied'}
+                                    disabled={submittingAbsensi || !capturedPhoto || (settings?.requireAbsensiGps !== false && locationStatus === 'denied')}
                                     className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-40 text-white font-extrabold text-sm rounded-2xl shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2">
                                     {submittingAbsensi ? <><Icon name="spinner" className="animate-spin" /> Menyimpan...</>
-                                    : locationStatus === 'requesting' ? <><Icon name="spinner" className="animate-spin" /> Mendapatkan lokasi...</>
+                                    : (settings?.requireAbsensiGps !== false && locationStatus === 'requesting') ? <><Icon name="spinner" className="animate-spin" /> Mendapatkan lokasi...</>
                                     : <><Icon name="check" /> Simpan Absensi</>}
                                 </button>
                             </div>
@@ -12756,7 +12764,7 @@
                         {activeTab === 'settings' && (<SettingsView settings={settingsData} onSave={handleSaveSettings} loading={submitting} authSession={authSession} onUpdateSession={(newSession) => { setAuthSession(newSession); saveSession(newSession); }} />)}
                         {activeTab === 'pengguna_akun' && (<PenggunaAkunView authSession={authSession} onUpdateSession={(newSession) => { setAuthSession(newSession); saveSession(newSession); }} showToast={showToast} />)}
                         {activeTab === 'catatan' && (<PapanCatatan user={user} readOnly={menuItems.find(m=>m.id==='catatan')?.readOnly} />)}
-                        {activeTab === 'jadwal_shift' && (<JadwalShiftView user={user} showToast={showToast} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='jadwal_shift')?.readOnly} isOwner={isOwner} authSession={authSession} />)}
+                        {activeTab === 'jadwal_shift' && (<JadwalShiftView user={user} showToast={showToast} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='jadwal_shift')?.readOnly} isOwner={isOwner} authSession={authSession} settings={settingsData} />)}
                         {activeTab === 'transfer_barang' && (<TransferBarangView user={user} showToast={showToast} rawInventory={rawInventory} settings={settingsData} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='transfer_barang')?.readOnly} authSession={authSession} />)}
                     </main>
                     <ConfirmModal isOpen={deleteModal.show} title="Hapus Barang?" message={`Yakin ingin menghapus permanen "${deleteModal.item?.name}"? Barang ini akan hilang dari SEMUA toko.`} onConfirm={handleDelete} onCancel={() => setDeleteModal({ show: false, item: null })} />
