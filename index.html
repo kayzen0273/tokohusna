@@ -3407,7 +3407,7 @@
                         dueDate: invoiceData.dueDate ? new Date(invoiceData.dueDate).toISOString() : null, 
                         isPaid: invoiceData.isPaid, 
                         isConsignment: invoiceData.isConsignment || false,
-                        items: finalItems.map(item => ({ id: item.id, name: item.name, qty: item.qty, price: item.price, buyPrice: item.buyPrice || 0, discountBeli: item.discountBeli || 0, discountBeliType: item.discountBeliType || '%' })),
+                        items: finalItems.map(item => ({ id: item.id, name: item.name, qty: item.qty, price: item.price, buyPrice: item.buyPrice || 0, discountBeli: item.discountBeli || 0, discountBeliType: item.discountBeliType || '%', batchNo: item.batchNo || '' })),
                         updatedAt: window.serverTimestamp(),
                         ...(attachmentData ? { attachmentData, attachmentType, attachmentName } : {})
                     };
