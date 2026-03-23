@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistem Kasir Toko Husna (V52 - Tambah Shift & Tanggal Merah)</title>
+    <title>Sistem Kasir Toko Husna (V58 - Fast/Slow Moving Barang)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -277,6 +277,24 @@
 
         // --- CHANGELOG / NOTIFIKASI UPDATE ---
         const CHANGELOG = [
+            {
+                id: 'v58_1',
+                version: 'v58.1',
+                date: '23 Mar 2025',
+                title: 'Fast / Normal / Slow Moving + Stok Mati',
+                tag: 'Fitur Baru',
+                tagColor: 'bg-green-100 text-green-700',
+                icon: 'chart-bar',
+                isNew: true,
+                items: [
+                    '⚡ Widget baru di Dashboard: 4 kategori — Fast, Normal, Slow Moving, dan Stok Mati',
+                    '💀 Stok Mati = barang yang ada stok fisik tapi tidak terjual sama sekali dalam periode',
+                    '📊 Klasifikasi akurat: hanya dari barang yang terjual — Top 25% Fast, Bottom 25% Slow, Tengah Normal',
+                    '💰 Stok Mati tampilkan nilai modal tertahan (harga beli × stok)',
+                    '📅 Filter periode 30, 60, atau 90 hari terakhir',
+                    '📋 Penjelasan cara hitung tampil langsung di widget untuk transparansi',
+                ]
+            },
             {
                 id: 'v50_1',
                 version: 'v50.1',
@@ -8097,6 +8115,99 @@
             const expiringItems = useMemo(() => { const today = new Date(); today.setHours(0,0,0,0); const threeMonthsLater = new Date(today); threeMonthsLater.setMonth(today.getMonth() + 3); return items.filter(i => { if (!i.exp) return false; const expDate = new Date(i.exp); return expDate <= threeMonthsLater; }).sort((a,b) => new Date(a.exp) - new Date(b.exp)); }, [items]);
             const getDaysRemaining = (dateStr) => { const today = new Date(); today.setHours(0,0,0,0); const exp = new Date(dateStr); return Math.ceil((exp - today) / (1000 * 60 * 60 * 24)); };
 
+            // ---- FAST / SLOW MOVING ----
+            const [fsmTransactions, setFsmTransactions] = useState([]);
+            const [fsmLoading, setFsmLoading] = useState(true);
+            const [fsmPeriod, setFsmPeriod] = useState(30); // 30 | 60 | 90 hari
+            const [fsmActiveTab, setFsmActiveTab] = useState('fast'); // 'fast' | 'normal' | 'slow'
+
+            useEffect(() => {
+                setFsmLoading(true);
+                const q = window.query(
+                    window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions'),
+                    window.orderBy('date', 'desc'),
+                    window.limit(1000)
+                );
+                const unsub = window.onSnapshot(q, (snap) => {
+                    setFsmTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                    setFsmLoading(false);
+                }, () => setFsmLoading(false));
+                return () => unsub();
+            }, []);
+
+            const fsmData = useMemo(() => {
+                const cutoff = new Date();
+                cutoff.setDate(cutoff.getDate() - fsmPeriod);
+                cutoff.setHours(0, 0, 0, 0);
+
+                // Hitung total terjual per item dalam periode
+                const soldMap = {};
+                fsmTransactions.forEach(tx => {
+                    if (tx.status === 'returned') return;
+                    const txDate = tx.date?.toDate ? tx.date.toDate() : (tx.date ? new Date(tx.date) : null);
+                    if (!txDate || txDate < cutoff) return;
+                    (tx.items || []).forEach(item => {
+                        const netQty = (item.cartQty || 0) - (item.returnedQty || 0);
+                        if (netQty <= 0) return;
+                        const key = item.id || item.name;
+                        if (!soldMap[key]) soldMap[key] = { sold: 0 };
+                        soldMap[key].sold += netQty;
+                    });
+                });
+
+                // Gabungkan dengan seluruh inventory
+                const allItems = items.map(inv => {
+                    const s = soldMap[inv.id] || soldMap[inv.name];
+                    return {
+                        id: inv.id,
+                        name: inv.name,
+                        sold: s ? s.sold : 0,
+                        unit: inv.unit || '',
+                        qty: safeNumber(inv.qty),
+                        rack: inv.rack,
+                        costPrice: safeNumber(inv.costPrice),
+                        price: safeNumber(inv.price),
+                    };
+                });
+
+                if (allItems.length === 0) return { fast: [], normal: [], slow: [], dead: [], total: 0 };
+
+                // ── STOK MATI: sama sekali tidak terjual dalam periode (qty berapapun)
+                // Ini mencakup: stok ada tapi tak laku, MAUPUN stok sudah habis tapi tak ada penjualan baru
+                const dead = allItems
+                    .filter(i => i.sold === 0)
+                    .sort((a, b) => b.qty - a.qty); // urut stok terbanyak di atas
+
+                // ── BARANG YANG TERJUAL → dibagi Fast/Normal/Slow berdasarkan persentil
+                const soldItems = allItems.filter(i => i.sold > 0);
+                soldItems.sort((a, b) => b.sold - a.sold);
+
+                const n = soldItems.length;
+                let fast = [], normal = [], slow = [];
+
+                if (n === 1) {
+                    fast = soldItems;
+                } else if (n === 2) {
+                    fast = [soldItems[0]];
+                    slow = [soldItems[1]];
+                } else if (n === 3) {
+                    fast = [soldItems[0]];
+                    normal = [soldItems[1]];
+                    slow = [soldItems[2]];
+                } else if (n >= 4) {
+                    // Top 25% → Fast, Bottom 25% → Slow, Tengah → Normal
+                    const fastCount = Math.max(1, Math.round(n * 0.25));
+                    const slowCount = Math.max(1, Math.round(n * 0.25));
+                    const safeSlow = Math.min(slowCount, n - fastCount);
+                    fast   = soldItems.slice(0, fastCount);
+                    slow   = soldItems.slice(n - safeSlow);
+                    normal = soldItems.slice(fastCount, n - safeSlow);
+                }
+
+                // Verifikasi: fast + normal + slow + dead harus = allItems.length
+                return { fast, normal, slow, dead, total: allItems.length };
+            }, [fsmTransactions, fsmPeriod, items]);
+
             return (
                 <div className="space-y-6 fade-in pb-24 md:pb-0">
                     <div className="bg-gradient-to-r from-night-900 to-sky-900 rounded-3xl p-5 md:p-6 text-white relative overflow-hidden shadow-2xl border border-slate-700 group">
@@ -8169,6 +8280,155 @@
                             )}
                         </div>
                     </div>
+
+                    {/* ===== FAST / SLOW / NORMAL / STOK MATI ===== */}
+                    <div className="bg-white/90 backdrop-blur-md rounded-[24px] border border-white shadow-soft overflow-hidden relative z-10">
+                        {/* Header */}
+                        <div className="p-4 border-b border-slate-50 bg-white/50">
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-500 flex items-center justify-center"><Icon name="chart-bar" /></div>
+                                    <div>
+                                        <h3 className="font-bold text-slate-800 text-sm">Pergerakan Barang</h3>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">Fast · Normal · Slow · Stok Mati</p>
+                                    </div>
+                                </div>
+                                {/* Periode selector */}
+                                <div className="flex gap-1 bg-slate-100 p-1 rounded-xl">
+                                    {[[30,'30H'],[60,'60H'],[90,'90H']].map(([v,l]) => (
+                                        <button key={v} onClick={() => setFsmPeriod(v)} className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${fsmPeriod===v ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>{l}</button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Penjelasan logika */}
+                            {!fsmLoading && (
+                                <div className="mb-3 p-2.5 bg-slate-50 rounded-xl border border-slate-100 text-[9px] text-slate-500 leading-relaxed">
+                                    <span className="font-bold text-slate-600">Cara hitung: </span>
+                                    <span className="font-bold text-slate-600">Cara hitung:</span>{' '}
+                                    Barang yang <b>tidak terjual sama sekali</b> dalam {fsmPeriod} hari = <span className="text-red-600 font-bold">Stok Mati</span> (termasuk stok habis).{' '}
+                                    Sisanya (yang terjual) dibagi: Top 25% = <span className="text-green-600 font-bold">Fast</span>, Tengah = <span className="text-blue-600 font-bold">Normal</span>, Bottom 25% = <span className="text-orange-500 font-bold">Slow</span>.{' '}
+                                    ✅ Total: <b>{fsmData.fast.length + fsmData.normal.length + fsmData.slow.length + fsmData.dead.length}</b> = <b>{fsmData.total}</b> item (semua terhitung).
+                                </div>
+                            )}
+
+                            {/* Summary badges 4 kolom */}
+                            {fsmLoading ? (
+                                <div className="py-6 flex flex-col items-center gap-2 text-slate-400">
+                                    <div className="w-6 h-6 border-2 border-indigo-200 border-t-indigo-500 rounded-full animate-spin"></div>
+                                    <p className="text-xs">Memuat data penjualan...</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-4 gap-1.5">
+                                    <button onClick={() => setFsmActiveTab('fast')} className={`flex flex-col items-center p-2 rounded-xl border transition-all active:scale-95 ${fsmActiveTab==='fast' ? 'bg-green-50 border-green-300 shadow-sm' : 'bg-slate-50 border-slate-100 hover:border-green-200'}`}>
+                                        <span className="text-base font-black text-green-600">{fsmData.fast.length}</span>
+                                        <span className="text-[8px] font-bold text-green-600 flex items-center gap-0.5"><Icon name="bolt" className="text-[7px]" />FAST</span>
+                                        <span className="text-[7px] text-slate-400">Laris</span>
+                                    </button>
+                                    <button onClick={() => setFsmActiveTab('normal')} className={`flex flex-col items-center p-2 rounded-xl border transition-all active:scale-95 ${fsmActiveTab==='normal' ? 'bg-blue-50 border-blue-300 shadow-sm' : 'bg-slate-50 border-slate-100 hover:border-blue-200'}`}>
+                                        <span className="text-base font-black text-blue-600">{fsmData.normal.length}</span>
+                                        <span className="text-[8px] font-bold text-blue-600 flex items-center gap-0.5"><Icon name="equals" className="text-[7px]" />NORMAL</span>
+                                        <span className="text-[7px] text-slate-400">Sedang</span>
+                                    </button>
+                                    <button onClick={() => setFsmActiveTab('slow')} className={`flex flex-col items-center p-2 rounded-xl border transition-all active:scale-95 ${fsmActiveTab==='slow' ? 'bg-orange-50 border-orange-300 shadow-sm' : 'bg-slate-50 border-slate-100 hover:border-orange-200'}`}>
+                                        <span className="text-base font-black text-orange-500">{fsmData.slow.length}</span>
+                                        <span className="text-[8px] font-bold text-orange-500 flex items-center gap-0.5"><Icon name="hourglass-half" className="text-[7px]" />SLOW</span>
+                                        <span className="text-[7px] text-slate-400">Lambat</span>
+                                    </button>
+                                    <button onClick={() => setFsmActiveTab('dead')} className={`flex flex-col items-center p-2 rounded-xl border transition-all active:scale-95 ${fsmActiveTab==='dead' ? 'bg-red-50 border-red-300 shadow-sm' : 'bg-slate-50 border-slate-100 hover:border-red-200'}`}>
+                                        <span className="text-base font-black text-red-600">{fsmData.dead.length}</span>
+                                        <span className="text-[8px] font-bold text-red-600 flex items-center gap-0.5"><Icon name="skull" className="text-[7px]" />MATI</span>
+                                        <span className="text-[7px] text-slate-400">Tak terjual</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* List isi per tab */}
+                        {!fsmLoading && (() => {
+                            const activeList = { fast: fsmData.fast, normal: fsmData.normal, slow: fsmData.slow, dead: fsmData.dead }[fsmActiveTab] || [];
+                            const cfgMap = {
+                                fast:   { bg: 'bg-green-50',  border: 'border-green-100',  badge: 'bg-green-500',  icon: 'bolt',          label: 'FAST',   rankBg: 'bg-green-100 text-green-700',   emptyIcon: 'bolt',      emptyMsg: 'Belum ada barang fast moving' },
+                                normal: { bg: 'bg-blue-50',   border: 'border-blue-100',   badge: 'bg-blue-500',   icon: 'equals',        label: 'NORMAL', rankBg: 'bg-blue-100 text-blue-700',     emptyIcon: 'equals',    emptyMsg: 'Belum ada barang normal' },
+                                slow:   { bg: 'bg-orange-50', border: 'border-orange-100', badge: 'bg-orange-400', icon: 'hourglass-half',label: 'SLOW',   rankBg: 'bg-orange-100 text-orange-600', emptyIcon: 'check',     emptyMsg: 'Tidak ada slow moving — bagus!' },
+                                dead:   { bg: 'bg-red-50',    border: 'border-red-100',    badge: 'bg-red-500',    icon: 'skull',         label: 'MATI',   rankBg: 'bg-red-100 text-red-600',       emptyIcon: 'check',     emptyMsg: 'Tidak ada stok mati — luar biasa!' },
+                            };
+                            const cfg = cfgMap[fsmActiveTab];
+                            return (
+                                <div className="max-h-[340px] overflow-y-auto custom-scrollbar p-2">
+                                    {activeList.length === 0 ? (
+                                        <div className="py-10 text-center">
+                                            <Icon name={cfg.emptyIcon} className="text-4xl text-slate-200 mb-2" />
+                                            <p className="text-slate-400 text-xs font-medium">{cfg.emptyMsg}</p>
+                                        </div>
+                                    ) : (
+                                        <div className="grid gap-1.5">
+                                            {activeList.map((item, idx) => {
+                                                const nilaiStokMati = fsmActiveTab === 'dead' && item.costPrice > 0 && item.qty > 0 ? item.costPrice * item.qty : null;
+                                                return (
+                                                    <div key={item.id || item.name} className={`flex items-center gap-2.5 p-2.5 rounded-xl border ${cfg.bg} ${cfg.border} hover:shadow-sm transition-all`}>
+                                                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-[9px] font-black flex-shrink-0 ${cfg.rankBg}`}>
+                                                            {idx + 1}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <h4 className="text-xs font-bold text-slate-700 truncate">{item.name}</h4>
+                                                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                                                                <span className="text-[9px] text-slate-400"><Icon name="location-dot" className="text-[8px]" /> {item.rack || '-'}</span>
+                                                                {fsmActiveTab === 'dead' ? (
+                                                                    item.qty > 0
+                                                                        ? <span className="text-[9px] text-red-500 font-bold">Stok: {item.qty} (menumpuk)</span>
+                                                                        : <span className="text-[9px] text-slate-400 font-bold">Stok habis</span>
+                                                                ) : (
+                                                                    <span className="text-[9px] text-slate-400">Stok: <b>{item.qty}</b></span>
+                                                                )}
+                                                                {nilaiStokMati && <span className="text-[9px] text-red-400 font-bold">≈ {formatRupiah(nilaiStokMati)}</span>}
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex flex-col items-end flex-shrink-0 gap-1">
+                                                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-full text-white ${cfg.badge} flex items-center gap-1`}>
+                                                                <Icon name={cfg.icon} className="text-[8px]" /> {cfg.label}
+                                                            </span>
+                                                            <span className="text-[10px] font-bold text-slate-500">
+                                                                {fsmActiveTab === 'dead' ? '0 terjual' : `${item.sold} terjual`}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
+                        {!fsmLoading && fsmActiveTab === 'dead' && fsmData.dead.length > 0 && (
+                            <div className="px-4 pb-3 pt-2 border-t border-red-50 space-y-1">
+                                {(() => {
+                                    const deadWithStock  = fsmData.dead.filter(i => i.qty > 0);
+                                    const deadNoStock    = fsmData.dead.filter(i => i.qty === 0);
+                                    const totalNilai     = deadWithStock.reduce((s, i) => s + (i.costPrice > 0 ? i.costPrice * i.qty : 0), 0);
+                                    const totalUnit      = deadWithStock.reduce((s, i) => s + i.qty, 0);
+                                    return (
+                                        <>
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[9px] text-red-500 font-bold flex items-center gap-1">
+                                                    <Icon name="skull" className="text-[8px]" /> Stok menumpuk: {deadWithStock.length} item ({totalUnit} unit)
+                                                </span>
+                                                {totalNilai > 0 && <span className="text-[9px] font-black text-red-600">≈ {formatRupiah(totalNilai)}</span>}
+                                            </div>
+                                            {deadNoStock.length > 0 && (
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-[9px] text-slate-400 font-bold flex items-center gap-1">
+                                                        <Icon name="box-open" className="text-[8px]" /> Stok habis & tak terjual: {deadNoStock.length} item
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </>
+                                    );
+                                })()}
+                            </div>
+                        )}
+                    </div>
+
                 </div>
             );
         };
@@ -12916,3 +13176,4 @@
 <audio id="chaching-sound" src="cha-ching.mp3" preload="auto"></audio>
 </body>
 </html>
+    
