@@ -8108,7 +8108,7 @@
             );
         };
 
-        const DashboardView = ({ items, onShowLowStock, settings, currentProfile }) => {
+        const DashboardView = ({ items, onShowLowStock, settings, currentProfile, isOwner }) => {
             const lowStockThreshold = settings.lowStockThreshold || DEFAULT_SETTINGS.lowStockThreshold;
             const lowStockCount = items.filter(i => { const threshold = i.minStock ? safeNumber(i.minStock) : lowStockThreshold; return safeNumber(i.qty) < threshold; }).length;
             const totalStock = items.reduce((a,b)=> a + safeNumber(b.qty), 0);
@@ -8119,7 +8119,33 @@
             const [fsmTransactions, setFsmTransactions] = useState([]);
             const [fsmLoading, setFsmLoading] = useState(true);
             const [fsmPeriod, setFsmPeriod] = useState(30); // 30 | 60 | 90 hari
-            const [fsmActiveTab, setFsmActiveTab] = useState('fast'); // 'fast' | 'normal' | 'slow'
+            const [fsmActiveTab, setFsmActiveTab] = useState('fast'); // 'fast' | 'normal' | 'slow' | 'dead'
+            const [fsmCopyToast, setFsmCopyToast] = useState('');
+
+            const handleFsmCopy = (list, tabLabel) => {
+                if (!list || list.length === 0) return;
+                const now = new Date();
+                const tgl = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()}`;
+                const labelMap = { fast: '⚡ FAST MOVING (Laris)', normal: '〰️ NORMAL (Sedang)', slow: '⏳ SLOW MOVING (Lambat)', dead: '💀 STOK MATI (Tak Terjual)' };
+                let text = `*[${labelMap[tabLabel] || tabLabel}]*\n`;
+                text += `*${currentProfile.name}* • ${fsmPeriod} hari terakhir • ${tgl}\n`;
+                text += `Total: ${list.length} item\n`;
+                text += `──────────────\n`;
+                list.forEach((item, i) => { text += `${i + 1}. ${item.name}\n`; });
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(text).then(() => {
+                        setFsmCopyToast('✅ Disalin! Tempel di WA.');
+                        setTimeout(() => setFsmCopyToast(''), 2500);
+                    }).catch(() => fsmFallbackCopy(text, tabLabel));
+                } else { fsmFallbackCopy(text, tabLabel); }
+            };
+            const fsmFallbackCopy = (text) => {
+                const ta = document.createElement('textarea');
+                ta.value = text; ta.style.position = 'fixed'; ta.style.left = '-9999px';
+                document.body.appendChild(ta); ta.select();
+                try { document.execCommand('copy'); setFsmCopyToast('✅ Disalin! Tempel di WA.'); setTimeout(() => setFsmCopyToast(''), 2500); } catch {}
+                document.body.removeChild(ta);
+            };
 
             useEffect(() => {
                 setFsmLoading(true);
@@ -8347,6 +8373,34 @@
                                     </button>
                                 </div>
                             )}
+
+                            {/* Tombol Salin WA — hanya owner */}
+                            {!fsmLoading && isOwner && (() => {
+                                const activeList = { fast: fsmData.fast, normal: fsmData.normal, slow: fsmData.slow, dead: fsmData.dead }[fsmActiveTab] || [];
+                                const colorMap = {
+                                    fast:   'bg-green-500 hover:bg-green-600',
+                                    normal: 'bg-blue-500 hover:bg-blue-600',
+                                    slow:   'bg-orange-400 hover:bg-orange-500',
+                                    dead:   'bg-red-500 hover:bg-red-600',
+                                };
+                                return (
+                                    <div className="mt-3 flex items-center gap-2">
+                                        <button
+                                            onClick={() => handleFsmCopy(activeList, fsmActiveTab)}
+                                            disabled={activeList.length === 0}
+                                            className={`flex-1 py-2 rounded-xl text-white text-[10px] font-bold flex items-center justify-center gap-1.5 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${colorMap[fsmActiveTab]}`}
+                                        >
+                                            <Icon name="whatsapp" type="brands" className="text-xs" />
+                                            Salin {activeList.length} Nama ke WhatsApp
+                                        </button>
+                                        {fsmCopyToast && (
+                                            <span className="text-[10px] font-bold text-green-600 flex items-center gap-1 animate-bounce whitespace-nowrap">
+                                                <Icon name="circle-check" /> {fsmCopyToast}
+                                            </span>
+                                        )}
+                                    </div>
+                                );
+                            })()}
                         </div>
 
                         {/* List isi per tab */}
@@ -13154,7 +13208,7 @@
                                 </div>
                             </div>
                         )}
-                        {activeTab === 'home' && (<DashboardView items={inventoryData} settings={settingsData} currentProfile={currentProfile} onShowLowStock={() => { setActiveTab('list'); setShowOnlyLowStock(true); }} />)}
+                        {activeTab === 'home' && (<DashboardView items={inventoryData} settings={settingsData} currentProfile={currentProfile} isOwner={isOwner} onShowLowStock={() => { setActiveTab('list'); setShowOnlyLowStock(true); }} />)}
                         {activeTab === 'cashier' && (<CashierView items={inventoryData} user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='cashier')?.readOnly} authSession={authSession} />)}
                         {activeTab === 'history' && (<HistoryView user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} items={inventoryData} readOnly={menuItems.find(m=>m.id==='history')?.readOnly} isOwner={isOwner} />)}
                         {activeTab === 'purchases' && (<PurchaseView user={user} showToast={showToast} items={inventoryData} currentProfile={currentProfile} settings={settingsData} readOnly={menuItems.find(m=>m.id==='purchases')?.readOnly} />)}
@@ -13180,4 +13234,4 @@
     </script>
 <audio id="chaching-sound" src="cha-ching.mp3" preload="auto"></audio>
 </body>
-</html>
+</html>a
