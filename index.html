@@ -8108,7 +8108,7 @@
             );
         };
 
-        const DashboardView = ({ items, onShowLowStock, settings }) => {
+        const DashboardView = ({ items, onShowLowStock, settings, currentProfile }) => {
             const lowStockThreshold = settings.lowStockThreshold || DEFAULT_SETTINGS.lowStockThreshold;
             const lowStockCount = items.filter(i => { const threshold = i.minStock ? safeNumber(i.minStock) : lowStockThreshold; return safeNumber(i.qty) < threshold; }).length;
             const totalStock = items.reduce((a,b)=> a + safeNumber(b.qty), 0);
@@ -8140,12 +8140,17 @@
                 cutoff.setDate(cutoff.getDate() - fsmPeriod);
                 cutoff.setHours(0, 0, 0, 0);
 
-                // Hitung total terjual per item dalam periode
+                // Hitung total terjual per item dalam periode — KHUSUS TOKO INI
                 const soldMap = {};
                 fsmTransactions.forEach(tx => {
                     if (tx.status === 'returned') return;
                     const txDate = tx.date?.toDate ? tx.date.toDate() : (tx.date ? new Date(tx.date) : null);
                     if (!txDate || txDate < cutoff) return;
+                    // Filter per toko: storeId harus cocok, kecuali mode "all_stores"
+                    if (currentProfile.id !== 'all_stores') {
+                        const txStoreId = tx.storeId || 'default';
+                        if (txStoreId !== currentProfile.id) return;
+                    }
                     (tx.items || []).forEach(item => {
                         const netQty = (item.cartQty || 0) - (item.returnedQty || 0);
                         if (netQty <= 0) return;
@@ -8206,7 +8211,7 @@
 
                 // Verifikasi: fast + normal + slow + dead harus = allItems.length
                 return { fast, normal, slow, dead, total: allItems.length };
-            }, [fsmTransactions, fsmPeriod, items]);
+            }, [fsmTransactions, fsmPeriod, items, currentProfile]);
 
             return (
                 <div className="space-y-6 fade-in pb-24 md:pb-0">
@@ -8290,7 +8295,7 @@
                                     <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-500 flex items-center justify-center"><Icon name="chart-bar" /></div>
                                     <div>
                                         <h3 className="font-bold text-slate-800 text-sm">Pergerakan Barang</h3>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">Fast · Normal · Slow · Stok Mati</p>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">{currentProfile.name} · Fast · Normal · Slow · Mati</p>
                                     </div>
                                 </div>
                                 {/* Periode selector */}
@@ -13149,7 +13154,7 @@
                                 </div>
                             </div>
                         )}
-                        {activeTab === 'home' && (<DashboardView items={inventoryData} settings={settingsData} onShowLowStock={() => { setActiveTab('list'); setShowOnlyLowStock(true); }} />)}
+                        {activeTab === 'home' && (<DashboardView items={inventoryData} settings={settingsData} currentProfile={currentProfile} onShowLowStock={() => { setActiveTab('list'); setShowOnlyLowStock(true); }} />)}
                         {activeTab === 'cashier' && (<CashierView items={inventoryData} user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='cashier')?.readOnly} authSession={authSession} />)}
                         {activeTab === 'history' && (<HistoryView user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} items={inventoryData} readOnly={menuItems.find(m=>m.id==='history')?.readOnly} isOwner={isOwner} />)}
                         {activeTab === 'purchases' && (<PurchaseView user={user} showToast={showToast} items={inventoryData} currentProfile={currentProfile} settings={settingsData} readOnly={menuItems.find(m=>m.id==='purchases')?.readOnly} />)}
@@ -13176,4 +13181,3 @@
 <audio id="chaching-sound" src="cha-ching.mp3" preload="auto"></audio>
 </body>
 </html>
-    
