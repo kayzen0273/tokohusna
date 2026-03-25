@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistem Kasir Toko Husna (V59 - Auto Pending Cart on Hide)</title>
+    <title>Sistem Kasir Toko Husna (V58 - Fast/Slow Moving Barang)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -5318,72 +5318,10 @@
             const isExternalUpdate = useRef(false);
             // Ref untuk mencegah recovery berjalan lebih dari 1x akibat user/currentProfile berubah bersamaan
             const hasRecovered = useRef(false);
-
-            // Refs untuk menyimpan nilai terbaru agar bisa diakses di event listener (menghindari stale closure)
-            const latestCartRef = useRef(cart);
-            const latestActiveCartIdRef = useRef(activeCartId);
-            const latestIsSessionActiveRef = useRef(isSessionActive);
-            useEffect(() => { latestCartRef.current = cart; }, [cart]);
-            useEffect(() => { latestActiveCartIdRef.current = activeCartId; }, [activeCartId]);
-            useEffect(() => { latestIsSessionActiveRef.current = isSessionActive; }, [isSessionActive]);
-            // Ref untuk mencegah saveToPending dipanggil 2x berturutan (visibilitychange + pagehide)
-            const isSavingToPendingRef = useRef(false);
-
-            // AUTO-PENDING: Otomatis simpan keranjang aktif → pending saat user ganti tab / minimize / tutup jendela
-            useEffect(() => {
-                const saveToPending = async () => {
-                    const currentCart = latestCartRef.current;
-                    const currentActiveCartId = latestActiveCartIdRef.current;
-                    const currentIsSessionActive = latestIsSessionActiveRef.current;
-                    if (!currentIsSessionActive || !currentActiveCartId || currentCart.length === 0) return;
-                    if (isSavingToPendingRef.current) return; // Cegah double-save
-                    isSavingToPendingRef.current = true;
-                    try {
-                        // Simpan ke pending_carts
-                        await window.addDoc(
-                            window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pending_carts'),
-                            {
-                                date: new Date().toISOString(),
-                                items: currentCart,
-                                total: currentCart.reduce((acc, item) => acc + (safeNumber(item.price) * item.cartQty), 0),
-                                cashierName: cashierName,
-                                device: navigator.userAgent,
-                                storeProfile: currentProfile.name,
-                                storeId: currentProfile.id,
-                                createdAt: window.serverTimestamp(),
-                                savedOnHide: true
-                            }
-                        );
-                        // Hapus dari active_carts
-                        await window.deleteDoc(
-                            window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', currentActiveCartId)
-                        );
-                        // Reset state lokal
-                        setCart([]);
-                        setActiveCartId(null);
-                        setIsSessionActive(false);
-                        localStorage.removeItem('activeCartId');
-                    } catch (err) {
-                        console.error('Error auto-saving cart to pending:', err);
-                    } finally {
-                        // Beri jeda singkat sebelum boleh save lagi (misal user buka kembali tab)
-                        setTimeout(() => { isSavingToPendingRef.current = false; }, 2000);
-                    }
-                };
-
-                const handleVisibilityHide = () => {
-                    if (document.visibilityState === 'hidden') saveToPending();
-                };
-
-                document.addEventListener('visibilitychange', handleVisibilityHide);
-                window.addEventListener('pagehide', saveToPending);
-
-                return () => {
-                    document.removeEventListener('visibilitychange', handleVisibilityHide);
-                    window.removeEventListener('pagehide', saveToPending);
-                };
-            // cashierName & currentProfile stabil; cart/activeCartId/isSessionActive diambil via ref
-            }, [cashierName, currentProfile]);
+            // Refs untuk auto-tertunda (inaktif)
+            const inactivityTimerRef = useRef(null);
+            const visibilityTimerRef = useRef(null);
+            const autoSaveSnap = useRef(null);
 
             // Sync cart ke Firestore setiap kali cart berubah (outgoing)
             useEffect(() => {
@@ -5434,6 +5372,98 @@
                 });
                 return () => unsub();
             }, [isSessionActive, activeCartId]);
+
+            // ── AUTO-TERTUNDA: Pindahkan ke pending jika user tidak aktif ────────────────
+            // Selalu simpan snapshot state terbaru ke ref (dipakai di dalam event handler)
+            useEffect(() => {
+                autoSaveSnap.current = {
+                    cart,
+                    isSessionActive,
+                    activeCartId,
+                    grandTotal: cart.reduce((a, i) => a + (safeNumber(i.price) * i.cartQty), 0),
+                    cashierName: cashierName || 'Kasir',
+                    storeProfile: currentProfile.name,
+                    storeId: currentProfile.id,
+                };
+            });
+
+            // Fungsi eksekusi auto-pindah ke tertunda (pakai snapshot ref agar tidak stale)
+            const doAutoMoveToTertunda = useCallback(async () => {
+                const snap = autoSaveSnap.current;
+                if (!snap || !snap.isSessionActive || snap.cart.length === 0) return;
+                try {
+                    await window.addDoc(
+                        window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pending_carts'),
+                        {
+                            date: new Date().toISOString(),
+                            items: snap.cart,
+                            total: snap.grandTotal,
+                            cashierName: snap.cashierName,
+                            device: navigator.userAgent,
+                            storeProfile: snap.storeProfile,
+                            storeId: snap.storeId,
+                            createdAt: window.serverTimestamp(),
+                            autoSaved: true,
+                        }
+                    );
+                    if (snap.activeCartId) {
+                        await window.deleteDoc(
+                            window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', snap.activeCartId)
+                        );
+                    }
+                    // Reset state sesi
+                    setIsSessionActive(false);
+                    setCart([]);
+                    setActiveCartId(null);
+                    localStorage.removeItem('activeCartId');
+                    showToast('Sesi tidak aktif — keranjang dipindah ke Tertunda ⏸️', 'info');
+                } catch (e) {
+                    console.error('Auto-tertunda error:', e);
+                }
+            }, []); // eslint-disable-line
+
+            // Reset timer inaktif setiap ada interaksi user
+            const resetInactivityTimer = useCallback(() => {
+                clearTimeout(inactivityTimerRef.current);
+                const snap = autoSaveSnap.current;
+                if (!snap?.isSessionActive || snap.cart.length === 0) return;
+                inactivityTimerRef.current = setTimeout(doAutoMoveToTertunda, 5 * 60 * 1000); // 5 menit
+            }, [doAutoMoveToTertunda]);
+
+            useEffect(() => {
+                if (!isSessionActive) {
+                    clearTimeout(inactivityTimerRef.current);
+                    clearTimeout(visibilityTimerRef.current);
+                    return;
+                }
+
+                // Mulai timer inaktif saat sesi aktif & keranjang berisi
+                if (cart.length > 0) resetInactivityTimer();
+
+                const activityEvents = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'];
+                activityEvents.forEach(e => document.addEventListener(e, resetInactivityTimer, { passive: true }));
+
+                const handleVisibility = () => {
+                    if (document.hidden) {
+                        // Tab / browser disembunyikan: pindahkan ke tertunda setelah 30 detik
+                        clearTimeout(visibilityTimerRef.current);
+                        visibilityTimerRef.current = setTimeout(doAutoMoveToTertunda, 30 * 1000);
+                    } else {
+                        // User kembali: batalkan jadwal visibility & reset timer inaktif
+                        clearTimeout(visibilityTimerRef.current);
+                        resetInactivityTimer();
+                    }
+                };
+                document.addEventListener('visibilitychange', handleVisibility);
+
+                return () => {
+                    activityEvents.forEach(e => document.removeEventListener(e, resetInactivityTimer));
+                    document.removeEventListener('visibilitychange', handleVisibility);
+                    clearTimeout(inactivityTimerRef.current);
+                    clearTimeout(visibilityTimerRef.current);
+                };
+            }, [isSessionActive, cart.length, doAutoMoveToTertunda, resetInactivityTimer]);
+            // ── END AUTO-TERTUNDA ─────────────────────────────────────────────────────────
 
             // Mulai sesi kasir baru - nama otomatis dari akun login
             const handleStartSession = async (name) => {
