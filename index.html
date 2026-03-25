@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistem Kasir Toko Husna (V58 - Fast/Slow Moving Barang)</title>
+    <title>Sistem Kasir Toko Husna (V59 - Auto Pending Cart on Hide)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -5318,6 +5318,72 @@
             const isExternalUpdate = useRef(false);
             // Ref untuk mencegah recovery berjalan lebih dari 1x akibat user/currentProfile berubah bersamaan
             const hasRecovered = useRef(false);
+
+            // Refs untuk menyimpan nilai terbaru agar bisa diakses di event listener (menghindari stale closure)
+            const latestCartRef = useRef(cart);
+            const latestActiveCartIdRef = useRef(activeCartId);
+            const latestIsSessionActiveRef = useRef(isSessionActive);
+            useEffect(() => { latestCartRef.current = cart; }, [cart]);
+            useEffect(() => { latestActiveCartIdRef.current = activeCartId; }, [activeCartId]);
+            useEffect(() => { latestIsSessionActiveRef.current = isSessionActive; }, [isSessionActive]);
+            // Ref untuk mencegah saveToPending dipanggil 2x berturutan (visibilitychange + pagehide)
+            const isSavingToPendingRef = useRef(false);
+
+            // AUTO-PENDING: Otomatis simpan keranjang aktif → pending saat user ganti tab / minimize / tutup jendela
+            useEffect(() => {
+                const saveToPending = async () => {
+                    const currentCart = latestCartRef.current;
+                    const currentActiveCartId = latestActiveCartIdRef.current;
+                    const currentIsSessionActive = latestIsSessionActiveRef.current;
+                    if (!currentIsSessionActive || !currentActiveCartId || currentCart.length === 0) return;
+                    if (isSavingToPendingRef.current) return; // Cegah double-save
+                    isSavingToPendingRef.current = true;
+                    try {
+                        // Simpan ke pending_carts
+                        await window.addDoc(
+                            window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pending_carts'),
+                            {
+                                date: new Date().toISOString(),
+                                items: currentCart,
+                                total: currentCart.reduce((acc, item) => acc + (safeNumber(item.price) * item.cartQty), 0),
+                                cashierName: cashierName,
+                                device: navigator.userAgent,
+                                storeProfile: currentProfile.name,
+                                storeId: currentProfile.id,
+                                createdAt: window.serverTimestamp(),
+                                savedOnHide: true
+                            }
+                        );
+                        // Hapus dari active_carts
+                        await window.deleteDoc(
+                            window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', currentActiveCartId)
+                        );
+                        // Reset state lokal
+                        setCart([]);
+                        setActiveCartId(null);
+                        setIsSessionActive(false);
+                        localStorage.removeItem('activeCartId');
+                    } catch (err) {
+                        console.error('Error auto-saving cart to pending:', err);
+                    } finally {
+                        // Beri jeda singkat sebelum boleh save lagi (misal user buka kembali tab)
+                        setTimeout(() => { isSavingToPendingRef.current = false; }, 2000);
+                    }
+                };
+
+                const handleVisibilityHide = () => {
+                    if (document.visibilityState === 'hidden') saveToPending();
+                };
+
+                document.addEventListener('visibilitychange', handleVisibilityHide);
+                window.addEventListener('pagehide', saveToPending);
+
+                return () => {
+                    document.removeEventListener('visibilitychange', handleVisibilityHide);
+                    window.removeEventListener('pagehide', saveToPending);
+                };
+            // cashierName & currentProfile stabil; cart/activeCartId/isSessionActive diambil via ref
+            }, [cashierName, currentProfile]);
 
             // Sync cart ke Firestore setiap kali cart berubah (outgoing)
             useEffect(() => {
@@ -13234,4 +13300,4 @@
     </script>
 <audio id="chaching-sound" src="cha-ching.mp3" preload="auto"></audio>
 </body>
-</html>a
+</html>
