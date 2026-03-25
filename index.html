@@ -712,6 +712,27 @@
 
         // --- UTILS ---
         const safeNumber = (val) => { if (!val) return 0; const num = parseFloat(val); return isNaN(num) ? 0 : num; };
+        // Helper PPN mode: 'incl_11' | 'excl_11' | 'incl_12' | 'excl_12' | '' | backward-compat '11'/'12'
+        const parsePpnMode = (mode) => {
+            if (!mode) return { persen: 0, inclusive: false };
+            const m = String(mode).match(/^(incl|excl)_(\d+)$/);
+            if (m) return { persen: parseInt(m[2]), inclusive: m[1] === 'incl' };
+            const p = parseInt(mode); // backward compat lama (11 atau 12)
+            if (p > 0) return { persen: p, inclusive: false };
+            return { persen: 0, inclusive: false };
+        };
+        const calcPpnNom = (dpp, mode) => {
+            const { persen, inclusive } = parsePpnMode(mode);
+            if (!persen) return 0;
+            if (inclusive) return Math.round(dpp - Math.round(dpp * 100 / (100 + persen)));
+            return Math.floor(dpp * persen / 100);
+        };
+        const ppnModeLabel = (mode) => {
+            if (!mode) return '';
+            const { persen, inclusive } = parsePpnMode(mode);
+            if (!persen) return '';
+            return inclusive ? `Termasuk PPN ${persen}%` : `Belum Termasuk PPN ${persen}%`;
+        };
         const formatRupiah = (angka) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(safeNumber(angka)).replace(/,00$/, '');
         const isNewItem = (createdAt) => {
             if (!createdAt) return false;
@@ -3480,10 +3501,11 @@
                 
                 setSubmitting(true);
                 const subtotal = safeNumber(invoiceData.total); 
-                const ppn = safeNumber(invoiceData.ppn); 
+                const ppnMode = invoiceData.ppn || '';
                 const numDiskon = parseInt(diskon.replace(/\D/g,'')) || 0;
                 const diskonNominal = diskonType === 'percent' ? Math.floor(subtotal * numDiskon / 100) : numDiskon;
                 const dpp = subtotal - diskonNominal;
+                const ppn = calcPpnNom(dpp, ppnMode);
                 const numMaterai = parseInt(materai.replace(/\D/g,'')) || 0;
                 const numPengiriman = parseInt(pengiriman.replace(/\D/g,'')) || 0;
                 const numPembulatan = parseInt(pembulatan.replace(/\D/g,'')) || 0;
@@ -3558,6 +3580,7 @@
                         pengiriman: numPengiriman,
                         pembulatan: numPembulatan,
                         ppn: ppn, 
+                        ppnMode: ppnMode,
                         paymentMethod: invoiceData.paymentMethod, 
                         date: invoiceData.date ? new Date(invoiceData.date).toISOString() : new Date().toISOString(),
                         receivedDate: invoiceData.receivedDate || new Date().toISOString().slice(0,10),
@@ -3810,7 +3833,7 @@
                     receivedTime: purchase.receivedTime || '',
                     dueDate: purchase.dueDate ? new Date(purchase.dueDate).toISOString().slice(0,10) : '',
                     total: purchase.subtotal !== undefined ? purchase.subtotal.toString() : (purchase.total || '').toString(),
-                    ppn: purchase.ppn ? purchase.ppn.toString() : '',
+                    ppn: purchase.ppnMode || (purchase.ppn ? (purchase.ppn === 11 || purchase.ppn === '11' ? 'excl_11' : purchase.ppn === 12 || purchase.ppn === '12' ? 'excl_12' : '') : ''),
                     paymentMethod: purchase.paymentMethod || 'Kredit',
                     isPaid: purchase.isPaid || false,
                     isConsignment: purchase.isConsignment || false,
@@ -4190,9 +4213,11 @@
                                         <div>
                                             <label className="block text-[11.5px] text-gray-500 mb-1">PPN</label>
                                             <select className="w-full h-8 px-2 border border-gray-300 rounded-md text-xs bg-white outline-none focus:border-teal-500" value={invoiceData.ppn} onChange={e => setInvoiceData({...invoiceData, ppn: e.target.value})}>
-                                                <option value="">Tidak ada PPN</option>
-                                                <option value="11">PPN 11%</option>
-                                                <option value="12">PPN 12%</option>
+                                                <option value="">Tanpa PPN</option>
+                                                <option value="incl_11">Harga termasuk PPN 11%</option>
+                                                <option value="excl_11">Harga belum termasuk PPN 11%</option>
+                                                <option value="incl_12">Harga termasuk PPN 12%</option>
+                                                <option value="excl_12">Harga belum termasuk PPN 12%</option>
                                             </select>
                                         </div>
                                         <div className="flex items-center gap-2 pt-1">
@@ -4494,8 +4519,8 @@
                                         const numDiskon = parseInt((diskon || '0').replace(/\D/g,'')) || 0;
                                         const diskonNom = diskonType === 'percent' ? Math.floor(subtotal * numDiskon / 100) : numDiskon;
                                         const dpp = subtotal - diskonNom;
-                                        const ppnPersen = parseInt(invoiceData.ppn) || 0;
-                                        const ppnNom = Math.floor(dpp * ppnPersen / 100);
+                                        const ppnPersen = parsePpnMode(invoiceData.ppn).persen;
+                                        const ppnNom = calcPpnNom(dpp, invoiceData.ppn);
                                         const numMat = parseInt((materai || '0').replace(/\D/g,'')) || 0;
                                         const numPeng = parseInt((pengiriman || '0').replace(/\D/g,'')) || 0;
                                         const numPemb = parseInt((pembulatan || '0').replace(/\D/g,'')) || 0;
@@ -4523,7 +4548,7 @@
                                                 </div>
                                                 {ppnPersen > 0 && (
                                                     <div className="flex justify-between items-center text-xs py-1">
-                                                        <span className="text-gray-600">PPN {ppnPersen}%</span>
+                                                        <span className="text-gray-600">{ppnModeLabel(invoiceData.ppn)}</span>
                                                         <span className="font-medium">{fmt(ppnNom)}</span>
                                                     </div>
                                                 )}
@@ -4646,7 +4671,7 @@
                                         {[
                                             ['Subtotal', selectedPurchase.subtotal || selectedPurchase.total],
                                             selectedPurchase.diskon > 0 && ['Diskon', -selectedPurchase.diskon],
-                                            selectedPurchase.ppn > 0 && ['PPN', selectedPurchase.ppn],
+                                            selectedPurchase.ppn > 0 && [ppnModeLabel(selectedPurchase.ppnMode) || `PPN`, selectedPurchase.ppn],
                                             selectedPurchase.materai > 0 && ['Biaya Meterai', selectedPurchase.materai],
                                             selectedPurchase.pengiriman > 0 && ['Biaya Pengiriman', selectedPurchase.pengiriman],
                                             selectedPurchase.pembulatan > 0 && ['Pembulatan', selectedPurchase.pembulatan],
