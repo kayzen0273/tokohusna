@@ -9637,7 +9637,7 @@
         // ==================== END PAPAN CATATAN ====================
 
         // ==================== STOCK OPNAME VIEW ====================
-        const StockOpnameView = ({ items, user, showToast, currentProfile, readOnly }) => {
+        const StockOpnameView = ({ items, user, showToast, currentProfile, readOnly, isOwner }) => {
             const [physicalCounts, setPhysicalCounts] = useState({});
             const [sessions, setSessions] = useState([]);
             const [activeSession, setActiveSession] = useState(null);
@@ -9647,6 +9647,8 @@
             const [saving, setSaving] = useState(false);
             const [showHistory, setShowHistory] = useState(false);
             const [showFinishModal, setShowFinishModal] = useState(false);
+            const [showCancelModal, setShowCancelModal] = useState(false);
+            const [showEmployeeCancelInfo, setShowEmployeeCancelInfo] = useState(false);
             const [historyDetail, setHistoryDetail] = useState(null);
 
             const profileId = currentProfile?.id || 'default';
@@ -9753,6 +9755,19 @@
                     showToast('Stock Opname selesai! Stok barang telah diperbarui.');
                     setShowFinishModal(false);
                 } catch (e) { showToast('Gagal menyelesaikan sesi', 'error'); }
+                setSaving(false);
+            };
+
+            const cancelSession = async () => {
+                if (!sessionId) return;
+                setSaving(true);
+                try {
+                    await window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'stock_opname', sessionId), {
+                        status: 'cancelled', cancelledAt: window.serverTimestamp(), cancelledBy: user?.uid || 'anon',
+                    });
+                    showToast('Sesi Stock Opname dibatalkan.', 'info');
+                    setShowCancelModal(false);
+                } catch (e) { showToast('Gagal membatalkan sesi', 'error'); }
                 setSaving(false);
             };
 
@@ -10024,6 +10039,19 @@
                                 <div className="flex items-center justify-between mt-3 gap-2 flex-wrap">
                                     <p className="text-[10px] text-slate-400">Sesi dimulai: {formatDate(activeSession.createdAt)}</p>
                                     <div className="flex gap-2">
+                                        <button
+                                            onClick={() => {
+                                                if (isOwner) {
+                                                    setShowCancelModal(true);
+                                                } else {
+                                                    setShowEmployeeCancelInfo(true);
+                                                }
+                                            }}
+                                            title={isOwner ? 'Batalkan sesi ini' : 'Hanya Owner yang bisa membatalkan sesi'}
+                                            className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-all flex items-center gap-1.5 ${isOwner ? 'bg-red-50 hover:bg-red-100 text-red-600 border border-red-200' : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-70'}`}>
+                                            <i className="fa-solid fa-ban text-[10px]"></i> Batalkan
+                                            {!isOwner && <i className="fa-solid fa-lock text-[9px] opacity-60"></i>}
+                                        </button>
                                         <button onClick={saveProgress} disabled={saving} className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold px-3 py-1.5 rounded-lg transition-all">{saving ? '...' : ' Simpan'}</button>
                                         <button onClick={() => setShowFinishModal(true)} className="text-xs bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all"> Selesaikan</button>
                                     </div>
@@ -10043,45 +10071,64 @@
                             </div>
 
                             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-sm">
-                                        <thead className="bg-slate-50 sticky top-0">
-                                            <tr className="text-left text-xs font-bold text-slate-500 uppercase">
-                                                <th className="px-4 py-3">Nama Barang</th>
-                                                <th className="px-4 py-3">Rak</th>
-                                                <th className="px-4 py-3 text-center">Stok Sistem</th>
-                                                <th className="px-4 py-3 text-center w-32">Stok Fisik</th>
-                                                <th className="px-4 py-3 text-center">Selisih</th>
-                                                <th className="px-4 py-3 text-center">Status</th>
+                                <div style={{overflowX:'auto'}}>
+                                    <table style={{width:'100%', borderCollapse:'collapse', tableLayout:'fixed'}}>
+                                        <colgroup>
+                                            <col style={{width:'30%'}} />
+                                            <col style={{width:'12%'}} />
+                                            <col style={{width:'13%'}} />
+                                            <col style={{width:'14%'}} />
+                                            <col style={{width:'11%'}} />
+                                            <col style={{width:'20%'}} />
+                                        </colgroup>
+                                        <thead style={{background:'#f8fafc', position:'sticky', top:0, zIndex:1}}>
+                                            <tr style={{textAlign:'left'}}>
+                                                <th style={{padding:'7px 8px 7px 12px', fontSize:'9px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', whiteSpace:'nowrap'}}>Nama Barang</th>
+                                                <th style={{padding:'7px 4px', fontSize:'9px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em'}}>Rak</th>
+                                                <th style={{padding:'7px 4px', fontSize:'9px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', textAlign:'center'}}>Stok Sistem</th>
+                                                <th style={{padding:'7px 4px', fontSize:'9px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', textAlign:'center'}}>Stok Fisik</th>
+                                                <th style={{padding:'7px 4px', fontSize:'9px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', textAlign:'center'}}>Selisih</th>
+                                                <th style={{padding:'7px 8px 7px 4px', fontSize:'9px', fontWeight:800, color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', textAlign:'center'}}>Status</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-slate-50">
-                                            {filteredItems.map(item => {
+                                        <tbody>
+                                            {filteredItems.map((item, idx) => {
                                                 const physical = physicalCounts[item.id];
                                                 const hasCount = physical !== undefined && physical !== '';
                                                 const selisih = hasCount ? Number(physical) - Number(item.qty) : null;
                                                 const isOk = hasCount && selisih === 0;
                                                 const isSelisih = hasCount && selisih !== 0;
                                                 return (
-                                                    <tr key={item.id} className={`hover:bg-slate-50/50 transition-colors ${isSelisih ? 'bg-red-50/30' : isOk ? 'bg-emerald-50/30' : ''}`}>
-                                                        <td className="px-4 py-3 font-semibold text-slate-700 max-w-[180px] truncate">{item.name}</td>
-                                                        <td className="px-4 py-3 text-slate-400 text-xs">{item.rack || '-'}</td>
-                                                        <td className="px-4 py-3 text-center font-bold text-slate-600">{item.qty} <span className="text-[10px] text-slate-400">{item.unit}</span></td>
-                                                        <td className="px-4 py-3 text-center">
+                                                    <tr key={item.id} style={{
+                                                        borderTop: idx === 0 ? 'none' : '1px solid #f1f5f9',
+                                                        background: isSelisih ? 'rgba(254,242,242,0.5)' : isOk ? 'rgba(240,253,244,0.5)' : 'transparent',
+                                                    }}>
+                                                        <td style={{padding:'6px 6px 6px 12px', fontWeight:600, fontSize:'11px', color:'#334155', wordBreak:'break-word', lineHeight:'1.4'}}>{item.name}</td>
+                                                        <td style={{padding:'6px 4px', fontSize:'10px', color:'#94a3b8', wordBreak:'break-word', lineHeight:'1.4'}}>{item.rack || '—'}</td>
+                                                        <td style={{padding:'6px 4px', textAlign:'center', fontWeight:700, fontSize:'11px', color:'#475569'}}>
+                                                            {item.qty}<span style={{fontSize:'8px', color:'#94a3b8', marginLeft:'1px'}}>{item.unit}</span>
+                                                        </td>
+                                                        <td style={{padding:'4px 4px', textAlign:'center'}}>
                                                             <input type="number" min="0"
                                                                 value={physical !== undefined ? physical : ''}
                                                                 onChange={e => handleCountChange(item.id, e.target.value)}
                                                                 placeholder="—"
-                                                                className={`w-24 text-center px-2 py-1.5 rounded-lg border text-sm font-bold outline-none transition-all ${isOk ? 'border-emerald-300 bg-emerald-50 text-emerald-700 focus:ring-emerald-200' : isSelisih ? 'border-red-300 bg-red-50 text-red-600 focus:ring-red-200' : 'border-slate-200 bg-slate-50 text-slate-700 focus:border-sky-400 focus:ring-sky-100'} focus:ring-2`}
+                                                                style={{
+                                                                    width:'46px', textAlign:'center', fontSize:'11px', fontWeight:700,
+                                                                    padding:'3px 2px', borderRadius:'7px', outline:'none',
+                                                                    border: isOk ? '1.5px solid #6ee7b7' : isSelisih ? '1.5px solid #fca5a5' : '1.5px solid #e2e8f0',
+                                                                    background: isOk ? '#ecfdf5' : isSelisih ? '#fef2f2' : '#f8fafc',
+                                                                    color: isOk ? '#059669' : isSelisih ? '#dc2626' : '#475569',
+                                                                }}
                                                             />
                                                         </td>
-                                                        <td className={`px-4 py-3 text-center font-black text-base ${selisih === null ? 'text-slate-300' : selisih > 0 ? 'text-emerald-600' : selisih < 0 ? 'text-red-500' : 'text-slate-400'}`}>
+                                                        <td style={{padding:'6px 4px', textAlign:'center', fontWeight:800, fontSize:'12px', color: selisih === null ? '#cbd5e1' : selisih > 0 ? '#059669' : selisih < 0 ? '#ef4444' : '#94a3b8'}}>
                                                             {selisih === null ? '—' : selisih > 0 ? `+${selisih}` : selisih}
                                                         </td>
-                                                        <td className="px-4 py-3 text-center">
-                                                            {!hasCount && <span className="text-[10px] bg-slate-100 text-slate-400 font-bold px-2 py-1 rounded-full">Belum</span>}
-                                                            {isOk && <span className="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-2 py-1 rounded-full">Sesuai</span>}
-                                                            {isSelisih && <span className="text-[10px] bg-red-100 text-red-600 font-bold px-2 py-1 rounded-full">Selisih</span>}
+                                                        <td style={{padding:'6px 8px 6px 4px', textAlign:'center'}}>
+                                                            {!hasCount && <span style={{fontSize:'9px', fontWeight:700, padding:'2px 7px', borderRadius:'99px', background:'#f1f5f9', color:'#94a3b8'}}>Belum</span>}
+                                                            {isOk && <span style={{fontSize:'9px', fontWeight:700, padding:'2px 7px', borderRadius:'99px', background:'#d1fae5', color:'#065f46'}}>Sesuai</span>}
+                                                            {isSelisih && <span style={{fontSize:'9px', fontWeight:700, padding:'2px 7px', borderRadius:'99px', background:'#fee2e2', color:'#991b1b'}}>Selisih</span>}
                                                         </td>
                                                     </tr>
                                                 );
@@ -10105,6 +10152,125 @@
                                 <div className="flex gap-3">
                                     <button onClick={() => setShowFinishModal(false)} className="flex-1 py-3 rounded-xl bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200">Batal</button>
                                     <button onClick={finishSession} disabled={saving} className="flex-1 py-3 rounded-xl bg-emerald-500 text-white font-bold text-sm hover:bg-emerald-600 shadow-md">{saving ? 'Menyimpan...' : 'Ya, Selesaikan'}</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {showCancelModal && isOwner && (
+                        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm fade-in" onClick={() => setShowCancelModal(false)}>
+                            <div className="bg-white rounded-2xl shadow-2xl p-7 w-full max-w-sm pop-in" onClick={e => e.stopPropagation()}>
+                                <div className="text-center mb-5">
+                                    <div className="w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                                        <i className="fa-solid fa-ban text-red-500 text-2xl"></i>
+                                    </div>
+                                    <h3 className="font-black text-slate-800 text-lg">Batalkan Sesi Opname?</h3>
+                                    <p className="text-slate-500 text-sm mt-2">Semua data yang sudah diinput dalam sesi ini akan <strong className="text-red-500">hilang</strong> dan stok tidak akan diubah. Tindakan ini tidak dapat dibatalkan.</p>
+                                </div>
+                                <div className="bg-red-50 border border-red-100 rounded-xl p-3 mb-5 text-xs text-red-600 font-medium text-center">
+                                    <i className="fa-solid fa-triangle-exclamation mr-1"></i> Hanya Owner yang bisa membatalkan sesi ini.
+                                </div>
+                                <div className="flex gap-3">
+                                    <button onClick={() => setShowCancelModal(false)} className="flex-1 py-3 rounded-xl bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200">Kembali</button>
+                                    <button onClick={cancelSession} disabled={saving} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-bold text-sm hover:bg-red-600 shadow-md flex items-center justify-center gap-2">
+                                        {saving ? 'Membatalkan...' : <><i className="fa-solid fa-ban"></i> Ya, Batalkan</>}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Modal notif karyawan: tidak bisa batalkan sesi */}
+                    {showEmployeeCancelInfo && (
+                        <div
+                            className="fixed inset-0 z-50 flex items-center justify-center p-5"
+                            style={{ pointerEvents: 'none' }}
+                        >
+                            <div
+                                className="relative w-full max-w-xs pop-in"
+                                onClick={e => e.stopPropagation()}
+                                style={{
+                                    pointerEvents: 'auto',
+                                    background: 'linear-gradient(145deg, #1e293b 0%, #0f172a 100%)',
+                                    borderRadius: '24px',
+                                    boxShadow: '0 25px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.06)',
+                                    overflow: 'hidden',
+                                }}
+                            >
+                                {/* Top decorative bar */}
+                                <div style={{ height: '4px', background: 'linear-gradient(90deg, #f59e0b, #ef4444, #f59e0b)', backgroundSize: '200% 100%' }} />
+
+                                {/* Body */}
+                                <div className="p-7 text-center">
+                                    {/* Icon lock dengan efek ring */}
+                                    <div className="relative mx-auto mb-5" style={{ width: '72px', height: '72px' }}>
+                                        <div style={{
+                                            position: 'absolute', inset: 0, borderRadius: '50%',
+                                            background: 'rgba(245,158,11,0.15)',
+                                            animation: 'ping 1.8s cubic-bezier(0,0,0.2,1) infinite',
+                                        }} />
+                                        <div style={{
+                                            position: 'relative', width: '72px', height: '72px',
+                                            background: 'linear-gradient(135deg, #f59e0b22, #ef444422)',
+                                            border: '1.5px solid rgba(245,158,11,0.35)',
+                                            borderRadius: '50%',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        }}>
+                                            <i className="fa-solid fa-lock" style={{ fontSize: '28px', color: '#f59e0b' }} />
+                                        </div>
+                                    </div>
+
+                                    {/* Title */}
+                                    <p style={{
+                                        fontFamily: 'Nunito, sans-serif', fontWeight: 900,
+                                        fontSize: '18px', color: '#f8fafc', marginBottom: '10px', letterSpacing: '-0.3px',
+                                    }}>Akses Terbatas</p>
+
+                                    {/* Subtitle */}
+                                    <p style={{ fontSize: '13px', color: '#94a3b8', lineHeight: 1.7, marginBottom: '20px' }}>
+                                        Membatalkan sesi <strong style={{ color: '#fbbf24' }}>Stock Opname</strong> hanya dapat dilakukan oleh Owner toko.
+                                    </p>
+
+                                    {/* Info box */}
+                                    <div style={{
+                                        background: 'rgba(245,158,11,0.1)',
+                                        border: '1px solid rgba(245,158,11,0.25)',
+                                        borderRadius: '14px',
+                                        padding: '12px 14px',
+                                        marginBottom: '22px',
+                                        display: 'flex', alignItems: 'center', gap: '10px',
+                                    }}>
+                                        <div style={{
+                                            width: '34px', height: '34px', flexShrink: 0,
+                                            background: 'rgba(245,158,11,0.2)',
+                                            borderRadius: '10px',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        }}>
+                                            <i className="fa-solid fa-crown" style={{ color: '#f59e0b', fontSize: '14px' }} />
+                                        </div>
+                                        <p style={{ fontSize: '12px', color: '#fbbf24', fontWeight: 700, textAlign: 'left', lineHeight: 1.5 }}>
+                                            Hubungi <span style={{ color: '#fde68a' }}>Owner</span> untuk membatalkan sesi ini
+                                        </p>
+                                    </div>
+
+                                    {/* Tombol mengerti */}
+                                    <button
+                                        onClick={() => setShowEmployeeCancelInfo(false)}
+                                        style={{
+                                            width: '100%', padding: '13px',
+                                            background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                                            border: 'none', borderRadius: '14px',
+                                            color: '#fff', fontWeight: 800, fontSize: '14px',
+                                            cursor: 'pointer', letterSpacing: '0.2px',
+                                            boxShadow: '0 4px 16px rgba(245,158,11,0.4)',
+                                            transition: 'transform 0.1s, box-shadow 0.1s',
+                                            fontFamily: 'Nunito, sans-serif',
+                                        }}
+                                        onMouseDown={e => { e.currentTarget.style.transform = 'scale(0.97)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(245,158,11,0.3)'; }}
+                                        onMouseUp={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(245,158,11,0.4)'; }}
+                                    >
+                                        Mengerti
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -13337,7 +13503,7 @@
                         {activeTab === 'list' && (<ListView items={inventoryData} loading={loading} settings={settingsData} searchQuery={searchQuery} setSearchQuery={setSearchQuery} showOnlyLowStock={showOnlyLowStock} setShowOnlyLowStock={setShowOnlyLowStock} selectedRacks={selectedRacks} setSelectedRacks={setSelectedRacks} uniqueRacksData={uniqueRacksData} onCopySuccess={showToast} onEdit={(item) => { setFormData({...item}); setEditingItem(item); setActiveTab('add'); }} onDelete={(item) => setDeleteModal({ show: true, item: item })} onDeleteRack={(rackName) => setDeleteRackModal({ show: true, rackName })} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='list')?.readOnly} isOwner={isOwner} />)}
                         {activeTab === 'add' && (<FormView formData={formData} setFormData={setFormData} onSubmit={handleSubmit} isEditing={!!editingItem} submitting={submitting} onCancel={() => { setEditingItem(null); setFormData({name:'', qty:'', unit:'Pcs', exp:'', rack:'', price:'', costPrice:'', minStock: '', defaultDiscount: '', defaultDiscountType: '%'}); setActiveTab('list'); }} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='add')?.readOnly} />)}
                         {activeTab === 'import' && (<BulkImportView user={user} onImportComplete={(count) => { showToast(`${count} Barang berhasil diimport`); setActiveTab('list'); }} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='import')?.readOnly} />)}
-                        {activeTab === 'stock_opname' && (<StockOpnameView items={inventoryData} user={user} showToast={showToast} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='stock_opname')?.readOnly} />)}
+                        {activeTab === 'stock_opname' && (<StockOpnameView items={inventoryData} user={user} showToast={showToast} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='stock_opname')?.readOnly} isOwner={isOwner} />)}
                         {activeTab === 'rekam_medis' && (<RekamMedisView user={user} showToast={showToast} readOnly={menuItems.find(m=>m.id==='rekam_medis')?.readOnly} />)}
                         {activeTab === 'settings' && (<SettingsView settings={settingsData} onSave={handleSaveSettings} loading={submitting} authSession={authSession} onUpdateSession={(newSession) => { setAuthSession(newSession); saveSession(newSession); }} />)}
                         {activeTab === 'pengguna_akun' && (<PenggunaAkunView authSession={authSession} onUpdateSession={(newSession) => { setAuthSession(newSession); saveSession(newSession); }} showToast={showToast} />)}
