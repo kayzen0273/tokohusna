@@ -1759,7 +1759,7 @@
                             <div className="pt-2">
                                 <p className="text-[10px] font-black text-orange-500 uppercase tracking-wider px-1 mb-2 flex items-center gap-1.5"><Icon name="chart-pie" className="text-[10px]" /> Tampilan Dashboard</p>
                                 <div className="p-3 bg-orange-50 border border-orange-200 rounded-xl mb-2">
-                                    <p className="text-xs text-orange-800 font-semibold"><Icon name="circle-info" className="mr-1" />Card yang dinonaktifkan akan <strong>disembunyikan dari halaman Dashboard</strong> untuk semua pengguna.</p>
+                                    <p className="text-xs text-orange-800 font-semibold"><Icon name="circle-info" className="mr-1" />Card yang dinonaktifkan akan <strong>disembunyikan dari halaman Dashboard</strong> untuk semua karyawan. <span className="text-amber-700">Owner selalu bisa melihat.</span></p>
                                 </div>
                                 {dashboardVisibilityList.map(item => (
                                     <div key={item.key} className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200 hover:border-orange-200 transition-all mt-2">
@@ -8591,7 +8591,7 @@
                     </div>
 
                     {/* ===== TOTAL NILAI STOK (HARGA BELI) ===== */}
-                    {settings.showNilaiStokDashboard !== false && (
+                    {(settings.showNilaiStokDashboard !== false || isOwner) && (
                     <div className="bg-gradient-to-br from-orange-50 to-amber-50 backdrop-blur-sm p-5 rounded-3xl shadow-soft border border-orange-100 relative overflow-hidden group hover:shadow-md transition-all">
                         <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform text-orange-500"><Icon name="coins" className="text-5xl" /></div>
                         <div className="relative z-10">
