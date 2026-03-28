@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistem Kasir Toko Husna (V64 - Auto-Save Akses Toko)</title>
+    <title>Sistem Kasir Toko Husna (V65 - Total Nilai Stok Modal)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -8396,6 +8396,7 @@
             const lowStockThreshold = settings.lowStockThreshold || DEFAULT_SETTINGS.lowStockThreshold;
             const lowStockCount = items.filter(i => { const threshold = i.minStock ? safeNumber(i.minStock) : lowStockThreshold; return safeNumber(i.qty) < threshold; }).length;
             const totalStock = items.reduce((a,b)=> a + safeNumber(b.qty), 0);
+            const totalHargaBeli = items.reduce((a, b) => a + (safeNumber(b.costPrice) * safeNumber(b.qty)), 0);
             const expiringItems = useMemo(() => { const today = new Date(); today.setHours(0,0,0,0); const threeMonthsLater = new Date(today); threeMonthsLater.setMonth(today.getMonth() + 3); return items.filter(i => { if (!i.exp) return false; const expDate = new Date(i.exp); return expDate <= threeMonthsLater; }).sort((a,b) => new Date(a.exp) - new Date(b.exp)); }, [items]);
             const getDaysRemaining = (dateStr) => { const today = new Date(); today.setHours(0,0,0,0); const exp = new Date(dateStr); return Math.ceil((exp - today) / (1000 * 60 * 60 * 24)); };
 
@@ -8558,6 +8559,23 @@
                                 <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-sm"><Icon name="triangle-exclamation" className="text-lg" /></div>
                             </div>
                         </button>
+                    </div>
+
+                    {/* ===== TOTAL NILAI STOK (HARGA BELI) ===== */}
+                    <div className="bg-gradient-to-br from-orange-50 to-amber-50 backdrop-blur-sm p-5 rounded-3xl shadow-soft border border-orange-100 relative overflow-hidden group hover:shadow-md transition-all">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform text-orange-500"><Icon name="coins" className="text-5xl" /></div>
+                        <div className="relative z-10">
+                            <div className="flex items-center gap-2 mb-1">
+                                <div className="w-2 h-2 rounded-full bg-orange-400 animate-pulse"></div>
+                                <p className="text-[10px] text-orange-600 font-bold uppercase tracking-wider">Total Nilai Stok (Modal)</p>
+                            </div>
+                            <h3 className="text-xl font-black text-orange-700 leading-tight break-all">
+                                {totalHargaBeli > 0 ? formatRupiah(totalHargaBeli) : <span className="text-slate-300 text-base font-medium">Harga beli belum diisi</span>}
+                            </h3>
+                            <p className="text-[9px] text-orange-400 font-medium mt-1">
+                                Berdasarkan harga beli × stok saat ini • <span className="font-bold">{items.filter(i => safeNumber(i.costPrice) > 0).length}</span> dari {items.length} item
+                            </p>
+                        </div>
                     </div>
 
                     <div className="bg-white/90 backdrop-blur-md rounded-[24px] border border-white shadow-soft overflow-hidden relative z-10">
