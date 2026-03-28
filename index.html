@@ -509,6 +509,8 @@
             requireAbsensiGps: true,
             // Akses toko global ([] = semua toko diizinkan)
             globalAllowedStores: [],
+            // Visibilitas card dashboard
+            showNilaiStokDashboard: true,
         };
 
         // --- BLUETOOTH PRINTER HELPERS ---
@@ -1609,6 +1611,9 @@
                 { key: 'showMenuJadwalShift', label: 'Jadwal Shift', icon: 'calendar-days', desc: 'Tampilkan jadwal shift karyawan' },
                 { key: 'showMenuTransferBarang', label: 'Transfer Barang', icon: 'right-left', desc: 'Tampilkan transfer barang antar toko' },
             ];
+            const dashboardVisibilityList = [
+                { key: 'showNilaiStokDashboard', label: 'Total Nilai Stok (Modal)', icon: 'coins', desc: 'Tampilkan total harga beli × stok di dashboard' },
+            ];
 
             const filteredUsers = users.filter(u =>
                 !isOwnerEmail(u.email) &&
@@ -1749,6 +1754,30 @@
                                     </label>
                                 </div>
                             ))}
+
+                            {/* ── Visibilitas Dashboard ── */}
+                            <div className="pt-2">
+                                <p className="text-[10px] font-black text-orange-500 uppercase tracking-wider px-1 mb-2 flex items-center gap-1.5"><Icon name="chart-pie" className="text-[10px]" /> Tampilan Dashboard</p>
+                                <div className="p-3 bg-orange-50 border border-orange-200 rounded-xl mb-2">
+                                    <p className="text-xs text-orange-800 font-semibold"><Icon name="circle-info" className="mr-1" />Card yang dinonaktifkan akan <strong>disembunyikan dari halaman Dashboard</strong> untuk semua pengguna.</p>
+                                </div>
+                                {dashboardVisibilityList.map(item => (
+                                    <div key={item.key} className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200 hover:border-orange-200 transition-all mt-2">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center flex-shrink-0"><Icon name={item.icon} className="text-orange-500 text-xs" /></div>
+                                            <div>
+                                                <p className="font-bold text-slate-800 text-xs">{item.label}</p>
+                                                <p className="text-[10px] text-slate-400 leading-tight">{item.desc}</p>
+                                            </div>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer flex-shrink-0 ml-2">
+                                            <input type="checkbox" className="sr-only peer" checked={localSettings[item.key] !== false} onChange={e => handleChange(item.key, e.target.checked)} />
+                                            <div className="w-10 h-[22px] bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[18px] after:w-[18px] after:transition-all peer-checked:bg-orange-500"></div>
+                                        </label>
+                                    </div>
+                                ))}
+                            </div>
+
                             <button onClick={onSave} disabled={savingSettings} className="w-full mt-2 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
                                 {savingSettings ? <><span className="typing-dot bg-white"></span><span className="typing-dot bg-white"></span><span className="typing-dot bg-white"></span></> : <><Icon name="floppy-disk" /> Simpan Visibilitas Sidebar</>}
                             </button>
@@ -8562,6 +8591,7 @@
                     </div>
 
                     {/* ===== TOTAL NILAI STOK (HARGA BELI) ===== */}
+                    {settings.showNilaiStokDashboard !== false && (
                     <div className="bg-gradient-to-br from-orange-50 to-amber-50 backdrop-blur-sm p-5 rounded-3xl shadow-soft border border-orange-100 relative overflow-hidden group hover:shadow-md transition-all">
                         <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform text-orange-500"><Icon name="coins" className="text-5xl" /></div>
                         <div className="relative z-10">
@@ -8577,6 +8607,7 @@
                             </p>
                         </div>
                     </div>
+                    )}
 
                     <div className="bg-white/90 backdrop-blur-md rounded-[24px] border border-white shadow-soft overflow-hidden relative z-10">
                         <div className="p-5 border-b border-slate-50 flex items-center justify-between bg-white/50">
