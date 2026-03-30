@@ -6705,9 +6705,9 @@
                         const uangRVal = parseInt(racikanForm.uangR) || 0;
                         const racikanTotal = racikanSubtotal + uangRVal;
                         return (
-                            <div className="fixed inset-0 z-[90] bg-white flex flex-col fade-in">
+                            <div className="fixed inset-0 md:left-80 z-[90] bg-white flex flex-col fade-in">
                                 {/* Header */}
-                                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white" style={{paddingTop: 'calc(env(safe-area-inset-top, 0px) + 68px)'}}>
+                                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white md:!pt-3" style={{paddingTop: 'calc(env(safe-area-inset-top, 0px) + 68px)'}}>
                                     <button onClick={() => { setShowRacikanPage(false); setRacikanItemSearch(''); setEditingRacikanCartId(null); }} className="w-8 h-8 flex items-center justify-center text-red-500 hover:bg-red-50 rounded-lg transition-colors">
                                         <Icon name="xmark" className="text-xl" />
                                     </button>
@@ -6943,11 +6943,11 @@
 
                     {/* ===== DOKTER PICKER ===== */}
                     {showDokterPicker && (
-                        <div className="fixed inset-0 z-[98] bg-white flex flex-col fade-in">
+                        <div className="fixed inset-0 md:left-80 z-[98] bg-white flex flex-col fade-in">
                             {/* ---- FORM TAMBAH / EDIT DOKTER ---- */}
                             {showAddDokterForm ? (
                                 <>
-                                    <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 bg-white" style={{paddingTop: 'calc(env(safe-area-inset-top, 0px) + 68px)'}}>
+                                    <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 bg-white md:!pt-3" style={{paddingTop: 'calc(env(safe-area-inset-top, 0px) + 68px)'}}>
                                         <button onClick={() => { setShowAddDokterForm(false); setNewDokterName(''); setNewDokterAlamat(''); setNewDokterHp(''); setEditingDokter(null); }} className="w-9 h-9 flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
                                             <Icon name="arrow-left" className="text-xl" />
                                         </button>
@@ -6999,7 +6999,7 @@
                             ) : (
                                 <>
                                     {/* ---- LIST DOKTER ---- */}
-                                    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white" style={{paddingTop: 'calc(env(safe-area-inset-top, 0px) + 68px)'}}>
+                                    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white md:!pt-3" style={{paddingTop: 'calc(env(safe-area-inset-top, 0px) + 68px)'}}>
                                         <button onClick={() => setShowDokterPicker(false)} className="w-9 h-9 flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
                                             <Icon name="arrow-left" className="text-xl" />
                                         </button>
@@ -7079,11 +7079,11 @@
 
                     {/* ===== PASIEN PICKER ===== */}
                     {showPasienPicker && (
-                        <div className="fixed inset-0 z-[98] bg-white flex flex-col fade-in">
+                        <div className="fixed inset-0 md:left-80 z-[98] bg-white flex flex-col fade-in">
                             {/* ---- FORM TAMBAH / EDIT PASIEN ---- */}
                             {showAddPasienForm ? (
                                 <>
-                                    <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 bg-white" style={{paddingTop: 'calc(env(safe-area-inset-top, 0px) + 68px)'}}>
+                                    <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200 bg-white md:!pt-3" style={{paddingTop: 'calc(env(safe-area-inset-top, 0px) + 68px)'}}>
                                         <button onClick={() => { setShowAddPasienForm(false); setNewPasienName(''); setNewPasienAge(''); setNewPasienAlamat(''); setNewPasienHp(''); setEditingPasien(null); }} className="w-9 h-9 flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
                                             <Icon name="arrow-left" className="text-xl" />
                                         </button>
@@ -7141,7 +7141,7 @@
                             ) : (
                                 <>
                                     {/* ---- LIST PASIEN ---- */}
-                                    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white" style={{paddingTop: 'calc(env(safe-area-inset-top, 0px) + 68px)'}}>
+                                    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-white md:!pt-3" style={{paddingTop: 'calc(env(safe-area-inset-top, 0px) + 68px)'}}>
                                         <button onClick={() => setShowPasienPicker(false)} className="w-9 h-9 flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors">
                                             <Icon name="arrow-left" className="text-xl" />
                                         </button>
@@ -7221,7 +7221,7 @@
 
                     {/* ===== RACIKAN ITEM DETAIL MODAL ===== */}
                     {racikanModal.show && racikanModal.item && (
-                        <div className="fixed inset-0 z-[95] flex flex-col bg-white fade-in">
+                        <div className="fixed inset-0 md:left-80 z-[95] flex flex-col bg-white fade-in">
                             <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-200">
                                 <button onClick={() => setRacikanModal({ show: false, item: null, qty: 1, selectedUnit: '', selectedPrice: 0, uangR: '' })} className="text-slate-500 hover:text-slate-700 transition-colors">
                                     <Icon name="arrow-left" className="text-xl" />
