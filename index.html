@@ -5351,6 +5351,7 @@
             const [showCashierModal, setShowCashierModal] = useState(false);
             const cashierName = authSession?.namaLengkap || authSession?.username || 'Kasir';
             const [activeCartId, setActiveCartId] = useState(null);
+            const [originalCashierName, setOriginalCashierName] = useState(null); // Nama kasir asli pemilik keranjang
             const [activeCarts, setActiveCarts] = useState([]); // Cart real-time dari kasir lain
             const [helpingCart, setHelpingCart] = useState(null);
             const [pendingHelpingCart, setPendingHelpingCart] = useState(null);
@@ -5603,7 +5604,7 @@
                     isSessionActive,
                     activeCartId,
                     grandTotal: cart.reduce((a, i) => a + (safeNumber(i.price) * i.cartQty), 0),
-                    cashierName: cashierName || 'Kasir',
+                    cashierName: originalCashierName || cashierName || 'Kasir',
                     storeProfile: currentProfile.name,
                     storeId: currentProfile.id,
                 };
@@ -5637,6 +5638,7 @@
                     setIsSessionActive(false);
                     setCart([]);
                     setActiveCartId(null);
+                    setOriginalCashierName(null);
                     localStorage.removeItem('activeCartId');
                     showToast('Sesi tidak aktif — keranjang dipindah ke Tertunda ⏸️', 'info');
                 } catch (e) {
@@ -6093,7 +6095,7 @@
                             date: new Date().toISOString(),
                             items: cart,
                             total: grandTotal,
-                            cashierName: cashierName || user.email || 'Kasir',
+                            cashierName: originalCashierName || cashierName || user.email || 'Kasir',
                             device: navigator.userAgent,
                             storeProfile: currentProfile.name, 
                             storeId: currentProfile.id, // SAVE ID TO FILTER LATER
@@ -6119,6 +6121,7 @@
                 setSearch(''); 
                 setCart([]);
                 setActiveCartId(null);
+                setOriginalCashierName(null); // Reset setelah sesi selesai
                 localStorage.removeItem('activeCartId');
                 // cashierName TETAP disimpan untuk sesi berikutnya
             };
@@ -6147,8 +6150,8 @@
                 try {
                     await window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'pending_carts', pendingItem.id));
                     
-                    // Set nama kasir dari pending cart
-
+                    // Simpan nama kasir asli agar saat ditunda lagi tetap pakai nama pertama
+                    setOriginalCashierName(pendingItem.cashierName || cashierName || 'Kasir');
                     
                     // Buat active cart baru
                     const cartRef = await window.addDoc(
@@ -6415,27 +6418,29 @@
                              </div>
 
                              {pendingCarts.length > 0 && (
-                                <div className="w-full mb-6 fade-in">
-                                    <div className="flex items-center justify-between mb-3 px-1">
-                                        <div className="flex items-center gap-2"><Icon name="clock-rotate-left" className="text-sky-600" /><h3 className="font-bold text-slate-700 text-sm">Tertunda di {currentProfile.name}</h3></div>
-                                        <span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-bold">{pendingCarts.length} sesi</span>
+                                <div className="w-full mb-4 fade-in">
+                                    <div className="flex items-center justify-between mb-2 px-0.5">
+                                        <div className="flex items-center gap-1.5"><Icon name="clock-rotate-left" className="text-sky-500 text-xs" /><h3 className="font-bold text-slate-600 text-xs">Tertunda di {currentProfile.name}</h3></div>
+                                        <span className="text-[9px] bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-full font-bold">{pendingCarts.length} sesi</span>
                                     </div>
-                                    <div className="space-y-3">
+                                    <div className="space-y-1.5">
                                         {pendingCarts.map(pending => (
-                                            <button key={pending.id} onClick={() => resumeTransaction(pending)} className="w-full bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-sky-300 transition-all flex items-center justify-between group relative overflow-hidden">
-                                                <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-sky-400 to-sky-600"></div>
-                                                <div className="text-left pl-2 flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2 mb-0.5">
-                                                        <div className="w-6 h-6 bg-sky-500 rounded-full flex items-center justify-center text-white text-[10px] font-black flex-shrink-0">
-                                                            {(pending.cashierName || '?').charAt(0).toUpperCase()}
-                                                        </div>
-                                                        <p className="font-bold text-sky-700 text-xs truncate">{pending.cashierName || 'Kasir'}</p>
-                                                    </div>
-                                                    <p className="font-black text-slate-800 text-lg">{formatRupiah(pending.total)}</p>
-                                                    <p className="text-xs text-slate-500 font-medium mt-0.5">{pending.items.length} Barang • {new Date(pending.date).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}</p>
-                                                    <span className="inline-block mt-1 text-[9px] font-bold text-sky-600 bg-sky-50 px-2 py-0.5 rounded border border-sky-100">Klik untuk lanjut</span>
+                                            <button key={pending.id} onClick={() => resumeTransaction(pending)} className="w-full bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-sky-300 transition-all flex items-center gap-2 group relative overflow-hidden">
+                                                <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-sky-400 to-sky-600"></div>
+                                                <div className="w-7 h-7 bg-sky-500 rounded-full flex items-center justify-center text-white text-[10px] font-black flex-shrink-0 ml-1">
+                                                    {(pending.cashierName || '?').charAt(0).toUpperCase()}
                                                 </div>
-                                                <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-sky-50 group-hover:text-sky-600 transition-colors ml-2 flex-shrink-0"><Icon name="chevron-right" /></div>
+                                                <div className="text-left flex-1 min-w-0">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <p className="font-bold text-sky-700 text-[11px] truncate">{pending.cashierName || 'Kasir'}</p>
+                                                        <span className="text-[9px] text-slate-400 font-medium flex-shrink-0">{new Date(pending.date).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                                        <p className="font-black text-slate-800 text-sm">{formatRupiah(pending.total)}</p>
+                                                        <span className="text-[9px] text-slate-400">{pending.items.length} barang</span>
+                                                    </div>
+                                                </div>
+                                                <div className="w-6 h-6 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-sky-50 group-hover:text-sky-500 transition-colors flex-shrink-0"><Icon name="chevron-right" className="text-[10px]" /></div>
                                             </button>
                                         ))}
                                     </div>
@@ -6444,76 +6449,56 @@
 
                             {/* Keranjang Aktif — bisa dibantu bersama */}
                             {activeCarts.length > 0 && (
-                                <div className="w-full mb-6 fade-in">
-                                    <div className="flex items-center justify-between mb-1 px-1">
-                                        <div className="flex items-center gap-2">
-                                            <Icon name="users" className="text-emerald-500" />
-                                            <h3 className="font-bold text-slate-700 text-sm">Kasir Lain Sedang Aktif</h3>
+                                <div className="w-full mb-4 fade-in">
+                                    <div className="flex items-center justify-between mb-1 px-0.5">
+                                        <div className="flex items-center gap-1.5">
+                                            <Icon name="users" className="text-emerald-500 text-xs" />
+                                            <h3 className="font-bold text-slate-600 text-xs">Kasir Lain Sedang Aktif</h3>
                                         </div>
-                                        <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold animate-pulse">{activeCarts.length} LIVE</span>
+                                        <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-bold animate-pulse">{activeCarts.length} LIVE</span>
                                     </div>
-                                    <p className="text-[10px] text-slate-400 px-1 mb-3">🤝 Klik <b>Ikut Bantu</b> untuk scan barang bareng ke keranjang mereka secara real-time.</p>
-                                    <div className="space-y-4">
+                                    <p className="text-[9px] text-slate-400 px-0.5 mb-2">🤝 Klik <b>Bantu</b> untuk scan bareng ke keranjang mereka secara real-time.</p>
+                                    <div className="space-y-2">
                                         {activeCarts.map(activeCart => (
-                                            <div key={activeCart.id} className="bg-white rounded-2xl border-2 border-emerald-200 shadow-sm overflow-hidden">
+                                            <div key={activeCart.id} className="bg-white rounded-xl border border-emerald-200 shadow-sm overflow-hidden">
                                                 {/* Header kartu */}
-                                                <div className="bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-3 flex items-center justify-between">
+                                                <div className="bg-gradient-to-r from-emerald-500 to-teal-500 px-3 py-2 flex items-center justify-between">
                                                     <div className="flex items-center gap-2">
-                                                        <div className="w-8 h-8 bg-white/30 rounded-full flex items-center justify-center text-white text-sm font-black">
+                                                        <div className="w-6 h-6 bg-white/30 rounded-full flex items-center justify-center text-white text-[10px] font-black flex-shrink-0">
                                                             {(activeCart.cashierName||'?').charAt(0).toUpperCase()}
                                                         </div>
-                                                        <div>
-                                                            <p className="font-black text-white text-sm leading-none">{activeCart.cashierName}</p>
-                                                            <div className="flex items-center gap-1 mt-0.5">
-                                                                <span className="w-1.5 h-1.5 bg-green-300 rounded-full inline-block animate-pulse"></span>
-                                                                <p className="text-[10px] text-emerald-100 font-bold">LIVE</p>
-                                                            </div>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <p className="font-black text-white text-xs leading-none">{activeCart.cashierName}</p>
+                                                            <span className="w-1.5 h-1.5 bg-green-300 rounded-full inline-block animate-pulse"></span>
+                                                            <p className="text-[9px] text-emerald-100 font-bold">LIVE</p>
                                                         </div>
                                                     </div>
                                                     <div className="text-right">
-                                                        <p className="font-black text-white text-xl leading-none">{formatRupiah(activeCart.total)}</p>
-                                                        <p className="text-[10px] text-emerald-100 mt-0.5">{(activeCart.items||[]).length} barang</p>
+                                                        <p className="font-black text-white text-sm leading-none">{formatRupiah(activeCart.total)}</p>
+                                                        <p className="text-[9px] text-emerald-100 mt-0.5">{(activeCart.items||[]).length} barang</p>
                                                     </div>
                                                 </div>
 
-                                                {/* Daftar item real-time — bisa edit */}
-                                                <div className="px-3 py-2">
+                                                {/* Daftar item real-time */}
+                                                <div className="px-2 py-1.5">
                                                     {(activeCart.items||[]).length === 0 ? (
-                                                        <div className="py-4 text-center text-xs text-slate-400 italic">Keranjang masih kosong...</div>
+                                                        <div className="py-2 text-center text-[10px] text-slate-400 italic">Keranjang masih kosong...</div>
                                                     ) : (
-                                                        <div className="space-y-1.5">
+                                                        <div className="space-y-1">
                                                             {(activeCart.items||[]).map((item, idx) => (
-                                                                <div key={idx} className="flex items-center gap-2 p-2 bg-slate-50 rounded-xl border border-slate-100 group">
+                                                                <div key={idx} className="flex items-center gap-1.5 px-2 py-1 bg-slate-50 rounded-lg border border-slate-100">
                                                                     <div className="flex-1 min-w-0">
-                                                                        <p className="text-xs font-bold text-slate-700 truncate">{item.name}</p>
-                                                                        <p className="text-[10px] text-slate-400">{formatRupiah(item.price)} × {item.cartQty} = <span className="font-bold text-slate-600">{formatRupiah(item.price * item.cartQty)}</span></p>
+                                                                        <p className="text-[11px] font-bold text-slate-700 truncate leading-tight">{item.name}</p>
+                                                                        <p className="text-[9px] text-slate-400">{formatRupiah(item.price)} × {item.cartQty} = <span className="font-bold text-slate-600">{formatRupiah(item.price * item.cartQty)}</span></p>
                                                                     </div>
-                                                                    {/* Tombol edit dan hapus HANYA muncul jika sedang dalam mode bantu untuk keranjang ini */}
                                                                     {helpingCart?.id === activeCart.id && (
                                                                         <>
-                                                                            {/* Kontrol qty */}
-                                                                            <div className="flex items-center gap-1 bg-white rounded-lg border border-slate-200 shadow-sm px-1 py-0.5 flex-shrink-0">
-                                                                                <button 
-                                                                                    onClick={() => updateItemQtyInActiveCart(activeCart.id, idx, -1)} 
-                                                                                    className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
-                                                                                >
-                                                                                    <Icon name="minus" className="text-[9px]" />
-                                                                                </button>
-                                                                                <span className="text-xs font-black text-slate-700 w-4 text-center">{item.cartQty}</span>
-                                                                                <button 
-                                                                                    onClick={() => updateItemQtyInActiveCart(activeCart.id, idx, 1)} 
-                                                                                    className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-green-500 hover:bg-green-50 rounded transition-colors"
-                                                                                >
-                                                                                    <Icon name="plus" className="text-[9px]" />
-                                                                                </button>
+                                                                            <div className="flex items-center gap-0.5 bg-white rounded-lg border border-slate-200 px-1 py-0.5 flex-shrink-0">
+                                                                                <button onClick={() => updateItemQtyInActiveCart(activeCart.id, idx, -1)} className="w-4 h-4 flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"><Icon name="minus" className="text-[8px]" /></button>
+                                                                                <span className="text-[10px] font-black text-slate-700 w-4 text-center">{item.cartQty}</span>
+                                                                                <button onClick={() => updateItemQtyInActiveCart(activeCart.id, idx, 1)} className="w-4 h-4 flex items-center justify-center text-slate-400 hover:text-green-500 hover:bg-green-50 rounded transition-colors"><Icon name="plus" className="text-[8px]" /></button>
                                                                             </div>
-                                                                            {/* Tombol hapus */}
-                                                                            <button 
-                                                                                onClick={() => removeItemFromActiveCart(activeCart.id, idx)} 
-                                                                                className="w-6 h-6 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
-                                                                            >
-                                                                                <Icon name="trash" className="text-[10px]" />
-                                                                            </button>
+                                                                            <button onClick={() => removeItemFromActiveCart(activeCart.id, idx)} className="w-5 h-5 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"><Icon name="trash" className="text-[9px]" /></button>
                                                                         </>
                                                                     )}
                                                                 </div>
@@ -6523,12 +6508,9 @@
                                                 </div>
 
                                                 {/* Footer: tombol bantu */}
-                                                <div className="px-3 pb-3">
-                                                    <button
-                                                        onClick={() => startHelping(activeCart)}
-                                                        className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-bold shadow-md active:scale-95 transition-all flex items-center justify-center gap-2"
-                                                    >
-                                                        <Icon name="handshake" /> Ikut Bantu Scan Barang
+                                                <div className="px-2 pb-2">
+                                                    <button onClick={() => startHelping(activeCart)} className="w-full py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-[11px] font-bold shadow-sm active:scale-95 transition-all flex items-center justify-center gap-1.5">
+                                                        <Icon name="handshake" /> Ikut Bantu Scan
                                                     </button>
                                                 </div>
                                             </div>
@@ -13750,4 +13732,4 @@
     </script>
 <audio id="chaching-sound" src="cha-ching.mp3" preload="auto"></audio>
 </body>
-</html>
+</html>l
