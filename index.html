@@ -265,6 +265,12 @@
         .otp-input:focus { border-color: #0ea5e9; box-shadow: 0 0 0 4px rgba(14,165,233,0.1); background: white; }
         .auth-floating-star { position: absolute; pointer-events: none; animation: authStar 4s ease-in-out infinite; }
         @keyframes authStar { 0%,100% { opacity:0.3; transform: scale(0.8) rotate(0deg); } 50% { opacity:0.8; transform: scale(1.2) rotate(15deg); } }
+
+        /* Expiry Banner - slide from top */
+        @keyframes expBannerIn  { from { transform: translateY(-110%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes expBannerOut { from { transform: translateY(0);     opacity: 1; } to { transform: translateY(-110%); opacity: 0; } }
+        .exp-banner-enter { animation: expBannerIn  0.45s cubic-bezier(0.16,1,0.3,1) forwards; }
+        .exp-banner-exit  { animation: expBannerOut 0.4s  ease-in            forwards; }
     </style>
 </head>
 <body class="islamic-pattern relative">
@@ -792,6 +798,79 @@
                 </div>
             );
         };
+
+        // ── EXPIRY BANNER ──────────────────────────────────────────────────
+        // Banner notifikasi kadaluarsa: muncul di atas layar, auto-dismiss 3 dtk,
+        // tidak memblokir interaksi sama sekali.
+        const ExpiryBanner = ({ items }) => {
+            const [phase, setPhase] = React.useState('hidden'); // hidden | enter | exit
+            const shownRef = React.useRef(false);
+
+            React.useEffect(() => {
+                if (!items || items.length === 0 || shownRef.current) return;
+                shownRef.current = true;
+                // Mulai masuk
+                setPhase('enter');
+                // Mulai keluar setelah 3 detik
+                const t1 = setTimeout(() => setPhase('exit'), 3000);
+                // Hapus dari DOM setelah animasi keluar selesai
+                const t2 = setTimeout(() => setPhase('hidden'), 3450);
+                return () => { clearTimeout(t1); clearTimeout(t2); };
+            }, [items]);
+
+            if (phase === 'hidden' || !items || items.length === 0) return null;
+
+            const expired    = items.filter(i => { const d = getDaysRemaining(i.exp); return d !== null && d < 0; });
+            const nearExp    = items.filter(i => { const d = getDaysRemaining(i.exp); return d !== null && d >= 0 && d <= 30; });
+            const totalCount = expired.length + nearExp.length;
+
+            // Buat teks notifikasi
+            let label = '';
+            if (expired.length > 0 && nearExp.length > 0)
+                label = `${expired.length} barang sudah & ${nearExp.length} hampir kadaluarsa`;
+            else if (expired.length > 0)
+                label = `${expired.length} barang sudah kadaluarsa`;
+            else
+                label = `${nearExp.length} barang hampir kadaluarsa (≤30 hari)`;
+
+            const isUrgent = expired.length > 0;
+            const gradient = isUrgent
+                ? 'linear-gradient(135deg,#ef4444,#f97316)'
+                : 'linear-gradient(135deg,#f59e0b,#fb923c)';
+            const iconName = isUrgent ? 'triangle-exclamation' : 'clock';
+
+            return (
+                <div
+                    className={phase === 'exit' ? 'exp-banner-exit' : 'exp-banner-enter'}
+                    style={{
+                        position: 'fixed', top: 0, left: 0, right: 0,
+                        zIndex: 999, display: 'flex', justifyContent: 'center',
+                        padding: '10px 16px',
+                        pointerEvents: phase === 'exit' ? 'none' : 'auto',
+                    }}
+                >
+                    <div style={{
+                        display: 'flex', alignItems: 'center', gap: '10px',
+                        background: gradient,
+                        color: '#fff',
+                        padding: '10px 20px',
+                        borderRadius: '99px',
+                        boxShadow: '0 6px 24px rgba(0,0,0,0.22)',
+                        fontSize: '13px', fontWeight: 700,
+                        maxWidth: '480px',
+                        backdropFilter: 'blur(8px)',
+                        border: '1.5px solid rgba(255,255,255,0.25)',
+                    }}>
+                        <Icon name={iconName} style={{ fontSize: '14px', flexShrink: 0 }} />
+                        <span>{label}</span>
+                        <span style={{ opacity: 0.65, fontWeight: 500, fontSize: '11px', marginLeft: 2 }}>
+                            — lihat Stok Barang
+                        </span>
+                    </div>
+                </div>
+            );
+        };
+        // ─────────────────────────────────────────────────────────────────────
 
         const ConfirmModal = ({ isOpen, title, message, onConfirm, onCancel, confirmText = "Ya, Hapus", confirmColor = "red", children }) => {
             if (!isOpen) return null;
@@ -12871,6 +12950,8 @@
             const [deleteRackModal, setDeleteRackModal] = useState({ show: false, rackName: null });
             const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
             const [submitting, setSubmitting] = useState(false);
+            const [expiryAlertItems, setExpiryAlertItems] = useState([]); // untuk ExpiryBanner
+            const _expiryAlertShown = useRef(false); // hanya tampil sekali per session
             const [user, setUser] = useState(null);
             const [isSidebarOpen, setIsSidebarOpen] = useState(false);
             const [receiptToPrint, setReceiptToPrint] = useState(null);
@@ -13245,6 +13326,24 @@
                 return () => { unsubPending(); unsubActive(); };
             }, [user, activeStoreId, settingsData]);
 
+            // ── Deteksi barang kadaluarsa / hampir kadaluarsa → trigger ExpiryBanner ──
+            useEffect(() => {
+                // Hanya jalankan sekali per sesi, setelah data selesai dimuat
+                if (loading || _expiryAlertShown.current || inventoryData.length === 0) return;
+                const today = new Date(); today.setHours(0,0,0,0);
+                const deadline = new Date(today); deadline.setDate(today.getDate() + 30);
+                const alertItems = inventoryData.filter(i => {
+                    if (!i.exp) return false;
+                    const expDate = new Date(i.exp); expDate.setHours(0,0,0,0);
+                    return expDate <= deadline;
+                });
+                if (alertItems.length > 0) {
+                    _expiryAlertShown.current = true;
+                    setExpiryAlertItems(alertItems);
+                }
+            }, [inventoryData, loading]);
+            // ─────────────────────────────────────────────────────────────────
+
             const uniqueRacksData = useMemo(() => {
                 const rackMap = new Map();
                 inventoryData.forEach(item => {
@@ -13421,7 +13520,7 @@
 
             return (
                 <div className={`min-h-screen flex flex-col md:flex-row bg-sky-50/50 transition-colors duration-500 ${activeStoreId === 'all_stores' ? 'theme-all-stores' : ''}`}>
-                    <RamadhanDecor /> <Toast show={toast.show} message={toast.message} type={toast.type} /> {isSidebarOpen && (<div className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm fade-in" onClick={() => setIsSidebarOpen(false)}></div>)}
+                    <RamadhanDecor /> <Toast show={toast.show} message={toast.message} type={toast.type} /> <ExpiryBanner items={expiryAlertItems} /> {isSidebarOpen && (<div className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm fade-in" onClick={() => setIsSidebarOpen(false)}></div>)}
                     
                     {/* HIDDEN RECEIPT CONTAINER (UPDATED FOR DYNAMIC STORE) */}
                     {receiptToPrint && ( <div style={{ position: 'fixed', top: '-9999px', left: '-9999px', zIndex: -1 }}> 
