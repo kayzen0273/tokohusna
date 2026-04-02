@@ -517,6 +517,9 @@
             globalAllowedStores: [],
             // Visibilitas card dashboard
             showNilaiStokDashboard: true,
+            // Notifikasi kadaluarsa banner
+            expiryNotifEnabled: true,
+            expiryNotifMonths: 3,
         };
 
         // --- BLUETOOTH PRINTER HELPERS ---
@@ -802,7 +805,7 @@
         // ── EXPIRY BANNER ──────────────────────────────────────────────────
         // Banner notifikasi kadaluarsa: muncul di atas layar, auto-dismiss 3 dtk,
         // tidak memblokir interaksi sama sekali.
-        const ExpiryBanner = ({ items }) => {
+        const ExpiryBanner = ({ items, thresholdDays = 90 }) => {
             const [phase, setPhase] = React.useState('hidden'); // hidden | enter | exit
             const shownRef = React.useRef(false);
 
@@ -821,8 +824,10 @@
             if (phase === 'hidden' || !items || items.length === 0) return null;
 
             const expired    = items.filter(i => { const d = getDaysRemaining(i.exp); return d !== null && d < 0; });
-            const nearExp    = items.filter(i => { const d = getDaysRemaining(i.exp); return d !== null && d >= 0 && d <= 30; });
+            const nearExp    = items.filter(i => { const d = getDaysRemaining(i.exp); return d !== null && d >= 0 && d <= thresholdDays; });
             const totalCount = expired.length + nearExp.length;
+            const thresholdMonths = Math.round(thresholdDays / 30);
+            const thresholdLabel = thresholdMonths >= 1 ? `≤${thresholdMonths} bulan` : `≤${thresholdDays} hari`;
 
             // Buat teks notifikasi
             let label = '';
@@ -831,7 +836,7 @@
             else if (expired.length > 0)
                 label = `${expired.length} barang sudah kadaluarsa`;
             else
-                label = `${nearExp.length} barang hampir kadaluarsa (≤30 hari)`;
+                label = `${nearExp.length} barang hampir kadaluarsa (${thresholdLabel})`;
 
             const isUrgent = expired.length > 0;
             const gradient = isUrgent
@@ -1887,6 +1892,53 @@
                             <button onClick={onSave} disabled={savingSettings} className="w-full mt-2 py-3.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
                                 {savingSettings ? <><span className="typing-dot bg-white"></span><span className="typing-dot bg-white"></span><span className="typing-dot bg-white"></span></> : <><Icon name="floppy-disk" /> Simpan Pengaturan Menu</>}
                             </button>
+
+                            {/* ── Notifikasi Kadaluarsa ── */}
+                            <div className="pt-2">
+                                <p className="text-[10px] font-black text-orange-500 uppercase tracking-wider px-1 mb-2 flex items-center gap-1.5"><Icon name="bell" className="text-[10px]" /> Notifikasi Kadaluarsa</p>
+                                <div className="p-3 bg-orange-50 border border-orange-200 rounded-xl mb-2">
+                                    <p className="text-xs text-orange-800 font-semibold"><Icon name="circle-info" className="mr-1" />Banner notifikasi muncul di atas layar saat login jika ada barang yang akan kadaluarsa. Bisa dimatikan dan diatur batas waktunya.</p>
+                                </div>
+
+                                {/* Toggle aktifkan/matikan */}
+                                <div className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200 hover:border-orange-200 transition-all mb-2">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="w-7 h-7 rounded-lg bg-orange-50 flex items-center justify-center flex-shrink-0"><Icon name="bell" className="text-orange-500 text-xs" /></div>
+                                        <div>
+                                            <p className="font-bold text-slate-800 text-xs">Aktifkan Notifikasi Banner</p>
+                                            <p className="text-[10px] text-slate-400 leading-tight">Tampilkan banner kadaluarsa di atas layar</p>
+                                        </div>
+                                    </div>
+                                    <label className="relative inline-flex items-center cursor-pointer flex-shrink-0 ml-2">
+                                        <input type="checkbox" className="sr-only peer" checked={localSettings.expiryNotifEnabled !== false} onChange={e => handleChange('expiryNotifEnabled', e.target.checked)} />
+                                        <div className="w-10 h-[22px] bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[18px] after:w-[18px] after:transition-all peer-checked:bg-orange-500"></div>
+                                    </label>
+                                </div>
+
+                                {/* Setting berapa bulan */}
+                                {localSettings.expiryNotifEnabled !== false && (
+                                    <div className="p-3 bg-white rounded-xl border border-slate-200">
+                                        <p className="text-xs font-bold text-slate-600 mb-2">Tampilkan notifikasi jika kadaluarsa dalam:</p>
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-1 flex-wrap">
+                                                {[1,2,3,4,5,6].map(m => (
+                                                    <button
+                                                        key={m}
+                                                        onClick={() => handleChange('expiryNotifMonths', m)}
+                                                        className={`w-10 h-10 rounded-xl text-sm font-black transition-all border ${(localSettings.expiryNotifMonths || 3) === m ? 'bg-orange-500 text-white border-orange-500 shadow-md scale-105' : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-orange-300 hover:bg-orange-50'}`}
+                                                    >{m}</button>
+                                                ))}
+                                            </div>
+                                            <span className="text-sm font-semibold text-slate-500">bulan</span>
+                                        </div>
+                                        <p className="text-[10px] text-slate-400 mt-2">Barang yang kadaluarsa dalam <strong>{localSettings.expiryNotifMonths || 3} bulan</strong> ke depan akan memunculkan banner notifikasi.</p>
+                                    </div>
+                                )}
+
+                                <button onClick={onSave} disabled={savingSettings} className="w-full mt-3 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold shadow active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-50 text-sm">
+                                    {savingSettings ? <><span className="typing-dot bg-white"></span></> : <><Icon name="floppy-disk" /> Simpan Notifikasi Kadaluarsa</>}
+                                </button>
+                            </div>
                         </div>
                     )}
 
@@ -13330,8 +13382,11 @@
             useEffect(() => {
                 // Hanya jalankan sekali per sesi, setelah data selesai dimuat
                 if (loading || _expiryAlertShown.current || inventoryData.length === 0) return;
+                // Cek apakah notifikasi kadaluarsa diaktifkan
+                if (settingsData.expiryNotifEnabled === false) return;
+                const months = settingsData.expiryNotifMonths || 3;
                 const today = new Date(); today.setHours(0,0,0,0);
-                const deadline = new Date(today); deadline.setDate(today.getDate() + 30);
+                const deadline = new Date(today); deadline.setMonth(today.getMonth() + months);
                 const alertItems = inventoryData.filter(i => {
                     if (!i.exp) return false;
                     const expDate = new Date(i.exp); expDate.setHours(0,0,0,0);
@@ -13341,7 +13396,7 @@
                     _expiryAlertShown.current = true;
                     setExpiryAlertItems(alertItems);
                 }
-            }, [inventoryData, loading]);
+            }, [inventoryData, loading, settingsData.expiryNotifEnabled, settingsData.expiryNotifMonths]);
             // ─────────────────────────────────────────────────────────────────
 
             const uniqueRacksData = useMemo(() => {
@@ -13520,7 +13575,7 @@
 
             return (
                 <div className={`min-h-screen flex flex-col md:flex-row bg-sky-50/50 transition-colors duration-500 ${activeStoreId === 'all_stores' ? 'theme-all-stores' : ''}`}>
-                    <RamadhanDecor /> <Toast show={toast.show} message={toast.message} type={toast.type} /> <ExpiryBanner items={expiryAlertItems} /> {isSidebarOpen && (<div className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm fade-in" onClick={() => setIsSidebarOpen(false)}></div>)}
+                    <RamadhanDecor /> <Toast show={toast.show} message={toast.message} type={toast.type} /> <ExpiryBanner items={expiryAlertItems} thresholdDays={(settingsData.expiryNotifMonths || 3) * 30} /> {isSidebarOpen && (<div className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm fade-in" onClick={() => setIsSidebarOpen(false)}></div>)}
                     
                     {/* HIDDEN RECEIPT CONTAINER (UPDATED FOR DYNAMIC STORE) */}
                     {receiptToPrint && ( <div style={{ position: 'fixed', top: '-9999px', left: '-9999px', zIndex: -1 }}> 
