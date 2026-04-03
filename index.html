@@ -5909,6 +5909,53 @@
                 }
             }, []); // eslint-disable-line
 
+            // Ganti toko → langsung simpan ke tertunda dengan info toko LAMA
+            const prevProfileRef = useRef(currentProfile);
+            useEffect(() => {
+                if (prevProfileRef.current?.id && prevProfileRef.current.id !== currentProfile?.id) {
+                    // Ambil snapshot cart saat ini dengan profil LAMA sebelum berubah
+                    const snap = autoSaveSnap.current;
+                    if (snap && snap.isSessionActive && snap.cart.length > 0) {
+                        const oldProfile = prevProfileRef.current;
+                        (async () => {
+                            try {
+                                await window.addDoc(
+                                    window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pending_carts'),
+                                    {
+                                        date: new Date().toISOString(),
+                                        items: snap.cart,
+                                        total: snap.grandTotal,
+                                        cashierName: snap.cashierName,
+                                        device: navigator.userAgent,
+                                        storeProfile: oldProfile.name,
+                                        storeId: oldProfile.id,
+                                        createdAt: window.serverTimestamp(),
+                                        autoSaved: true,
+                                    }
+                                );
+                                if (snap.activeCartId) {
+                                    await window.deleteDoc(
+                                        window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', snap.activeCartId)
+                                    );
+                                }
+                            } catch (e) {
+                                console.error('Ganti toko - tertunda error:', e);
+                            }
+                        })();
+                    }
+                    setIsSessionActive(false);
+                    setCart([]);
+                    setActiveCartId(null);
+                    setOriginalCashierName(null);
+                    localStorage.removeItem('activeCartId');
+                    setSearch('');
+                    setCartDiskon('0');
+                    setCartDiskonType('%');
+                    setCartBiayaPengiriman('0');
+                }
+                prevProfileRef.current = currentProfile;
+            }, [currentProfile?.id]); // eslint-disable-line
+
             // Reset timer inaktif setiap ada interaksi user
             const resetInactivityTimer = useCallback(() => {
                 clearTimeout(inactivityTimerRef.current);
@@ -5932,9 +5979,9 @@
 
                 const handleVisibility = () => {
                     if (document.hidden) {
-                        // Tab / browser disembunyikan: pindahkan ke tertunda setelah 30 detik
+                        // Tab / browser disembunyikan: langsung pindah ke tertunda
                         clearTimeout(visibilityTimerRef.current);
-                        visibilityTimerRef.current = setTimeout(doAutoMoveToTertunda, 30 * 1000);
+                        doAutoMoveToTertunda();
                     } else {
                         // User kembali: batalkan jadwal visibility & reset timer inaktif
                         clearTimeout(visibilityTimerRef.current);
@@ -5943,9 +5990,16 @@
                 };
                 document.addEventListener('visibilitychange', handleVisibility);
 
+                // Keluar website (tutup tab / reload)
+                const handlePageHide = () => { doAutoMoveToTertunda(); };
+                window.addEventListener('pagehide', handlePageHide);
+                window.addEventListener('beforeunload', handlePageHide);
+
                 return () => {
                     activityEvents.forEach(e => document.removeEventListener(e, resetInactivityTimer));
                     document.removeEventListener('visibilitychange', handleVisibility);
+                    window.removeEventListener('pagehide', handlePageHide);
+                    window.removeEventListener('beforeunload', handlePageHide);
                     clearTimeout(inactivityTimerRef.current);
                     clearTimeout(visibilityTimerRef.current);
                 };
