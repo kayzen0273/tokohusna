@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistem Kasir Toko Husna (V66 - Buku Kas Gradient Card)</title>
+    <title>Sistem Kasir Toko Husna (V67 - Sales & Kasir Terpisah)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -5583,6 +5583,38 @@
             const [newPasienAlamat, setNewPasienAlamat] = useState('');
             const [newPasienHp, setNewPasienHp] = useState('');
 
+            // --- INFO TRANSAKSI ---
+            const TIPE_TRANSAKSI_OPTIONS = ['Harga normal', 'Harga pokok + markup', 'Harga grosir', 'Harga reseller', 'Harga khusus'];
+            const [tipeTransaksi, setTipeTransaksi] = useState('Harga normal');
+            const [showTipeModal, setShowTipeModal] = useState(false);
+            const [tipeModalTemp, setTipeModalTemp] = useState('Harga normal');
+            const [markupPersen, setMarkupPersen] = useState(0);
+            const [markupTemp, setMarkupTemp] = useState(0);
+            const [selectedSales, setSelectedSales] = useState('');
+            const [showSalesModal, setShowSalesModal] = useState(false);
+            const [selectedPembeli, setSelectedPembeli] = useState('');
+            const [pembeliInput, setPembeliInput] = useState('');
+            const [showPembeliModal, setShowPembeliModal] = useState(false);
+            const [showAddPembeliForm, setShowAddPembeliForm] = useState(false);
+            const [newPembeliNameInput, setNewPembeliNameInput] = useState('');
+            const [savingPembeli, setSavingPembeli] = useState(false);
+            const [registeredUsers, setRegisteredUsers] = useState([]);
+
+            // Fetch semua akun terdaftar untuk pilihan Sales
+            useEffect(() => {
+                if (!user) return;
+                const usersRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'users');
+                const unsub = window.onSnapshot(usersRef, (snap) => {
+                    const users = snap.docs
+                        .map(d => ({ id: d.id, ...d.data() }))
+                        .map(u => ({ name: u.namaLengkap || u.username, isActive: u.isActive !== false }))
+                        .filter(u => u.name)
+                        .sort((a, b) => a.name.localeCompare(b.name));
+                    setRegisteredUsers(users);
+                });
+                return () => unsub();
+            }, [user]);
+
             // Load daftar dokter & pasien dari Firestore
             useEffect(() => {
                 if (!user) return;
@@ -5876,7 +5908,21 @@
             // Fungsi eksekusi auto-pindah ke tertunda (pakai snapshot ref agar tidak stale)
             const doAutoMoveToTertunda = useCallback(async () => {
                 const snap = autoSaveSnap.current;
-                if (!snap || !snap.isSessionActive || snap.cart.length === 0) return;
+                if (!snap || !snap.isSessionActive) return;
+                // Cart kosong: cukup hapus active_cart tanpa simpan ke tertunda
+                if (snap.cart.length === 0) {
+                    if (snap.activeCartId) {
+                        try {
+                            await window.deleteDoc(
+                                window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', snap.activeCartId)
+                            );
+                        } catch (e) { console.error('Delete empty active_cart error:', e); }
+                    }
+                    setIsSessionActive(false);
+                    setActiveCartId(null);
+                    localStorage.removeItem('activeCartId');
+                    return;
+                }
                 try {
                     await window.addDoc(
                         window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pending_carts'),
@@ -5915,24 +5961,26 @@
                 if (prevProfileRef.current?.id && prevProfileRef.current.id !== currentProfile?.id) {
                     // Ambil snapshot cart saat ini dengan profil LAMA sebelum berubah
                     const snap = autoSaveSnap.current;
-                    if (snap && snap.isSessionActive && snap.cart.length > 0) {
+                    if (snap && snap.isSessionActive) {
                         const oldProfile = prevProfileRef.current;
                         (async () => {
                             try {
-                                await window.addDoc(
-                                    window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pending_carts'),
-                                    {
-                                        date: new Date().toISOString(),
-                                        items: snap.cart,
-                                        total: snap.grandTotal,
-                                        cashierName: snap.cashierName,
-                                        device: navigator.userAgent,
-                                        storeProfile: oldProfile.name,
-                                        storeId: oldProfile.id,
-                                        createdAt: window.serverTimestamp(),
-                                        autoSaved: true,
-                                    }
-                                );
+                                if (snap.cart.length > 0) {
+                                    await window.addDoc(
+                                        window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pending_carts'),
+                                        {
+                                            date: new Date().toISOString(),
+                                            items: snap.cart,
+                                            total: snap.grandTotal,
+                                            cashierName: snap.cashierName,
+                                            device: navigator.userAgent,
+                                            storeProfile: oldProfile.name,
+                                            storeId: oldProfile.id,
+                                            createdAt: window.serverTimestamp(),
+                                            autoSaved: true,
+                                        }
+                                    );
+                                }
                                 if (snap.activeCartId) {
                                     await window.deleteDoc(
                                         window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', snap.activeCartId)
@@ -6545,6 +6593,9 @@
                         paymentProofImage: paymentProofImage || null,
                         status: 'success', 
                         cashierName: cashierName || user.email || 'Admin',
+                        salesName: selectedSales || originalCashierName || cashierName || user.email || 'Admin',
+                        tipeTransaksi: tipeTransaksi || 'Harga normal',
+                        pembeli: selectedPembeli || '',
                         storeId: currentProfile.id || 'default',
                         storeName: currentProfile.name
                     };
@@ -6910,6 +6961,9 @@
                 <div className="fade-in h-full flex flex-col md:flex-row gap-4 pb-20 md:pb-0 relative z-10">
                     <div className="flex-1 flex flex-col h-full min-h-0">
                         
+                        {/* Tombol Kembali - paling atas */}
+                        <button onClick={handleBack} className="w-10 h-10 rounded-xl bg-white text-slate-400 hover:text-sky-600 hover:border-sky-300 border border-slate-200 flex items-center justify-center shadow-sm transition-colors mb-3" title="Kembali & Simpan Sementara"><Icon name="arrow-left" /></button>
+
                         {/* Slim kasir indicator */}
                         <div className="flex items-center gap-2 mb-3 px-1">
                             <div className="w-6 h-6 bg-sky-500 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm">{cashierName.charAt(0).toUpperCase()}</div>
@@ -6917,9 +6971,207 @@
                             <span className="text-[10px] text-slate-400">• {currentProfile.name}</span>
                         </div>
                         
-                        <div className="flex items-center gap-3 mb-4"><button onClick={handleBack} className="w-10 h-10 rounded-xl bg-white text-slate-400 hover:text-sky-600 hover:border-sky-300 border border-slate-200 flex items-center justify-center shadow-sm transition-colors" title="Kembali & Simpan Sementara"><Icon name="arrow-left" /></button><div className="relative group flex-1"><input autoFocus type="text" placeholder="Ketik nama barang disini..." className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-white border border-slate-200 shadow-soft focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition-all font-bold text-lg text-slate-700 placeholder:font-normal placeholder:text-slate-400" value={search} onChange={e => setSearch(e.target.value)} /><Icon name="magnifying-glass" className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xl group-focus-within:text-sky-500" /></div><button onClick={() => { setShowRacikanPage(true); setRacikanSearch(''); }} className="flex-shrink-0 px-4 py-3.5 rounded-2xl bg-teal-600 hover:bg-teal-700 text-white font-black text-sm shadow-lg active:scale-95 transition-all flex items-center gap-1.5" title="Pelayanan Racikan / Resep"><span className="text-base leading-none">R/</span></button></div>
-                        <div className="flex-1 pr-1 pb-2">
-                            {search !== '' ? (
+                        {/* Info Transaksi */}
+                        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm mb-3 overflow-hidden">
+                            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
+                                <div>
+                                    <p className="text-[10px] font-bold text-teal-600 leading-none mb-0.5">Tipe transaksi</p>
+                                    <p className="text-xs font-semibold text-slate-700">{tipeTransaksi}</p>
+                                </div>
+                                <button onClick={() => { setTipeModalTemp(tipeTransaksi); setMarkupTemp(markupPersen); setShowTipeModal(true); }} className="w-8 h-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-teal-600 hover:border-teal-300 transition-all active:scale-95">
+                                    <Icon name="pen" className="text-xs" />
+                                </button>
+                            </div>
+                            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
+                                <div>
+                                    <p className="text-[10px] font-bold text-teal-600 leading-none mb-0.5">Sales</p>
+                                    <p className="text-xs font-semibold text-slate-700">{selectedSales || originalCashierName || cashierName}</p>
+                                </div>
+                                <button onClick={() => setShowSalesModal(true)} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:border-teal-400 hover:text-teal-600 transition-all active:scale-95 flex items-center gap-1">Pilih <Icon name="chevron-right" className="text-[10px]" /></button>
+                            </div>
+                            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-100">
+                                <div>
+                                    <p className="text-[10px] font-bold text-teal-600 leading-none mb-0.5">Kasir</p>
+                                    <p className="text-xs font-semibold text-slate-700">{cashierName}</p>
+                                </div>
+                                <span className="px-2 py-1 rounded-lg bg-slate-50 text-[10px] font-bold text-slate-400">Auto</span>
+                            </div>
+                            <div className="flex items-center justify-between px-4 py-2.5">
+                                <div>
+                                    <p className="text-[10px] font-bold text-teal-600 leading-none mb-0.5">Pembeli</p>
+                                    <p className="text-xs font-semibold text-slate-700">{selectedPembeli || 'Pembeli belum dipilih'}</p>
+                                </div>
+                                <button onClick={() => { setPembeliInput(selectedPembeli); setShowPembeliModal(true); }} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:border-teal-400 hover:text-teal-600 transition-all active:scale-95 flex items-center gap-1">Pilih <Icon name="chevron-right" className="text-[10px]" /></button>
+                            </div>
+                        </div>
+
+                        {/* Modal Tipe Transaksi */}
+                        {showTipeModal && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowTipeModal(false)}>
+                                <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+                                    <h3 className="font-black text-slate-800 text-lg text-center mb-5">Pilih tipe transaksi</h3>
+                                    <div className="divide-y divide-slate-100">
+                                        {['Harga normal','Harga pokok + markup','Harga grosir','Harga reseller','Harga khusus'].map(opt => (
+                                            <div key={opt}>
+                                                <button onClick={() => setTipeModalTemp(opt)} className="w-full flex items-center justify-between py-3.5 px-1 transition-all">
+                                                    <span className={`text-sm font-bold ${tipeModalTemp === opt ? 'text-teal-600' : 'text-slate-700'}`}>{opt}</span>
+                                                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${tipeModalTemp === opt ? 'border-teal-600' : 'border-slate-300'}`}>
+                                                        {tipeModalTemp === opt && <div className="w-3 h-3 rounded-full bg-teal-600"></div>}
+                                                    </div>
+                                                </button>
+                                                {opt === 'Harga pokok + markup' && tipeModalTemp === 'Harga pokok + markup' && (
+                                                    <div className="flex items-center gap-3 pb-3 px-1">
+                                                        <span className="text-sm font-bold text-slate-700">Markup</span>
+                                                        <input
+                                                            type="number"
+                                                            value={markupTemp}
+                                                            onChange={e => setMarkupTemp(Number(e.target.value))}
+                                                            className="w-24 text-center border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold text-slate-800 outline-none focus:border-teal-500"
+                                                        />
+                                                        <span className="text-sm font-bold text-slate-700">%</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="flex gap-3 mt-5">
+                                        <button onClick={() => { setTipeTransaksi(tipeModalTemp); setMarkupPersen(markupTemp); setShowTipeModal(false); }} className="flex-1 py-3 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-2xl active:scale-95 transition-all">Simpan</button>
+                                        <button onClick={() => setShowTipeModal(false)} className="flex-1 py-3 border-2 border-red-400 text-red-500 font-bold rounded-2xl hover:bg-red-50 active:scale-95 transition-all">Batal</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        {/* Modal Pilih Sales */}
+                        {showSalesModal && (() => {
+                            // Gabung semua akun + salesList + nama pemilik keranjang, tanpa duplikat
+                            const allSalesNames = [
+                                originalCashierName || cashierName,
+                                cashierName,
+                                ...registeredUsers.map(u => u.name),
+                                ...(settings?.salesList || [])
+                            ].filter((v, i, a) => v && a.indexOf(v) === i);
+                            const activeSales = selectedSales || originalCashierName || cashierName;
+                            return (
+                                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm" onClick={() => setShowSalesModal(false)}>
+                                    <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+                                        <div className="flex items-center justify-between mb-3">
+                                            <h3 className="font-bold text-slate-800">Pilih Sales</h3>
+                                            {selectedSales && selectedSales !== (originalCashierName || cashierName) && (
+                                                <button onClick={() => { setSelectedSales(''); setShowSalesModal(false); }} className="text-[10px] font-bold text-red-400 hover:text-red-600 border border-red-200 px-2 py-1 rounded-lg transition-all">Reset</button>
+                                            )}
+                                        </div>
+                                        <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                                            {allSalesNames.map(name => {
+                                                const userObj = registeredUsers.find(u => u.name === name);
+                                                const isInactive = userObj && userObj.isActive === false;
+                                                const isSelected = activeSales === name;
+                                                return (
+                                                    <button key={name} onClick={() => { setSelectedSales(name); setShowSalesModal(false); }}
+                                                        className={`w-full text-left px-4 py-3 rounded-xl text-sm font-semibold transition-all flex items-center gap-3 ${isSelected ? 'bg-teal-600 text-white' : 'bg-slate-50 text-slate-700 hover:bg-teal-50'}`}>
+                                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 ${isSelected ? 'bg-white/20 text-white' : 'bg-teal-100 text-teal-700'}`}>
+                                                            {name.charAt(0).toUpperCase()}
+                                                        </div>
+                                                        <span className="flex-1">{name}</span>
+                                                        {isInactive && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${isSelected ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-500'}`}>Nonaktif</span>}
+                                                        {isSelected && <Icon name="check" className="text-white text-xs" />}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })()}
+                        {/* Modal Pembeli */}
+                        {showPembeliModal && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm" onClick={() => { setShowPembeliModal(false); setShowAddPembeliForm(false); setNewPembeliNameInput(''); }}>
+                                <div className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl mx-4" onClick={e => e.stopPropagation()}>
+                                    {/* Header */}
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="font-black text-slate-800 text-lg">{showAddPembeliForm ? '+ Tambah Pembeli' : 'Pilih Pembeli'}</h3>
+                                        <div className="flex items-center gap-2">
+                                            {!showAddPembeliForm && selectedPembeli && (
+                                                <button onClick={() => { setSelectedPembeli(''); setPembeliInput(''); }} className="text-[10px] font-bold text-red-400 hover:text-red-600 border border-red-200 px-2 py-1 rounded-lg transition-all">Reset</button>
+                                            )}
+                                            <button onClick={() => { setShowAddPembeliForm(!showAddPembeliForm); setNewPembeliNameInput(showAddPembeliForm ? '' : pembeliInput); }}
+                                                className={`flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${showAddPembeliForm ? 'bg-slate-100 text-slate-500 hover:bg-slate-200' : 'bg-teal-600 text-white hover:bg-teal-700'}`}>
+                                                <Icon name={showAddPembeliForm ? 'xmark' : 'plus'} className="text-[10px]" />
+                                                {showAddPembeliForm ? 'Batal' : 'Pembeli'}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {showAddPembeliForm ? (
+                                        /* Form tambah pembeli baru */
+                                        <div>
+                                            <input autoFocus type="text" value={newPembeliNameInput} onChange={e => setNewPembeliNameInput(e.target.value)}
+                                                onKeyDown={e => { if (e.key === 'Enter' && newPembeliNameInput.trim()) e.currentTarget.blur(); }}
+                                                placeholder="Nama pembeli baru..." className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100 mb-4" />
+                                            <button disabled={!newPembeliNameInput.trim() || savingPembeli}
+                                                onClick={async () => {
+                                                    const name = newPembeliNameInput.trim();
+                                                    if (!name) return;
+                                                    setSavingPembeli(true);
+                                                    try {
+                                                        const exists = pasienList.find(p => p.name.toLowerCase() === name.toLowerCase());
+                                                        if (!exists) {
+                                                            await window.addDoc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pasien_list'), { name, age: '', alamat: '', hp: '', createdAt: window.serverTimestamp() });
+                                                        }
+                                                        setSelectedPembeli(name);
+                                                        setPembeliInput(name);
+                                                        setShowAddPembeliForm(false);
+                                                        setNewPembeliNameInput('');
+                                                        setShowPembeliModal(false);
+                                                        showToast(`Pembeli "${name}" ditambahkan ✅`);
+                                                    } catch(e) { showToast('Gagal menyimpan', 'error'); }
+                                                    finally { setSavingPembeli(false); }
+                                                }}
+                                                className="w-full py-3 rounded-2xl bg-teal-600 hover:bg-teal-700 disabled:opacity-40 text-white font-bold transition-all active:scale-95 flex items-center justify-center gap-2">
+                                                {savingPembeli ? <Icon name="spinner" className="animate-spin" /> : <><Icon name="floppy-disk" /> Simpan & Pilih</>}
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        /* Daftar & cari pembeli */
+                                        <div>
+                                            <input autoFocus type="text" value={pembeliInput} onChange={e => setPembeliInput(e.target.value)} placeholder="Cari nama pembeli..." className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-100 mb-3" />
+                                            <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                                                {pasienList.filter(p => !pembeliInput || p.name?.toLowerCase().includes(pembeliInput.toLowerCase())).slice(0, 8).map(p => (
+                                                    <button key={p.id} onClick={() => { setSelectedPembeli(p.name); setPembeliInput(p.name); setShowPembeliModal(false); }}
+                                                        className={`w-full text-left px-4 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center gap-3 ${selectedPembeli === p.name ? 'bg-teal-600 text-white' : 'bg-slate-50 hover:bg-teal-50 text-slate-700'}`}>
+                                                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 ${selectedPembeli === p.name ? 'bg-white/20 text-white' : 'bg-teal-100 text-teal-700'}`}>
+                                                            {p.name.charAt(0).toUpperCase()}
+                                                        </div>
+                                                        <span className="flex-1">{p.name}</span>
+                                                        {selectedPembeli === p.name && <Icon name="check" className="text-white text-xs" />}
+                                                    </button>
+                                                ))}
+                                                {pasienList.filter(p => !pembeliInput || p.name?.toLowerCase().includes(pembeliInput.toLowerCase())).length === 0 && (
+                                                    <p className="text-center text-xs text-slate-400 py-4">Tidak ada pembeli ditemukan.<br/>Klik <b>+ Pembeli</b> untuk tambah baru.</p>
+                                                )}
+                                            </div>
+                                            {pembeliInput.trim() && !pasienList.find(p => p.name.toLowerCase() === pembeliInput.trim().toLowerCase()) && (
+                                                <button onClick={() => { setSelectedPembeli(pembeliInput.trim()); setShowPembeliModal(false); }}
+                                                    className="w-full mt-3 py-2.5 rounded-xl border-2 border-dashed border-teal-300 text-teal-600 text-xs font-bold hover:bg-teal-50 transition-all active:scale-95">
+                                                    Pilih "{pembeliInput.trim()}" (tanpa simpan)
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Tombol Bayar di atas pencarian */}
+                        <button onClick={() => { if(readOnly){showToast('Akses terbatas — hubungi owner','error');return;} setPaymentAmount(''); setPaymentMethod(''); setCheckoutModal(true); }} disabled={cart.length === 0} className="w-full py-2.5 mb-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold shadow-sm active:scale-95 transition-all disabled:opacity-40 disabled:scale-100 flex items-center justify-center gap-2 text-sm">Bayar Sekarang</button>
+
+                        <div className="relative mb-4">
+                        <div className="flex items-center gap-3"><div className="relative group flex-1"><input autoFocus type="text" placeholder="Ketik nama barang disini..." className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-white border border-slate-200 shadow-soft focus:ring-2 focus:ring-sky-500 focus:border-sky-500 outline-none transition-all font-bold text-base text-slate-700 placeholder:font-normal placeholder:text-slate-400" value={search} onChange={e => setSearch(e.target.value)} /><Icon name="magnifying-glass" className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-base group-focus-within:text-sky-500" /></div></div>
+                        {/* Tombol R/ Resep - di bawah search, akan tertutup dropdown */}
+                        <div className="flex justify-start mt-2" style={{position:'relative',zIndex:1}}>
+                            <button onClick={() => { setShowRacikanPage(true); setRacikanSearch(''); }} className="flex-shrink-0 px-4 py-2.5 rounded-2xl bg-teal-600 hover:bg-teal-700 text-white font-black text-sm shadow-lg active:scale-95 transition-all flex items-center gap-1.5" title="Pelayanan Racikan / Resep"><span className="text-base leading-none">R/</span></button>
+                        </div>
+                        {search !== '' && (
+                            <div style={{position:'absolute',top:'60px',left:0,right:0,zIndex:20}}>
                                 <div className="bg-white rounded-xl border border-slate-200 shadow-soft overflow-hidden">
                                     {/* Tab Barang / Paket barang */}
                                     <div className="flex border-b border-slate-200">
@@ -7048,7 +7300,10 @@
                                         )}
                                     </>)}
                                 </div>
-                            ) : null}
+                            </div>
+                        )}
+                        </div>
+                        <div className="flex-1 pr-1 pb-2">
                         </div>
                     </div>
                     <div className="w-full md:w-80 lg:w-96 flex flex-col bg-white rounded-3xl shadow-soft border border-slate-100 h-fit md:h-full max-h-[calc(100vh-100px)]">
@@ -8626,7 +8881,53 @@
                     )}
                     </div>
                     <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1">
-                        {loading ? <div className="text-center py-10 text-slate-400"><div className="typing-dot bg-sky-500"></div> Loading...</div> : processedTransactions.length === 0 ? (<div className="text-center py-12 flex flex-col items-center opacity-60"><div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3"><Icon name="calendar-xmark" className="text-2xl text-slate-400" /></div><p className="font-semibold text-slate-500">Tidak ada transaksi</p><p className="text-xs text-slate-400">Sesuai filter pencarian</p></div>) : processedTransactions.map(tx => (<div key={tx.id} onClick={() => setSelectedTx(tx)} className={`p-4 rounded-2xl border shadow-sm cursor-pointer transition-all hover:shadow-md ${tx.status === 'returned' ? 'bg-red-50 border-red-100 opacity-80' : 'bg-white border-slate-100 hover:border-sky-300'}`}><div className="flex justify-between items-start mb-2"><div><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{(() => { const d = new Date(tx.date.seconds ? tx.date.toDate() : tx.date); const hari = d.toLocaleDateString('id-ID', {weekday:'short'}); const tgl = d.toLocaleDateString('id-ID', {day:'numeric', month:'short'}); const jam = d.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}); return `${hari}, ${tgl}  •  ${jam} WIB${tx.storeName ? ` • ${tx.storeName}` : ''}`; })()}</p><h4 className={`font-black text-lg ${tx.status === 'returned' ? 'text-red-500 line-through' : 'text-slate-800'}`}>{formatRupiah(tx.total)}</h4></div>{tx.status === 'returned' ? <span className="bg-red-100 text-red-600 text-[10px] font-bold px-2 py-1 rounded-full">BATAL</span> : (tx.status === 'partial' ? <span className="bg-amber-100 text-amber-600 text-[10px] font-bold px-2 py-1 rounded-full">SEBAGIAN</span> : <span className="bg-green-100 text-green-600 text-[10px] font-bold px-2 py-1 rounded-full">SUKSES</span>)}</div><div className="text-xs text-slate-500 truncate">{tx.items.map(i => i.name).join(', ')}</div><div className="mt-3 flex justify-between items-center border-t border-dashed border-slate-200 pt-2"><div className="flex items-center gap-2 flex-wrap"><span className="text-[10px] font-bold text-slate-400">{tx.items.length} Barang</span>{tx.cashierName && <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1"><Icon name="user-tie" className="text-[9px]" /> {tx.cashierName}</span>}{tx.items.some(i=>i.isRacikanGroup) && (() => { const ri = tx.items.find(i=>i.isRacikanGroup)?.racikanInfo; return (<span className="text-[10px] bg-teal-100 text-teal-700 font-black px-1.5 py-0.5 rounded-full flex items-center gap-1">R/ {ri?.pasien ? ri.pasien.split(',')[0] : ''}</span>); })()}</div><div className="flex items-center gap-2">{tx.paymentProofImage && <span className="text-[10px] bg-teal-100 text-teal-700 font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1"><Icon name="camera" /> Bukti</span>}{tx.paymentMethod && tx.paymentMethod !== 'tunai' && <span className="text-[10px] bg-sky-100 text-sky-700 font-bold px-1.5 py-0.5 rounded-full">{tx.paymentMethod === 'qris' ? 'QRIS' : 'Transfer'}</span>}<span className="text-[10px] text-sky-600 font-bold flex items-center gap-1">Lihat Detail <Icon name="chevron-right" /></span></div></div></div>))}
+                        {loading ? <div className="text-center py-10 text-slate-400"><div className="typing-dot bg-sky-500"></div> Loading...</div> : processedTransactions.length === 0 ? (<div className="text-center py-12 flex flex-col items-center opacity-60"><div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-3"><Icon name="calendar-xmark" className="text-2xl text-slate-400" /></div><p className="font-semibold text-slate-500">Tidak ada transaksi</p><p className="text-xs text-slate-400">Sesuai filter pencarian</p></div>) : processedTransactions.map((tx, idx) => (<div key={tx.id} onClick={() => setSelectedTx(tx)} className={`p-4 rounded-2xl border shadow-sm cursor-pointer transition-all hover:shadow-md ${tx.status === 'returned' ? 'bg-red-50 border-red-100 opacity-80' : 'bg-white border-slate-100 hover:border-sky-300'}`}>
+                            {/* Baris atas: nomor urut + tanggal + total */}
+                            <div className="flex justify-between items-start mb-1">
+                                <div className="flex items-start gap-2">
+                                    <span className="text-xs font-bold text-slate-400 mt-0.5">{idx + 1}</span>
+                                    <div>
+                                        <p className="text-xs font-bold text-teal-600">{(() => { const d = new Date(tx.date.seconds ? tx.date.toDate() : tx.date); return d.toLocaleDateString('en-GB', {year:'numeric', month:'short', day:'numeric'}) + ', ' + d.toLocaleTimeString('id-ID', {hour:'2-digit', minute:'2-digit'}) + ' WIB'; })()}</p>
+                                        <p className={`text-sm font-black ${tx.status === 'returned' ? 'text-red-500 line-through' : 'text-teal-600'}`}>#{tx.id?.slice(-10).toUpperCase()}</p>
+                                    </div>
+                                </div>
+                                <div className="flex flex-col items-end gap-1">
+                                    <span className={`font-bold text-base ${tx.status === 'returned' ? 'text-red-500 line-through' : 'text-slate-800'}`}>{formatRupiah(tx.total)}</span>
+                                    {tx.status === 'returned' ? <span className="bg-red-100 text-red-600 text-[10px] font-bold px-2 py-0.5 rounded-full">BATAL</span> : (tx.status === 'partial' ? <span className="bg-amber-100 text-amber-600 text-[10px] font-bold px-2 py-0.5 rounded-full">SEBAGIAN</span> : null)}
+                                </div>
+                            </div>
+                            {/* Barang, Kasir, Pembeli, Bayar - diindent sesuai posisi tanggal */}
+                            <div className="pl-6">
+                            {/* Barang */}
+                            <div className="mt-2 mb-3">
+                                <p className="text-xs font-black text-slate-800 mb-0.5">Barang</p>
+                                <p className="text-xs text-slate-600 leading-snug">{tx.items.map(i => i.name).join(', ')}</p>
+                            </div>
+                            {/* Grid 2 kolom: Kasir | Sales */}
+                            <div className="grid grid-cols-2 gap-x-4 mb-2">
+                                <div><p className="text-xs font-black text-slate-800">Kasir</p><p className="text-xs text-slate-600">{tx.cashierName || '-'}</p></div>
+                                <div><p className="text-xs font-black text-slate-800">Sales</p><p className="text-xs text-slate-600">{tx.salesName || tx.cashierName || '-'}</p></div>
+                            </div>
+                            {/* Grid 2 kolom: Pembeli | Tipe transaksi */}
+                            <div className="grid grid-cols-2 gap-x-4 mb-2">
+                                <div><p className="text-xs font-black text-slate-800">Pembeli</p><p className="text-xs text-slate-600">{tx.pembeli || '-'}</p></div>
+                                <div><p className="text-xs font-black text-slate-800">Tipe transaksi</p><p className="text-xs text-slate-600">{tx.tipeTransaksi || 'Harga normal'}</p></div>
+                            </div>
+                            {/* Bayar */}
+                            <div className="mb-1">
+                                <p className="text-xs font-black text-slate-800">Bayar</p>
+                                <p className="text-xs text-slate-600 capitalize">{tx.paymentMethod || 'Tunai'}</p>
+                            </div>
+                            </div>
+                            {/* Footer badges */}
+                            <div className="flex justify-between items-center border-t border-dashed border-slate-200 pt-2 mt-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    {tx.items.some(i=>i.isRacikanGroup) && (() => { const ri = tx.items.find(i=>i.isRacikanGroup)?.racikanInfo; return (<span className="text-[10px] bg-teal-100 text-teal-700 font-black px-1.5 py-0.5 rounded-full flex items-center gap-1">R/ {ri?.pasien ? ri.pasien.split(',')[0] : ''}</span>); })()}
+                                    {tx.paymentProofImage && <span className="text-[10px] bg-teal-100 text-teal-700 font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1"><Icon name="camera" /> Bukti</span>}
+                                </div>
+                                <span className="text-[10px] text-sky-600 font-bold flex items-center gap-1">Lihat Detail <Icon name="chevron-right" /></span>
+                            </div>
+                        </div>))}
                     </div>
                     {selectedTx && (
                         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
