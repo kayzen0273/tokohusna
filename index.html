@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistem Kasir Toko Husna (V67 - Sales & Kasir Terpisah)</title>
+    <title>Sistem Kasir Toko Husna (V69 - Kontrol Retur Transaksi Lama)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -284,6 +284,40 @@
         // --- CHANGELOG / NOTIFIKASI UPDATE ---
         const CHANGELOG = [
             {
+                id: 'v69_1',
+                version: 'v69',
+                date: '06 Apr 2026',
+                title: 'Kontrol Retur Transaksi Hari Sebelumnya',
+                tag: 'Fitur Baru',
+                tagColor: 'bg-red-100 text-red-700',
+                icon: 'rotate-left',
+                isNew: true,
+                items: [
+                    '🔒 Retur transaksi kemarin & sebelumnya kini hanya bisa dilakukan Owner secara default',
+                    '👥 Owner bisa izinkan akun tertentu untuk retur transaksi lama — diatur di Pengaturan Stok',
+                    '🔐 Tombol "Retur Item" otomatis terkunci untuk akun yang tidak diizinkan',
+                    '⚙️ Setting izin retur tampil di Pengaturan Stok dengan daftar semua akun karyawan',
+                    '👑 Owner tidak perlu dicentang — selalu bisa retur kapanpun',
+                ]
+            },
+            {
+                id: 'v68_1',
+                version: 'v68',
+                date: '06 Apr 2025',
+                title: 'Stok 0 Bisa CO + Notif Stok Minus',
+                tag: 'Fitur Baru',
+                tagColor: 'bg-green-100 text-green-700',
+                icon: 'box-open',
+                isNew: true,
+                items: [
+                    '🛒 Barang stok 0 kini tetap bisa di-checkout (CO)',
+                    '👑 Owner selalu bisa CO stok 0 meski fitur dimatikan',
+                    '🔔 Banner notifikasi otomatis jika ada stok minus — ingatkan input faktur',
+                    '⚙️ Interval notif bisa disetting (default 2 hari sekali)',
+                    '🔧 Setting "Izinkan CO Stok 0" & "Notif Stok Minus" tersedia di Pengaturan Stok',
+                ]
+            },
+            {
                 id: 'v64_1',
                 version: 'v64',
                 date: '27 Mar 2025',
@@ -521,6 +555,10 @@
             expiryNotifEnabled: true,
             expiryNotifMonths: 3,
             expiryNotifSeconds: 3,
+            // Stok 0 & minus
+            allowCheckoutZeroStock: true,
+            negativeStockNotifEnabled: true,
+            negativeStockNotifIntervalDays: 2,
         };
 
         // --- BLUETOOTH PRINTER HELPERS ---
@@ -3115,6 +3153,200 @@
             );
         };
 
+        // --- NEGATIVE STOCK BANNER ---
+        const NEGSTOCK_NOTIF_KEY = 'husna_negstock_last_notif';
+        const NegativeStockBanner = ({ items, settings, onNavigateToPurchases }) => {
+            const [visible, setVisible] = useState(false);
+            const [dismissed, setDismissed] = useState(false);
+            const negItems = useMemo(() => (items || []).filter(i => (i.qty || 0) < 0), [items]);
+
+            useEffect(() => {
+                if (!settings.negativeStockNotifEnabled || negItems.length === 0 || dismissed) { setVisible(false); return; }
+                const intervalDays = settings.negativeStockNotifIntervalDays || 2;
+                const lastNotif = localStorage.getItem(NEGSTOCK_NOTIF_KEY);
+                const now = Date.now();
+                if (!lastNotif || (now - parseInt(lastNotif)) >= intervalDays * 24 * 60 * 60 * 1000) {
+                    setVisible(true);
+                    localStorage.setItem(NEGSTOCK_NOTIF_KEY, String(now));
+                }
+            }, [negItems.length, settings.negativeStockNotifEnabled, settings.negativeStockNotifIntervalDays, dismissed]);
+
+            if (!visible || negItems.length === 0) return null;
+            return (
+                <div className="exp-banner-enter fixed top-0 left-0 right-0 z-[999] flex items-stretch shadow-lg" style={{background:'linear-gradient(90deg,#ef4444,#dc2626)'}}>
+                    <div className="flex-1 flex items-center gap-2 px-3 py-2">
+                        <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center flex-shrink-0">
+                            <Icon name="triangle-exclamation" className="text-white text-xs" />
+                        </span>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-white text-xs font-bold leading-tight">
+                                ⚠️ {negItems.length} barang stok minus! Segera input faktur pembelian.
+                            </p>
+                            <p className="text-red-100 text-[10px] leading-tight truncate">
+                                {negItems.slice(0,3).map(i=>i.name).join(', ')}{negItems.length > 3 ? ` +${negItems.length-3} lainnya` : ''}
+                            </p>
+                        </div>
+                        {onNavigateToPurchases && (
+                            <button onClick={() => { setDismissed(true); setVisible(false); onNavigateToPurchases(); }}
+                                className="flex-shrink-0 bg-white text-red-600 text-[10px] font-black px-2 py-1 rounded-lg mr-1 active:scale-95">
+                                Input Faktur
+                            </button>
+                        )}
+                        <button onClick={() => { setDismissed(true); setVisible(false); }} className="flex-shrink-0 w-6 h-6 rounded-full bg-white/20 flex items-center justify-center text-white text-xs active:scale-95">
+                            <Icon name="xmark" />
+                        </button>
+                    </div>
+                </div>
+            );
+        };
+
+        // ===== STOK SETTINGS CONTENT (dipisah agar bisa pakai hooks) =====
+        const StokSettingsContent = ({ localSettings, handleChange, isOwner }) => {
+            const [allUsers, setAllUsers] = React.useState([]);
+
+            React.useEffect(() => {
+                const usersRef = window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'users');
+                const unsub = window.onSnapshot(usersRef, (snap) => {
+                    const users = snap.docs
+                        .map(d => ({ id: d.id, ...d.data() }))
+                        .filter(u => !isOwnerEmail(u.email) && u.email)
+                        .sort((a, b) => (a.namaLengkap || a.username || '').localeCompare(b.namaLengkap || b.username || ''));
+                    setAllUsers(users);
+                });
+                return () => unsub();
+            }, []);
+
+            const permitted = localSettings.returPermittedUsers || [];
+            const toggleUser = (email) => {
+                const next = permitted.includes(email)
+                    ? permitted.filter(e => e !== email)
+                    : [...permitted, email];
+                handleChange('returPermittedUsers', next);
+            };
+
+            return (
+                <div className="p-5 space-y-5">
+                    {/* Batas stok menipis */}
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 block mb-2">Batas Stok Menipis (Global)</label>
+                        <div className="flex items-center gap-3">
+                            <input type="number" value={localSettings.lowStockThreshold} onChange={(e) => handleChange('lowStockThreshold', parseInt(e.target.value) || 0)} className="w-24 p-2.5 rounded-lg border border-slate-300 focus:border-sky-500 outline-none text-center font-bold text-lg" />
+                            <span className="text-sm text-slate-400">Unit (angka default minimum stok)</span>
+                        </div>
+                    </div>
+
+                    <div className="border-t border-slate-100" />
+
+                    {/* CO Stok 0 */}
+                    <div>
+                        <div className="flex items-center justify-between gap-3">
+                            <div>
+                                <p className="text-sm font-bold text-slate-700">Izinkan CO Stok 0</p>
+                                <p className="text-[11px] text-slate-400 mt-0.5">Kasir bisa checkout barang yang stoknya 0. Owner selalu bisa CO stok 0.</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                                <input type="checkbox" className="sr-only peer" checked={localSettings.allowCheckoutZeroStock !== false} onChange={e => handleChange('allowCheckoutZeroStock', e.target.checked)} />
+                                <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:bg-sky-500 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
+                            </label>
+                        </div>
+                        {localSettings.allowCheckoutZeroStock === false && (
+                            <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-700 font-medium flex items-center gap-2">
+                                <Icon name="crown" className="text-amber-500" /> Owner tetap bisa CO stok 0 meskipun fitur ini dimatikan.
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="border-t border-slate-100" />
+
+                    {/* Notifikasi Stok Minus */}
+                    <div>
+                        <div className="flex items-center justify-between gap-3">
+                            <div>
+                                <p className="text-sm font-bold text-slate-700">Notifikasi Stok Minus</p>
+                                <p className="text-[11px] text-slate-400 mt-0.5">Tampilkan banner peringatan jika ada barang dengan stok negatif (minus).</p>
+                            </div>
+                            <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                                <input type="checkbox" className="sr-only peer" checked={localSettings.negativeStockNotifEnabled !== false} onChange={e => handleChange('negativeStockNotifEnabled', e.target.checked)} />
+                                <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:bg-sky-500 after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
+                            </label>
+                        </div>
+                        {localSettings.negativeStockNotifEnabled !== false && (
+                            <div className="mt-3 flex items-center gap-3">
+                                <span className="text-xs text-slate-500 font-medium flex-shrink-0">Muncul setiap</span>
+                                <input type="number" min="1" max="30" value={localSettings.negativeStockNotifIntervalDays || 2} onChange={e => handleChange('negativeStockNotifIntervalDays', parseInt(e.target.value) || 2)} className="w-20 p-2 rounded-lg border border-slate-300 focus:border-sky-500 outline-none text-center font-bold" />
+                                <span className="text-xs text-slate-500 font-medium">hari sekali</span>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="border-t border-slate-100" />
+
+                    {/* Izin Retur Transaksi Hari Sebelumnya */}
+                    <div>
+                        <div className="flex items-start gap-2 mb-3">
+                            <div className="w-8 h-8 rounded-xl bg-red-500 text-white flex items-center justify-center flex-shrink-0 mt-0.5">
+                                <Icon name="rotate-left" className="text-sm" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-bold text-slate-700">Izin Retur Transaksi Kemarin & Sebelumnya</p>
+                                <p className="text-[11px] text-slate-400 mt-0.5">
+                                    Pilih akun yang boleh melakukan retur pada transaksi di luar hari ini. Owner selalu bisa retur kapanpun.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3 flex items-center gap-2">
+                            <Icon name="crown" className="text-amber-500 flex-shrink-0" />
+                            <p className="text-[11px] text-amber-700 font-medium">Owner selalu bisa retur transaksi dari hari manapun — tidak perlu dicentang.</p>
+                        </div>
+
+                        {allUsers.length === 0 ? (
+                            <div className="text-center py-6 text-slate-400 text-xs">
+                                <Icon name="users" className="text-2xl mb-2 block text-center" />
+                                Belum ada akun karyawan terdaftar
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {allUsers.map(u => {
+                                    const email = u.email;
+                                    const isChecked = permitted.includes(email);
+                                    const nama = u.namaLengkap || u.username || email;
+                                    return (
+                                        <button
+                                            key={u.id}
+                                            onClick={() => toggleUser(email)}
+                                            className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all active:scale-98 ${isChecked ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200 hover:border-slate-300'}`}
+                                        >
+                                            {/* Avatar */}
+                                            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${isChecked ? 'bg-red-500 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                                                {u.profilePhoto
+                                                    ? <img src={u.profilePhoto} alt="" className="w-full h-full rounded-full object-cover" />
+                                                    : (nama[0] || '?').toUpperCase()
+                                                }
+                                            </div>
+                                            <div className="flex-1 text-left min-w-0">
+                                                <p className={`text-sm font-bold truncate ${isChecked ? 'text-red-700' : 'text-slate-700'}`}>{nama}</p>
+                                                <p className="text-[10px] text-slate-400 truncate">{email}</p>
+                                            </div>
+                                            {/* Checkbox visual */}
+                                            <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${isChecked ? 'bg-red-500 border-red-500' : 'bg-white border-slate-300'}`}>
+                                                {isChecked && <Icon name="check" className="text-white text-xs" />}
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        {permitted.length > 0 && (
+                            <p className="mt-2 text-[10px] text-red-500 font-medium">
+                                {permitted.length} akun diizinkan retur transaksi hari sebelumnya
+                            </p>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
         const SettingsView = ({ settings, onSave, loading, authSession, inOwnerPanel, onUpdateSession }) => {
             const isOwner = isOwnerEmail(authSession?.email);
             const [localSettings, setLocalSettings] = useState(settings);
@@ -3322,13 +3554,7 @@
                         if (activeMenu === 'stok') return (
                             <div className={`bg-white/90 backdrop-blur-sm rounded-[30px] shadow-soft border ${c.border} overflow-hidden`}>
                                 <SubHeader />
-                                <div className="p-5">
-                                    <label className="text-xs font-bold text-slate-500 block mb-2">Batas Stok Menipis (Global)</label>
-                                    <div className="flex items-center gap-3">
-                                        <input type="number" value={localSettings.lowStockThreshold} onChange={(e) => handleChange('lowStockThreshold', parseInt(e.target.value) || 0)} className="w-24 p-2.5 rounded-lg border border-slate-300 focus:border-sky-500 outline-none text-center font-bold text-lg" />
-                                        <span className="text-sm text-slate-400">Unit (angka default minimum stok)</span>
-                                    </div>
-                                </div>
+                                <StokSettingsContent localSettings={localSettings} handleChange={handleChange} isOwner={isOwner} />
                                 <SaveBtn />
                             </div>
                         );
@@ -5487,7 +5713,7 @@
         };
 
         // --- CASHIER COMPONENT ---
-        const CashierView = ({ items, user, showToast, settings, onGenerateImage, currentProfile, readOnly, authSession, onNavigateToAdd }) => {
+        const CashierView = ({ items, user, showToast, settings, onGenerateImage, currentProfile, readOnly, authSession, onNavigateToAdd, isOwner }) => {
             const [isSessionActive, setIsSessionActive] = useState(false);
             const [search, setSearch] = useState('');
             const [cart, setCart] = useState([]);
@@ -6178,8 +6404,10 @@
                 );
             }
 
+            const isOwnerSession = isOwner || (isOwnerEmail ? isOwnerEmail(authSession?.email) : false);
+            const allowZeroStockCO = isOwnerSession || (settings.allowCheckoutZeroStock !== false);
             const addToCart = (item) => {
-                if (safeNumber(item.qty) <= 0) { showToast("Stok Habis di Toko Ini!", "error"); return; }
+                if (safeNumber(item.qty) <= 0 && !allowZeroStockCO) { showToast("Stok Habis! CO stok 0 dinonaktifkan.", "error"); return; }
                 
                 // Set default sesuai barang
                 const defaultPrice = item.price || 0;
@@ -6968,6 +7196,7 @@
                                                 const inCart = cart.find(c => c.id === item.id);
                                                 const currentStock = safeNumber(item.qty) - (inCart ? inCart.cartQty : 0);
                                                 const isOOS = currentStock <= 0;
+                                                const isDisabled = isOOS && !allowZeroStockCO;
                                                 const highlightName = (name, query) => {
                                                     if (!query) return name;
                                                     const idx = name.toLowerCase().indexOf(query.toLowerCase());
@@ -6975,8 +7204,8 @@
                                                     return (<>{name.slice(0, idx)}<b className="font-black text-slate-900">{name.slice(idx, idx + query.length)}</b>{name.slice(idx + query.length)}</>);
                                                 };
                                                 return (
-                                                    <button key={item.id} onClick={() => addToCart(item)} disabled={isOOS}
-                                                        className={`w-full text-left px-3 py-2 flex items-center justify-between gap-2 transition-all active:scale-[0.99] ${isOOS ? 'opacity-50 bg-slate-50' : 'hover:bg-teal-50/60 active:bg-teal-100/50'}`}>
+                                                    <button key={item.id} onClick={() => addToCart(item)} disabled={isDisabled}
+                                                        className={`w-full text-left px-3 py-2 flex items-center justify-between gap-2 transition-all active:scale-[0.99] ${isDisabled ? 'opacity-50 bg-slate-50' : 'hover:bg-teal-50/60 active:bg-teal-100/50'}`}>
                                                         <div className="flex-1 min-w-0">
                                                             <p className="text-sm text-slate-700 leading-snug">{highlightName(item.name, search)}{item.isKonsinyasi && <span className="ml-1 inline-block bg-fuchsia-100 text-fuchsia-700 text-[8px] font-black px-1 rounded border border-fuchsia-200">kons.</span>}</p>
                                                         </div>
@@ -7980,7 +8209,7 @@
         };
 
         // --- UPDATED: HISTORY VIEW ---
-        const HistoryView = ({ user, showToast, settings, onGenerateImage, currentProfile, items, readOnly, isOwner }) => {
+        const HistoryView = ({ user, showToast, settings, onGenerateImage, currentProfile, items, readOnly, isOwner, authSession }) => {
             const [transactions, setTransactions] = useState([]);
             const [loading, setLoading] = useState(true);
             const [selectedTx, setSelectedTx] = useState(null);
@@ -8274,6 +8503,23 @@
             }, [processedTransactions]);
 
             const openReturModal = (tx, item, index) => { const maxRetur = item.cartQty - (item.returnedQty || 0); if (maxRetur <= 0) { showToast("Barang ini sudah diretur semua", "error"); return; } setReturModal({ show: true, tx, item, index, max: maxRetur }); setQtyToRetur(maxRetur); };
+
+            // Cek apakah transaksi berasal dari hari sebelum hari ini
+            const isTxOlderThanToday = (tx) => {
+                if (!tx?.date) return false;
+                const txDate = tx.date?.toDate ? tx.date.toDate() : new Date(tx.date);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                return txDate < today;
+            };
+
+            // Cek apakah user saat ini boleh retur transaksi kemarin & sebelumnya
+            const canReturOldTransaction = (tx) => {
+                if (!isTxOlderThanToday(tx)) return true; // transaksi hari ini: semua boleh
+                if (isOwner) return true; // owner selalu boleh
+                const permitted = settings?.returPermittedUsers || [];
+                return permitted.includes(authSession?.email);
+            };
             const handleProcessRetur = async () => {
                 const { tx, item, index, max } = returModal;
                 if (!tx || !user) return;
@@ -8807,7 +9053,7 @@
                         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm fade-in">
                             <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-0 overflow-hidden flex flex-col max-h-[90vh]">
                                 <div className="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center"><div><h3 className="font-bold text-slate-800">Detail Transaksi</h3><p className="text-[10px] text-slate-500">{selectedTx.id} {selectedTx.storeName ? `(${selectedTx.storeName})` : ''}</p>{selectedTx.cashierName && <div className="flex items-center gap-1 mt-1"><div className="w-4 h-4 rounded-full bg-sky-500 flex items-center justify-center text-white text-[8px] font-black flex-shrink-0">{selectedTx.cashierName.charAt(0).toUpperCase()}</div><span className="text-[10px] font-bold text-sky-700">{selectedTx.cashierName}</span></div>}</div><button onClick={() => setSelectedTx(null)} className="w-8 h-8 rounded-full bg-white text-slate-400 hover:text-slate-600 flex items-center justify-center shadow-sm"><Icon name="xmark" /></button></div>
-                                <div className="p-5 overflow-y-auto flex-1"><div className="space-y-4">{selectedTx.items.map((item, idx) => { const returnedQty = item.returnedQty || 0; const remainingQty = item.cartQty - returnedQty; const isFullyReturned = remainingQty === 0; const ri = item.racikanInfo; return (<div key={idx} className={`p-3 rounded-xl border ${isFullyReturned ? 'bg-red-50 border-red-100' : item.isRacikanGroup ? 'bg-teal-50 border-teal-100' : 'bg-slate-50 border-slate-100'}`}><div className="flex justify-between items-start mb-2"><div className="flex-1 min-w-0 pr-2"><div className="flex items-center gap-1.5 flex-wrap"><p className={`font-bold text-sm ${isFullyReturned ? 'text-red-600 line-through' : 'text-slate-700'}`}>{item.name}</p>{item.isRacikanGroup && <span className="text-[8px] font-black bg-teal-600 text-white px-1 py-0.5 rounded flex-shrink-0">R/</span>}</div><p className="text-[10px] text-slate-500 mt-0.5">{item.cartQty} x {formatRupiah(item.price)}</p>{returnedQty > 0 && <span className="text-[9px] font-bold text-red-500 bg-red-100 px-1.5 py-0.5 rounded-sm">Sudah Retur: {returnedQty}</span>}{item.isRacikanGroup && ri && (ri.dokter || ri.pasien) && (<button onClick={() => setRacikanInfoModal(item)} className="mt-2 flex items-center gap-1.5 text-teal-600 hover:text-teal-800 text-[10px] font-bold bg-teal-100 hover:bg-teal-200 px-2.5 py-1.5 rounded-lg transition-colors"><Icon name="circle-info" className="text-xs" /> Info Pasien / Dokter</button>)}</div><div className="text-right flex-shrink-0"><p className="font-bold text-slate-800 text-sm">{formatRupiah(item.cartQty * item.price)}</p>{selectedTx.status !== 'returned' && remainingQty > 0 && (<button onClick={() => openReturModal(selectedTx, item, idx)} className="mt-2 bg-white border border-red-200 text-red-500 text-[10px] font-bold px-2 py-1 rounded-lg hover:bg-red-50 transition-colors shadow-sm">Retur Item</button>)}</div></div></div>); })}</div><div className="my-4 border-t border-dashed border-slate-300"></div>{(() => {
+                                <div className="p-5 overflow-y-auto flex-1"><div className="space-y-4">{selectedTx.items.map((item, idx) => { const returnedQty = item.returnedQty || 0; const remainingQty = item.cartQty - returnedQty; const isFullyReturned = remainingQty === 0; const ri = item.racikanInfo; return (<div key={idx} className={`p-3 rounded-xl border ${isFullyReturned ? 'bg-red-50 border-red-100' : item.isRacikanGroup ? 'bg-teal-50 border-teal-100' : 'bg-slate-50 border-slate-100'}`}><div className="flex justify-between items-start mb-2"><div className="flex-1 min-w-0 pr-2"><div className="flex items-center gap-1.5 flex-wrap"><p className={`font-bold text-sm ${isFullyReturned ? 'text-red-600 line-through' : 'text-slate-700'}`}>{item.name}</p>{item.isRacikanGroup && <span className="text-[8px] font-black bg-teal-600 text-white px-1 py-0.5 rounded flex-shrink-0">R/</span>}</div><p className="text-[10px] text-slate-500 mt-0.5">{item.cartQty} x {formatRupiah(item.price)}</p>{returnedQty > 0 && <span className="text-[9px] font-bold text-red-500 bg-red-100 px-1.5 py-0.5 rounded-sm">Sudah Retur: {returnedQty}</span>}{item.isRacikanGroup && ri && (ri.dokter || ri.pasien) && (<button onClick={() => setRacikanInfoModal(item)} className="mt-2 flex items-center gap-1.5 text-teal-600 hover:text-teal-800 text-[10px] font-bold bg-teal-100 hover:bg-teal-200 px-2.5 py-1.5 rounded-lg transition-colors"><Icon name="circle-info" className="text-xs" /> Info Pasien / Dokter</button>)}</div><div className="text-right flex-shrink-0"><p className="font-bold text-slate-800 text-sm">{formatRupiah(item.cartQty * item.price)}</p>{selectedTx.status !== 'returned' && remainingQty > 0 && (<button onClick={() => { if (!canReturOldTransaction(selectedTx)) { showToast('Hanya Owner atau akun yang diizinkan yang bisa retur transaksi kemarin & sebelumnya', 'error'); return; } openReturModal(selectedTx, item, idx); }} className={`mt-2 border text-[10px] font-bold px-2 py-1 rounded-lg transition-colors shadow-sm ${canReturOldTransaction(selectedTx) ? 'bg-white border-red-200 text-red-500 hover:bg-red-50' : 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'}`}>{canReturOldTransaction(selectedTx) ? 'Retur Item' : <span className="flex items-center gap-1"><Icon name="lock" className="text-[9px]" /> Retur (Terkunci)</span>}</button>)}</div></div></div>); })}</div><div className="my-4 border-t border-dashed border-slate-300"></div>{(() => {
   const subtotalTx = selectedTx.items.reduce((acc, item) => acc + ((item.originalPrice || item.price) * (item.cartQty - (item.returnedQty || 0))), 0);
   const diskonTxRp = subtotalTx - selectedTx.total;
   const discountedItems = selectedTx.items.filter(i => i.discount && i.discount.value > 0);
@@ -14413,9 +14659,10 @@
                                 </div>
                             </div>
                         )}
+                        <NegativeStockBanner items={inventoryData} settings={settingsData} onNavigateToPurchases={() => setActiveTab('purchases')} />
                         {activeTab === 'home' && (<DashboardView items={inventoryData} settings={settingsData} currentProfile={currentProfile} isOwner={isOwner} onShowLowStock={() => { setActiveTab('list'); setShowOnlyLowStock(true); }} />)}
-                        {activeTab === 'cashier' && (<CashierView items={inventoryData} user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='cashier')?.readOnly} authSession={authSession} onNavigateToAdd={() => setActiveTab('add')} />)}
-                        {activeTab === 'history' && (<HistoryView user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} items={inventoryData} readOnly={menuItems.find(m=>m.id==='history')?.readOnly} isOwner={isOwner} />)}
+                        {activeTab === 'cashier' && (<CashierView items={inventoryData} user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='cashier')?.readOnly} authSession={authSession} onNavigateToAdd={() => setActiveTab('add')} isOwner={isOwner} />)}
+                        {activeTab === 'history' && (<HistoryView user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} items={inventoryData} readOnly={menuItems.find(m=>m.id==='history')?.readOnly} isOwner={isOwner} authSession={authSession} />)}
                         {activeTab === 'purchases' && (<PurchaseView user={user} showToast={showToast} items={inventoryData} currentProfile={currentProfile} settings={settingsData} readOnly={menuItems.find(m=>m.id==='purchases')?.readOnly} />)}
                         {activeTab === 'cashbook' && (<CashBookView user={user} currentProfile={currentProfile} showToast={showToast} readOnly={menuItems.find(m=>m.id==='cashbook')?.readOnly} />)}
                         {activeTab === 'list' && (<ListView items={inventoryData} loading={loading} settings={settingsData} searchQuery={searchQuery} setSearchQuery={setSearchQuery} showOnlyLowStock={showOnlyLowStock} setShowOnlyLowStock={setShowOnlyLowStock} selectedRacks={selectedRacks} setSelectedRacks={setSelectedRacks} uniqueRacksData={uniqueRacksData} onCopySuccess={showToast} onEdit={(item) => { setFormData({...item}); setEditingItem(item); setActiveTab('add'); }} onDelete={(item) => setDeleteModal({ show: true, item: item })} onDeleteRack={(rackName) => setDeleteRackModal({ show: true, rackName })} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='list')?.readOnly} isOwner={isOwner} />)}
