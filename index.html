@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistem Kasir Toko Husna (V70 - Catatan Barang dengan Tombol Info)</title>
+    <title>Sistem Kasir Toko Husna (V71 - Mode Offline dengan Sinkronisasi Otomatis)</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -283,6 +283,24 @@
 
         // --- CHANGELOG / NOTIFIKASI UPDATE ---
         const CHANGELOG = [
+            {
+                id: 'v71_1',
+                version: 'v71',
+                date: '08 Apr 2026',
+                title: 'Mode Offline — Kasir Tanpa Internet',
+                tag: 'Fitur Baru',
+                tagColor: 'bg-amber-100 text-amber-700',
+                icon: 'plug',
+                isNew: true,
+                items: [
+                    '🔌 Tombol "Mode Offline" muncul di halaman kasir',
+                    '⚡ Saat tidak ada internet, klik Mode Offline → langsung ke keranjang belanja',
+                    '💾 Transaksi offline disimpan di perangkat (localStorage) dengan waktu CO aktual',
+                    '🔄 Saat kembali online, semua transaksi offline tersinkronkan otomatis ke Firebase',
+                    '🟡 Badge orange menunjukkan jumlah transaksi yang belum tersinkron',
+                    '📡 Indikator status koneksi (Online/Offline) muncul di banner toko',
+                ],
+            },
             {
                 id: 'v70_1',
                 version: 'v70',
@@ -5990,6 +6008,112 @@
             const [paymentSuccess, setPaymentSuccess] = useState(false);
             const [receiptData, setReceiptData] = useState(null);
             const [cancelModal, setCancelModal] = useState(false);
+
+            // ── OFFLINE MODE ─────────────────────────────────────────────────────────────
+            const [isOfflineMode, setIsOfflineMode] = useState(false);
+            const [isOnline, setIsOnline] = useState(navigator.onLine);
+            const [offlineQueue, setOfflineQueue] = useState(() => {
+                try { return JSON.parse(localStorage.getItem('husna_offline_queue') || '[]'); } catch { return []; }
+            });
+            const [isSyncing, setIsSyncing] = useState(false);
+
+            // Listener online/offline
+            useEffect(() => {
+                const goOnline  = () => setIsOnline(true);
+                const goOffline = () => setIsOnline(false);
+                window.addEventListener('online',  goOnline);
+                window.addEventListener('offline', goOffline);
+                return () => { window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline); };
+            }, []);
+
+            // Simpan offlineQueue ke localStorage setiap berubah
+            useEffect(() => {
+                localStorage.setItem('husna_offline_queue', JSON.stringify(offlineQueue));
+            }, [offlineQueue]);
+
+            // Auto-sync saat kembali online
+            useEffect(() => {
+                if (!isOnline || offlineQueue.length === 0 || isSyncing || !user) return;
+                const syncAll = async () => {
+                    setIsSyncing(true);
+                    try {
+                        for (const tx of offlineQueue) {
+                            const batch = window.writeBatch(window.db);
+                            // Update stok
+                            (tx.items || []).forEach(item => {
+                                const stockField = `stocks.${tx.storeId}`;
+                                if (item.isRacikanGroup) {
+                                    (item.racikanItems || []).forEach(ri => {
+                                        const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', ri.id);
+                                        batch.update(docRef, { [stockField]: window.increment(-ri.qty), updatedAt: window.serverTimestamp() });
+                                    });
+                                } else {
+                                    const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id);
+                                    batch.update(docRef, { [stockField]: window.increment(-item.cartQty), updatedAt: window.serverTimestamp() });
+                                }
+                            });
+                            // Simpan transaksi dengan coTime (waktu checkout saat offline)
+                            const txRef = window.doc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions'));
+                            batch.set(txRef, {
+                                ...tx,
+                                date: tx.coTime ? new Date(tx.coTime) : window.serverTimestamp(),
+                                syncedAt: window.serverTimestamp(),
+                                offlineSync: true,
+                            });
+                            await batch.commit();
+                        }
+                        setOfflineQueue([]);
+                        showToast(`✅ ${offlineQueue.length} transaksi offline berhasil disinkronkan!`);
+                    } catch (e) {
+                        console.error('Sync error:', e);
+                        showToast('Gagal sinkronisasi, coba lagi nanti', 'error');
+                    } finally { setIsSyncing(false); }
+                };
+                syncAll();
+            }, [isOnline, user]);
+
+            const startOfflineMode = () => {
+                setIsOfflineMode(true);
+                setIsSessionActive(true);
+                setActiveCartId(null);
+                showToast('🔌 Mode Offline aktif — transaksi disimpan lokal', 'info');
+            };
+
+            const handleOfflineCheckout = () => {
+                if (cart.length === 0) return;
+                const isNonCash = paymentMethod === 'qris' || paymentMethod === 'transfer';
+                if (!isNonCash && safeNumber(paymentAmount) < effectiveTotal) { showToast('Uang kurang!', 'error'); return; }
+                const finalPay = isNonCash ? effectiveTotal : safeNumber(paymentAmount);
+                const finalChange = isNonCash ? 0 : (safeNumber(paymentAmount) - effectiveTotal);
+                const coTime = new Date().toISOString(); // waktu CO aktual
+                const tx = {
+                    coTime,
+                    items: cart,
+                    subtotal: cartSubtotal,
+                    diskon: cartDiskonNominal,
+                    diskonType: cartDiskonType,
+                    biayaPengiriman: cartPengirimanNum,
+                    pembulatan: pembulatanDiff,
+                    total: effectiveTotal,
+                    pay: finalPay,
+                    change: finalChange,
+                    paymentMethod: paymentMethod || 'tunai',
+                    status: 'success',
+                    cashierName: cashierName || 'Kasir',
+                    salesName: selectedSales || cashierName || 'Kasir',
+                    tipeTransaksi: tipeTransaksi || 'Harga normal',
+                    pembeli: selectedPembeli || '',
+                    storeId: currentProfile.id || 'default',
+                    storeName: currentProfile.name,
+                    offlineMode: true,
+                };
+                setOfflineQueue(prev => [...prev, tx]);
+                setReceiptData({ ...tx, id: 'offline-' + Date.now(), date: new Date(coTime) });
+                setPaymentSuccess(true);
+                try { const s = document.getElementById('chaching-sound'); if(s){ s.currentTime=0; s.play(); } } catch(e) {}
+                showToast('💾 Transaksi disimpan offline!');
+            };
+            // ─────────────────────────────────────────────────────────────────────────────
             const [btDevice, setBtDevice] = useState(null);
             const [pendingCarts, setPendingCarts] = useState([]);
             const [activeCarts, setActiveCarts] = useState([]); // Keranjang aktif kasir lain
@@ -6326,7 +6450,7 @@
 
             // Sync cart ke Firestore setiap kali cart berubah (outgoing)
             useEffect(() => {
-                if (!isSessionActive || !activeCartId || !cashierName) return;
+                if (!isSessionActive || !activeCartId || !cashierName || isOfflineMode) return;
                 
                 const syncCart = async () => {
                     // Skip jika cart baru saja diupdate dari luar (oleh kasir lain)
@@ -6354,7 +6478,7 @@
 
             // Listener incoming: ketika item di keranjang kita diubah dari HP lain
             useEffect(() => {
-                if (!isSessionActive || !activeCartId) return;
+                if (!isSessionActive || !activeCartId || isOfflineMode) return;
                 const cartRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', activeCartId);
                 const unsub = window.onSnapshot(cartRef, (snap) => {
                     if (!snap.exists()) return;
@@ -6883,7 +7007,20 @@
                     return c;
                 }));
             };
-            const handleBack = async () => { 
+            const handleBack = async () => {
+                if (isOfflineMode) {
+                    // Mode offline: simpan cart ke localStorage sebagai draft offline
+                    if (cart.length > 0) {
+                        const draft = { isDraft: true, items: cart, total: grandTotal, cashierName: cashierName, storeId: currentProfile.id, storeName: currentProfile.name, savedAt: new Date().toISOString() };
+                        localStorage.setItem('husna_offline_draft', JSON.stringify(draft));
+                        showToast('Keranjang disimpan (offline draft)', 'info');
+                    }
+                    setIsOfflineMode(false);
+                    setIsSessionActive(false);
+                    setSearch('');
+                    setCart([]);
+                    return;
+                }
                 if (cart.length > 0) { 
                     try {
                         await window.addDoc(window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'pending_carts'), {
@@ -6923,7 +7060,7 @@
             
             const confirmCancel = async () => { 
                 // NEW: Hapus active cart dari Firestore
-                if (activeCartId) {
+                if (activeCartId && !isOfflineMode) {
                     try {
                         await window.deleteDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'active_carts', activeCartId));
                     } catch (error) {
@@ -6942,6 +7079,7 @@
                 localStorage.removeItem('activeCartId');
                 showToast("Transaksi dibatalkan & keranjang dikosongkan", "info");
                 setIsSessionActive(false);
+                setIsOfflineMode(false);
             };
             
             const resumeTransaction = async (pendingItem) => { 
@@ -6976,6 +7114,8 @@
             };
 
             const handleCheckout = async () => {
+                // Jika mode offline, gunakan handleOfflineCheckout
+                if (isOfflineMode) { handleOfflineCheckout(); return; }
                 if (!user) return;
                 if (cart.length === 0) return;
                 const isNonCash = paymentMethod === 'qris' || paymentMethod === 'transfer';
@@ -7053,9 +7193,11 @@
                 setCartDiskon('0');
                 setCartDiskonType('%');
                 setCartBiayaPengiriman('0');
-                setIsSessionActive(false); 
+                setIsSessionActive(false);
+                setIsOfflineMode(false);
                 setActiveCartId(null);
                 localStorage.removeItem('activeCartId');
+                localStorage.removeItem('husna_offline_draft');
                 // cashierName TETAP disimpan untuk sesi berikutnya
             };
             
@@ -7081,16 +7223,53 @@
                 return (
                     <div className="fade-in h-full overflow-y-auto pb-20 md:pb-0 flex flex-col items-center md:justify-start md:pt-8 justify-center relative z-10">
                         <div className="w-full max-w-sm px-4 flex flex-col items-center">
+
+                             {/* BANNER STATUS ONLINE/OFFLINE */}
+                             {!isOnline && (
+                                 <div className="w-full mb-3 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-2.5 flex items-center gap-2.5 fade-in">
+                                     <div className="w-6 h-6 bg-amber-400 rounded-full flex items-center justify-center flex-shrink-0">
+                                         <Icon name="wifi" className="text-white text-[10px]" />
+                                     </div>
+                                     <div className="flex-1 min-w-0">
+                                         <p className="text-xs font-black text-amber-700">Tidak ada koneksi internet</p>
+                                         <p className="text-[10px] text-amber-600">Gunakan Mode Offline untuk tetap berjualan</p>
+                                     </div>
+                                 </div>
+                             )}
+
+                             {/* BANNER SINKRONISASI */}
+                             {isSyncing && (
+                                 <div className="w-full mb-3 bg-sky-50 border border-sky-200 rounded-2xl px-4 py-2.5 flex items-center gap-2.5 fade-in">
+                                     <Icon name="spinner" className="text-sky-500 animate-spin text-sm flex-shrink-0" />
+                                     <p className="text-xs font-bold text-sky-700">Menyinkronkan transaksi offline...</p>
+                                 </div>
+                             )}
+                             {isOnline && offlineQueue.length > 0 && !isSyncing && (
+                                 <div className="w-full mb-3 bg-green-50 border border-green-200 rounded-2xl px-4 py-2.5 flex items-center gap-2.5 fade-in">
+                                     <Icon name="check-circle" className="text-green-500 text-sm flex-shrink-0" />
+                                     <div className="flex-1">
+                                         <p className="text-xs font-black text-green-700">{offlineQueue.length} transaksi menunggu sinkronisasi</p>
+                                         <p className="text-[10px] text-green-600">Akan otomatis tersinkron saat online</p>
+                                     </div>
+                                 </div>
+                             )}
+
                              {/* BANNER TOKO AKTIF */}
-                             <div className="mb-6 bg-white/60 backdrop-blur-md p-4 rounded-2xl border border-white shadow-sm w-full text-center">
+                             <div className="mb-4 bg-white/60 backdrop-blur-md p-4 rounded-2xl border border-white shadow-sm w-full text-center">
                                 <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1">POS Kasir Aktif</p>
                                 <h2 className="text-xl font-black text-slate-800 flex items-center justify-center gap-2">
                                     <Icon name="store" className="text-sky-600" /> {currentProfile.name}
                                 </h2>
+                                {/* Indikator status koneksi di dalam banner */}
+                                <div className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${isOnline ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-green-500' : 'bg-amber-500'}`}></span>
+                                    {isOnline ? 'Online' : 'Offline'}
+                                    {offlineQueue.length > 0 && isOnline && <span className="ml-1 bg-orange-400 text-white rounded-full px-1.5 text-[9px]">{offlineQueue.length} pending</span>}
+                                </div>
                              </div>
 
                              {/* Tombol Penjualan Baru - compact, di bawah banner */}
-                             <button onClick={() => handleStartSession(cashierName)} className="w-full mb-4 bg-sky-500 hover:bg-sky-600 active:scale-95 text-white rounded-2xl px-4 py-3 flex items-center justify-between shadow-md transition-all group">
+                             <button onClick={() => handleStartSession(cashierName)} className="w-full mb-3 bg-sky-500 hover:bg-sky-600 active:scale-95 text-white rounded-2xl px-4 py-3 flex items-center justify-between shadow-md transition-all group">
                                  <div className="flex items-center gap-3">
                                      <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center text-lg group-hover:scale-110 transition-transform">
                                          <Icon name="cart-plus" />
@@ -7102,6 +7281,36 @@
                                  </div>
                                  <Icon name="chevron-right" className="text-sky-200 text-sm" />
                              </button>
+
+                             {/* ── TOMBOL MODE OFFLINE ────────────────────────────────── */}
+                             <button
+                                 onClick={startOfflineMode}
+                                 className={`w-full mb-4 rounded-2xl px-4 py-3 flex items-center justify-between shadow-sm transition-all group active:scale-95 border-2 ${
+                                     !isOnline
+                                         ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-400'
+                                         : 'bg-white hover:bg-slate-50 text-slate-600 border-slate-200 hover:border-amber-300'
+                                 }`}
+                                 title="Mode tanpa internet — transaksi disimpan lokal & otomatis tersinkron saat online"
+                             >
+                                 <div className="flex items-center gap-3">
+                                     <div className={`w-9 h-9 rounded-xl flex items-center justify-center text-lg group-hover:scale-110 transition-transform ${!isOnline ? 'bg-white/20' : 'bg-amber-100'}`}>
+                                         <Icon name="plug" className={!isOnline ? 'text-white' : 'text-amber-500'} />
+                                     </div>
+                                     <div className="text-left">
+                                         <p className={`font-black text-sm leading-none ${!isOnline ? 'text-white' : 'text-slate-700'}`}>Mode Offline</p>
+                                         <p className={`text-[10px] mt-0.5 ${!isOnline ? 'text-amber-100' : 'text-slate-400'}`}>
+                                             {offlineQueue.length > 0 ? `${offlineQueue.length} transaksi belum tersinkron` : 'Transaksi disimpan lokal, sync otomatis'}
+                                         </p>
+                                     </div>
+                                 </div>
+                                 <div className="flex items-center gap-1.5">
+                                     {offlineQueue.length > 0 && (
+                                         <span className="w-5 h-5 bg-orange-400 text-white rounded-full text-[10px] font-black flex items-center justify-center">{offlineQueue.length}</span>
+                                     )}
+                                     <Icon name="chevron-right" className={`text-sm ${!isOnline ? 'text-amber-200' : 'text-slate-300'}`} />
+                                 </div>
+                             </button>
+                             {/* ───────────────────────────────────────────────────────── */}
 
                              {(activeCarts.length > 0 || pendingCarts.length > 0) && (
                                 <div className="w-full mb-4 fade-in">
@@ -7198,11 +7407,26 @@
                         {/* Tombol Kembali - paling atas */}
                         <button onClick={handleBack} className="w-10 h-10 rounded-xl bg-white text-slate-400 hover:text-sky-600 hover:border-sky-300 border border-slate-200 flex items-center justify-center shadow-sm transition-colors mb-3" title="Kembali & Simpan Sementara"><Icon name="arrow-left" /></button>
 
+                        {/* OFFLINE MODE BANNER */}
+                        {isOfflineMode && (
+                            <div className="mb-3 bg-amber-50 border-2 border-amber-300 rounded-2xl px-3 py-2 flex items-center gap-2 fade-in">
+                                <div className="w-7 h-7 bg-amber-400 rounded-xl flex items-center justify-center flex-shrink-0">
+                                    <Icon name="plug" className="text-white text-xs" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-black text-amber-800 leading-none">Mode Offline Aktif</p>
+                                    <p className="text-[10px] text-amber-600 mt-0.5">Transaksi disimpan lokal — tersinkron otomatis saat online</p>
+                                </div>
+                                <span className="text-[10px] bg-amber-200 text-amber-700 rounded-full px-2 py-0.5 font-bold flex-shrink-0">{offlineQueue.length} pending</span>
+                            </div>
+                        )}
+
                         {/* Slim kasir indicator */}
                         <div className="flex items-center gap-2 mb-3 px-1">
                             <div className="w-6 h-6 bg-sky-500 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm">{cashierName.charAt(0).toUpperCase()}</div>
                             <span className="text-xs font-bold text-sky-700">{cashierName}</span>
                             <span className="text-[10px] text-slate-400">• {currentProfile.name}</span>
+                            {isOfflineMode && <span className="text-[10px] bg-amber-100 text-amber-600 font-bold px-1.5 py-0.5 rounded-full">🔌 Offline</span>}
                         </div>
                         
                         {/* Info Transaksi */}
