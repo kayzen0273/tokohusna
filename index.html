@@ -6050,7 +6050,8 @@
                                     });
                                 } else {
                                     const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id);
-                                    batch.update(docRef, { [stockField]: window.increment(-item.cartQty), updatedAt: window.serverTimestamp() });
+                                    const deductQty = item.cartQty * (item.packageQtyPerUnit || 1);
+                                    batch.update(docRef, { [stockField]: window.increment(-deductQty), updatedAt: window.serverTimestamp() });
                                 }
                             });
                             // Simpan transaksi dengan coTime (waktu checkout saat offline)
@@ -6124,7 +6125,7 @@
             const cashierName = authSession?.namaLengkap || authSession?.username || 'Kasir';
             const [activeCartId, setActiveCartId] = useState(null);
             const [originalCashierName, setOriginalCashierName] = useState(null); // Nama kasir asli pemilik keranjang
-            const [priceModal, setPriceModal] = useState({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 }); // Modal pilih harga
+            const [priceModal, setPriceModal] = useState({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0, packageQtyPerUnit: 1 }); // Modal pilih harga
             const [editingCartItem, setEditingCartItem] = useState(null); // Track item yang sedang diedit dari cart
             
             // --- RACIKAN / RESEP STATE ---
@@ -6775,7 +6776,8 @@
                     selectedUnit: defaultUnit,
                     qty: 1,
                     discountType: item.defaultDiscountType || '%',
-                    discountValue: item.defaultDiscount || 0
+                    discountValue: item.defaultDiscount || 0,
+                    packageQtyPerUnit: 1
                 });
             };
             
@@ -6808,12 +6810,13 @@
                     selectedUnit: cartItem.selectedUnit || cartItem.unit,
                     qty: cartItem.cartQty,
                     discountType: cartItem.discount?.type || '%',
-                    discountValue: cartItem.discount?.value || 0
+                    discountValue: cartItem.discount?.value || 0,
+                    packageQtyPerUnit: cartItem.packageQtyPerUnit || 1
                 });
             };
             
             const addToCartWithPrice = () => {
-                const { item, selectedPrice, selectedUnit, qty, discountType, discountValue } = priceModal;
+                const { item, selectedPrice, selectedUnit, qty, discountType, discountValue, packageQtyPerUnit } = priceModal;
                 
                 const finalQty = typeof qty === 'string' && qty === '' ? 1 : parseInt(qty) || 1;
                 
@@ -6831,6 +6834,8 @@
                         finalPrice = selectedPrice - discountValue;
                     }
                 }
+                
+                const pkgQty = packageQtyPerUnit || 1;
                 
                 // Jika sedang mengedit item yang sudah ada di cart
                 if (editingCartItem) {
@@ -6864,13 +6869,14 @@
                                 price: finalPrice, 
                                 selectedUnit: selectedUnit, 
                                 originalPrice: selectedPrice, 
+                                packageQtyPerUnit: pkgQty,
                                 discount: discountValue > 0 ? { type: discountType, value: discountValue } : null 
                             }];
                         }
                     });
                     
                     setEditingCartItem(null);
-                    setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 });
+                    setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0, packageQtyPerUnit: 1 });
                     setSearch('');
                     showToast("Item diperbarui");
                     return;
@@ -6882,10 +6888,10 @@
                     if (existing) {
                         return prev.map(c => (c.id === item.id && c.selectedUnit === selectedUnit && c.price === finalPrice) ? { ...c, cartQty: c.cartQty + finalQty } : c);
                     }
-                    return [...prev, { ...item, cartQty: finalQty, price: finalPrice, selectedUnit: selectedUnit, originalPrice: selectedPrice, discount: discountValue > 0 ? { type: discountType, value: discountValue } : null }];
+                    return [...prev, { ...item, cartQty: finalQty, price: finalPrice, selectedUnit: selectedUnit, originalPrice: selectedPrice, packageQtyPerUnit: pkgQty, discount: discountValue > 0 ? { type: discountType, value: discountValue } : null }];
                 });
                 
-                setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 });
+                setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0, packageQtyPerUnit: 1 });
                 setSearch('');
                 showToast("Ditambahkan ke keranjang");
             };
@@ -7001,7 +7007,8 @@
                                        (c.id === id);
                     if (matchesItem) { 
                         const newQty = c.cartQty + delta; 
-                        if (!c.isRacikanGroup && newQty > c.qty) { showToast("Stok mentok!", "error"); return c; } 
+                        const maxAllowed = Math.floor(c.qty / (c.packageQtyPerUnit || 1));
+                        if (!c.isRacikanGroup && newQty > maxAllowed) { showToast("Stok mentok!", "error"); return c; } 
                         if (newQty < 1) return c; 
                         return { ...c, cartQty: newQty }; 
                     }
@@ -7139,7 +7146,8 @@
                         } else {
                             // Item biasa
                             const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id);
-                            batch.update(docRef, { [stockField]: window.increment(-item.cartQty), updatedAt: window.serverTimestamp() });
+                            const deductQty = item.cartQty * (item.packageQtyPerUnit || 1);
+                            batch.update(docRef, { [stockField]: window.increment(-deductQty), updatedAt: window.serverTimestamp() });
                         }
                     });
 
@@ -7649,7 +7657,7 @@
                                         <div className="divide-y divide-slate-100 max-h-[312px] overflow-y-auto custom-scrollbar">
                                             {filteredItems.map(item => {
                                                 const inCart = cart.find(c => c.id === item.id);
-                                                const currentStock = safeNumber(item.qty) - (inCart ? inCart.cartQty : 0);
+                                                const currentStock = safeNumber(item.qty) - (inCart ? inCart.cartQty * (inCart.packageQtyPerUnit || 1) : 0);
                                                 const isOOS = currentStock <= 0;
                                                 const isDisabled = isOOS && !allowZeroStockCO;
                                                 const highlightName = (name, query) => {
@@ -7787,7 +7795,7 @@
                     </div>
                     <div className="w-full md:w-80 lg:w-96 flex flex-col bg-white rounded-3xl shadow-soft border border-slate-100 h-fit md:h-full max-h-[calc(100vh-100px)]">
                         <div className="p-4 border-b border-slate-100 bg-slate-50/50 rounded-t-3xl flex justify-between items-center"><h3 className="font-bold text-slate-800 flex items-center gap-2"><Icon name="cart-shopping" className="text-sky-600" /> Keranjang</h3><span className="text-xs font-bold bg-sky-100 text-sky-700 px-2 py-1 rounded-full">{cart.length} Item</span></div>
-                        <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar min-h-[200px]">{cart.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60"><Icon name="basket-shopping" className="text-4xl mb-2" /><p className="text-xs font-medium">Keranjang Kosong</p></div>) : (cart.map(item => (<div key={item.id + (item.selectedUnit || '') + (item.price || '')} onClick={() => editCartItem(item)} className={`p-3 rounded-xl border flex gap-3 group relative cursor-pointer transition-all ${item.isRacikan ? 'bg-teal-50 border-teal-100 hover:bg-teal-100 hover:border-teal-300' : 'bg-slate-50 border-slate-100 hover:bg-sky-50 hover:border-sky-300'}`}><div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity"><Icon name="pen-to-square" className="text-[10px] text-sky-500" /></div><div className="flex-1 min-w-0"><div className="flex items-center gap-1.5 flex-wrap"><h4 className={"text-xs font-bold text-slate-700 " + (item.isRacikanGroup ? "line-clamp-2" : "truncate")}>{item.name}</h4>{item.isRacikan && <span className="text-[8px] font-black bg-teal-600 text-white px-1 py-0.5 rounded flex-shrink-0">R/</span>}{item.isKonsinyasi && <span className="text-[8px] font-black bg-fuchsia-100 text-fuchsia-700 px-1 py-0.5 rounded flex-shrink-0 border border-fuchsia-200">konsinyasi</span>}</div>{item.isRacikanGroup ? (<p className="text-[9px] text-teal-600 font-bold mt-0.5"><Icon name="pen-to-square" className="text-[9px] mr-0.5" />Klik untuk edit racikan</p>) : (<p className="text-[10px] text-slate-500">{formatRupiah(item.originalPrice || item.price)} {item.selectedUnit ? `per ${item.selectedUnit}` : ''} x {item.cartQty}</p>)}{item.discount && <p className="text-[9px] text-red-500 font-bold">Diskon: {item.discount.type === '%' ? `${item.discount.value}%` : formatRupiah(item.discount.value)}</p>}{settings?.showNoteButton !== false && item.itemNote && (<button onClick={e => { e.stopPropagation(); setNoteModalItem(item); }} title="Lihat catatan barang" className="mt-0.5 flex items-center gap-1 text-[9px] text-sky-600 font-bold bg-sky-50 hover:bg-sky-100 active:bg-sky-200 px-1.5 py-0.5 rounded-full border border-sky-200 transition-colors max-w-[120px] truncate"><Icon name="circle-info" className="text-[9px] flex-shrink-0" /><span className="truncate">{item.itemNote.length > 18 ? item.itemNote.slice(0, 18) + '…' : item.itemNote}</span></button>)}</div><div className="flex flex-col items-end gap-1"><p className="text-xs font-bold text-slate-800">{formatRupiah(item.price * item.cartQty)}</p><div className="flex items-center gap-1 bg-white rounded-lg shadow-sm border border-slate-200 p-0.5" onClick={e => e.stopPropagation()}><button onClick={() => updateQty(item.id, -1, item.selectedUnit, item.price)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="minus" /></button><span className="text-xs font-bold w-4 text-center">{item.cartQty}</span><button onClick={() => updateQty(item.id, 1, item.selectedUnit, item.price)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="plus" /></button></div></div></div>)))}</div>
+                        <div className="flex-1 overflow-y-auto p-2 space-y-2 custom-scrollbar min-h-[200px]">{cart.length === 0 ? (<div className="h-full flex flex-col items-center justify-center text-slate-300 opacity-60"><Icon name="basket-shopping" className="text-4xl mb-2" /><p className="text-xs font-medium">Keranjang Kosong</p></div>) : (cart.map(item => (<div key={item.id + (item.selectedUnit || '') + (item.price || '')} onClick={() => editCartItem(item)} className={`p-3 rounded-xl border flex gap-3 group relative cursor-pointer transition-all ${item.isRacikan ? 'bg-teal-50 border-teal-100 hover:bg-teal-100 hover:border-teal-300' : 'bg-slate-50 border-slate-100 hover:bg-sky-50 hover:border-sky-300'}`}><div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity"><Icon name="pen-to-square" className="text-[10px] text-sky-500" /></div><div className="flex-1 min-w-0"><div className="flex items-center gap-1.5 flex-wrap"><h4 className={"text-xs font-bold text-slate-700 " + (item.isRacikanGroup ? "line-clamp-2" : "truncate")}>{item.name}</h4>{item.isRacikan && <span className="text-[8px] font-black bg-teal-600 text-white px-1 py-0.5 rounded flex-shrink-0">R/</span>}{item.isKonsinyasi && <span className="text-[8px] font-black bg-fuchsia-100 text-fuchsia-700 px-1 py-0.5 rounded flex-shrink-0 border border-fuchsia-200">konsinyasi</span>}{item.packageQtyPerUnit > 1 && <span className="text-[8px] font-black bg-amber-100 text-amber-700 px-1 py-0.5 rounded flex-shrink-0 border border-amber-200">📦 {item.selectedUnit}</span>}</div>{item.isRacikanGroup ? (<p className="text-[9px] text-teal-600 font-bold mt-0.5"><Icon name="pen-to-square" className="text-[9px] mr-0.5" />Klik untuk edit racikan</p>) : (<p className="text-[10px] text-slate-500">{formatRupiah(item.originalPrice || item.price)} {item.selectedUnit ? `per ${item.selectedUnit}` : ''} x {item.cartQty}{item.packageQtyPerUnit > 1 ? ` (= ${item.cartQty * item.packageQtyPerUnit} ${item.unit})` : ''}</p>)}{item.discount && <p className="text-[9px] text-red-500 font-bold">Diskon: {item.discount.type === '%' ? `${item.discount.value}%` : formatRupiah(item.discount.value)}</p>}{settings?.showNoteButton !== false && item.itemNote && (<button onClick={e => { e.stopPropagation(); setNoteModalItem(item); }} title="Lihat catatan barang" className="mt-0.5 flex items-center gap-1 text-[9px] text-sky-600 font-bold bg-sky-50 hover:bg-sky-100 active:bg-sky-200 px-1.5 py-0.5 rounded-full border border-sky-200 transition-colors max-w-[120px] truncate"><Icon name="circle-info" className="text-[9px] flex-shrink-0" /><span className="truncate">{item.itemNote.length > 18 ? item.itemNote.slice(0, 18) + '…' : item.itemNote}</span></button>)}</div><div className="flex flex-col items-end gap-1"><p className="text-xs font-bold text-slate-800">{formatRupiah(item.price * item.cartQty)}</p><div className="flex items-center gap-1 bg-white rounded-lg shadow-sm border border-slate-200 p-0.5" onClick={e => e.stopPropagation()}><button onClick={() => updateQty(item.id, -1, item.selectedUnit, item.price)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="minus" /></button><span className="text-xs font-bold w-4 text-center">{item.cartQty}</span><button onClick={() => updateQty(item.id, 1, item.selectedUnit, item.price)} className="w-5 h-5 flex items-center justify-center text-[8px] hover:bg-slate-100 rounded text-slate-500"><Icon name="plus" /></button></div></div></div>)))}</div>
                         <div className="p-4 border-t border-slate-100 bg-slate-50 rounded-b-3xl">
                             {/* Subtotal, Diskon, Biaya Pengiriman, Total */}
                             <div className="space-y-2 mb-3">
@@ -8531,7 +8539,7 @@
                             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
                                 {/* Header */}
                                 <div className="p-4 border-b border-slate-200 flex items-center justify-between">
-                                    <button onClick={() => { setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0 }); setEditingCartItem(null); }} className="text-slate-600 hover:text-slate-800">
+                                    <button onClick={() => { setPriceModal({ show: false, item: null, selectedPrice: 0, selectedUnit: '', qty: 1, discountType: '%', discountValue: 0, packageQtyPerUnit: 1 }); setEditingCartItem(null); }} className="text-slate-600 hover:text-slate-800">
                                         <Icon name="arrow-left" className="text-xl" />
                                     </button>
                                     <div className="flex items-center gap-2">
@@ -8546,6 +8554,12 @@
                                     <div className="mb-6">
                                         <h2 className="text-xl font-bold text-slate-800 mb-1">{priceModal.item.name}</h2>
                                         <p className="text-sm text-slate-500">Stok {priceModal.item.qty} {priceModal.item.unit}</p>
+                                        {priceModal.packageQtyPerUnit > 1 && (
+                                            <div className="mt-1.5 inline-flex items-center gap-1.5 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1">
+                                                <Icon name="box-open" className="text-amber-500 text-xs" />
+                                                <span className="text-xs font-bold text-amber-700">Paket: {priceModal.selectedUnit} — stok berkurang {priceModal.qty * (priceModal.packageQtyPerUnit || 1)} {priceModal.item.unit}</span>
+                                            </div>
+                                        )}
                                     </div>
                                     
                                     {/* Harga Display */}
@@ -8592,21 +8606,28 @@
                                             />
                                             <div className="relative w-32">
                                                 <select 
-                                                    value={priceModal.selectedUnit ? `${priceModal.selectedUnit}|${priceModal.selectedPrice}` : ''} 
+                                                    value={priceModal.selectedUnit ? `${priceModal.selectedUnit}|${priceModal.selectedPrice}|${priceModal.packageQtyPerUnit || 1}` : ''} 
                                                     onChange={e => {
                                                         if (e.target.value) {
-                                                            const [unit, price] = e.target.value.split('|');
-                                                            setPriceModal({...priceModal, selectedUnit: unit, selectedPrice: parseFloat(price)});
+                                                            const parts = e.target.value.split('|');
+                                                            const unit = parts[0];
+                                                            const price = parseFloat(parts[1]);
+                                                            const pkgQty = parseInt(parts[2]) || 1;
+                                                            setPriceModal({...priceModal, selectedUnit: unit, selectedPrice: price, packageQtyPerUnit: pkgQty});
                                                         }
                                                     }}
                                                     className="w-full p-3 rounded-xl border-2 border-slate-200 focus:border-teal-500 outline-none appearance-none font-bold text-slate-700 bg-white"
                                                 >
                                                     {priceModal.item.price > 0 && (
-                                                        <option value={`${priceModal.item.unit}|${priceModal.item.price}`}>
+                                                        <option value={`${priceModal.item.unit}|${priceModal.item.price}|1`}>
                                                             {priceModal.item.unit} - {formatRupiah(priceModal.item.price)}
                                                         </option>
                                                     )}
-
+                                                    {(priceModal.item.packagePrices || []).map((pkg, idx) => (
+                                                        <option key={idx} value={`${pkg.name} (${pkg.qty} ${priceModal.item.unit})|${pkg.price}|${pkg.qty}`}>
+                                                            {pkg.name} (isi {pkg.qty}) - {formatRupiah(pkg.price)}
+                                                        </option>
+                                                    ))}
                                                 </select>
                                                 <Icon name="chevron-down" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
                                             </div>
@@ -10547,6 +10568,80 @@
                             <div className="grid grid-cols-5 gap-3"><div className="col-span-3 space-y-1.5"><label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Jumlah</label><div className="relative"><input type="number" step="any" className="w-full p-3.5 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white outline-none transition-all font-bold text-slate-700 text-sm focus:border-slate-400" value={formData.qty || ''} onChange={e=>setFormData({...formData, qty: e.target.value})} placeholder="0" /><div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-0.5"><button type="button" onClick={() => setFormData({...formData, qty: safeNumber(formData.qty)+1})} className="w-4 h-4 bg-white rounded shadow text-[8px] text-slate-500 hover:text-brand-600"><Icon name="chevron-up" /></button><button type="button" onClick={() => setFormData({...formData, qty: Math.max(0, safeNumber(formData.qty)-1)})} className="w-4 h-4 bg-white rounded shadow text-[8px] text-slate-500 hover:text-red-600"><Icon name="chevron-down" /></button></div></div></div><div className="col-span-2 space-y-1.5"><label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Satuan</label><select className="w-full p-3.5 rounded-xl bg-slate-50 border border-slate-200 outline-none appearance-none font-medium text-sm text-slate-600 focus:border-slate-400" value={formData.unit || 'Pcs'} onChange={e=>setFormData({...formData, unit: e.target.value})}>{unitOptions.map(u => <option key={u} value={u}>{u}</option>)}</select></div></div>
                             <div className="space-y-1.5"><label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1">Kadaluarsa</label><input type="date" className="w-full p-3.5 rounded-xl bg-slate-50 border border-slate-200 outline-none font-medium text-sm transition-all focus:bg-white text-slate-600 focus:border-slate-400" value={formData.exp || ''} onChange={e=>setFormData({...formData, exp: e.target.value})} /></div>
                             <div className="space-y-1.5 bg-slate-50 p-3 rounded-xl border border-dashed border-slate-200"><label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider ml-1 flex justify-between">Minimum Stok (Khusus) <span className="text-[9px] font-normal lowercase text-slate-400">kosongkan jika ikut aturan global</span></label><input type="number" className="w-full p-2.5 rounded-lg bg-white border border-slate-200 focus:border-sky-500 outline-none text-sm" placeholder="Contoh: 10 (Item ini akan 'Low' jika dibawah 10)" value={formData.minStock || ''} onChange={e=>setFormData({...formData, minStock: e.target.value})} /></div>
+
+                            {/* ===== HARGA PAKET ===== */}
+                            {(() => {
+                                const pkgs = formData.packagePrices || [];
+                                const [showAddPkg, setShowAddPkg] = React.useState(false);
+                                const [pkgForm, setPkgForm] = React.useState({ name: 'Box', qty: '', price: '' });
+                                const [editingPkgIdx, setEditingPkgIdx] = React.useState(null);
+                                const savePkg = () => {
+                                    if (!pkgForm.name.trim() || !pkgForm.qty || !pkgForm.price) return;
+                                    const newPkg = { name: pkgForm.name.trim(), qty: parseInt(pkgForm.qty) || 1, price: safeNumber(pkgForm.price) };
+                                    let updated;
+                                    if (editingPkgIdx !== null) {
+                                        updated = pkgs.map((p, i) => i === editingPkgIdx ? newPkg : p);
+                                    } else {
+                                        updated = [...pkgs, newPkg];
+                                    }
+                                    setFormData({ ...formData, packagePrices: updated });
+                                    setPkgForm({ name: 'Box', qty: '', price: '' });
+                                    setShowAddPkg(false);
+                                    setEditingPkgIdx(null);
+                                };
+                                const deletePkg = (idx) => setFormData({ ...formData, packagePrices: pkgs.filter((_, i) => i !== idx) });
+                                const startEdit = (idx) => { setPkgForm({ name: pkgs[idx].name, qty: String(pkgs[idx].qty), price: String(pkgs[idx].price) }); setEditingPkgIdx(idx); setShowAddPkg(true); };
+                                return (
+                                    <div className="space-y-2 bg-amber-50 p-3 rounded-xl border border-amber-200">
+                                        <label className="text-[10px] font-bold text-amber-600 uppercase tracking-wider ml-1 flex items-center gap-1">
+                                            <Icon name="box-open" className="text-[10px]" /> Harga Paket
+                                            <span className="text-[9px] font-normal lowercase text-slate-400 ml-1">— opsional, mis: Box isi 10 Strip</span>
+                                        </label>
+                                        {pkgs.length > 0 && (
+                                            <div className="space-y-1.5">
+                                                {pkgs.map((p, i) => (
+                                                    <div key={i} className="flex items-center gap-2 bg-white rounded-lg px-2.5 py-1.5 border border-amber-100">
+                                                        <span className="text-xs font-bold text-amber-700 flex-1">{p.name} <span className="text-slate-400 font-normal">isi {p.qty} {formData.unit || 'Pcs'}</span></span>
+                                                        <span className="text-xs font-bold text-slate-700">{formatRupiah(p.price)}</span>
+                                                        <button type="button" onClick={() => startEdit(i)} className="w-6 h-6 rounded bg-sky-50 hover:bg-sky-100 text-sky-500 text-[10px] flex items-center justify-center"><Icon name="pen" /></button>
+                                                        <button type="button" onClick={() => deletePkg(i)} className="w-6 h-6 rounded bg-red-50 hover:bg-red-100 text-red-400 text-[10px] flex items-center justify-center"><Icon name="trash" /></button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {showAddPkg ? (
+                                            <div className="bg-white rounded-lg p-2.5 border border-amber-200 space-y-2">
+                                                <div className="flex gap-2">
+                                                    <div className="flex-1 space-y-1">
+                                                        <label className="text-[9px] font-bold text-slate-500 uppercase">Nama Paket</label>
+                                                        <input className="w-full p-2 rounded-lg border border-slate-200 text-xs font-bold outline-none focus:border-amber-400" value={pkgForm.name} onChange={e => setPkgForm({...pkgForm, name: e.target.value})} placeholder="Box / Karton / Lusin" />
+                                                    </div>
+                                                    <div className="w-20 space-y-1">
+                                                        <label className="text-[9px] font-bold text-slate-500 uppercase">Isi ({formData.unit || 'Pcs'})</label>
+                                                        <input type="number" className="w-full p-2 rounded-lg border border-slate-200 text-xs font-bold outline-none focus:border-amber-400" value={pkgForm.qty} onChange={e => setPkgForm({...pkgForm, qty: e.target.value})} placeholder="10" />
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="text-[9px] font-bold text-slate-500 uppercase">Harga Paket (Rp)</label>
+                                                    <input type="number" className="w-full p-2 rounded-lg border border-slate-200 text-xs font-bold outline-none focus:border-amber-400" value={pkgForm.price} onChange={e => setPkgForm({...pkgForm, price: e.target.value})} placeholder="Mis: 80000" />
+                                                </div>
+                                                {pkgForm.qty && pkgForm.price && safeNumber(pkgForm.price) > 0 && parseInt(pkgForm.qty) > 0 && (
+                                                    <p className="text-[9px] text-amber-600 font-bold">= {formatRupiah(safeNumber(pkgForm.price) / parseInt(pkgForm.qty))} per {formData.unit || 'Pcs'}</p>
+                                                )}
+                                                <div className="flex gap-2">
+                                                    <button type="button" onClick={() => { setShowAddPkg(false); setEditingPkgIdx(null); setPkgForm({ name: 'Box', qty: '', price: '' }); }} className="flex-1 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold">Batal</button>
+                                                    <button type="button" onClick={savePkg} className="flex-1 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold">{editingPkgIdx !== null ? 'Simpan' : 'Tambah'}</button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <button type="button" onClick={() => { setShowAddPkg(true); setEditingPkgIdx(null); setPkgForm({ name: 'Box', qty: '', price: '' }); }} className="flex items-center gap-1.5 text-amber-600 text-xs font-bold hover:text-amber-700">
+                                                <Icon name="plus" className="text-[10px]" /> Tambah Paket
+                                            </button>
+                                        )}
+                                    </div>
+                                );
+                            })()}
+
                             <div className="pt-4 flex gap-3">{isEditing && (<button type="button" disabled={submitting} onClick={onCancel} className="flex-1 py-3.5 rounded-xl text-slate-600 font-bold bg-white border border-slate-200 hover:bg-slate-50 text-sm transition-colors">Batal</button>)}<button type="submit" disabled={submitting} className={`flex-1 py-3.5 rounded-xl text-white font-bold shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 text-sm disabled:opacity-50 ${isEditing ? 'bg-slate-700 hover:bg-slate-800' : 'bg-sky-600 hover:bg-sky-700 shadow-sky-200'}`}>{submitting ? <div className="typing-dot bg-white" /> : <Icon name={isEditing ? 'check' : 'plus'} />} {submitting ? 'Menyimpan...' : (isEditing ? 'Simpan' : 'Tambah')}</button></div>
                         </form>
                     </div>
@@ -14267,7 +14362,7 @@
             const [searchQuery, setSearchQuery] = useState('');
             const [showOnlyLowStock, setShowOnlyLowStock] = useState(false);
             const [selectedRacks, setSelectedRacks] = useState([]);
-            const [formData, setFormData] = useState({ name: '', qty: '', unit: 'Pcs', exp: '', rack: '', price: '', costPrice: '', minStock: '', defaultDiscount: '', defaultDiscountType: '%' });
+            const [formData, setFormData] = useState({ name: '', qty: '', unit: 'Pcs', exp: '', rack: '', price: '', costPrice: '', minStock: '', defaultDiscount: '', defaultDiscountType: '%', packagePrices: [] });
             const [editingItem, setEditingItem] = useState(null); 
             const [deleteModal, setDeleteModal] = useState({ show: false, item: null });
             const [deleteRackModal, setDeleteRackModal] = useState({ show: false, rackName: null });
@@ -14718,6 +14813,7 @@
                         price: safeNumber(formData.price), costPrice: safeNumber(formData.costPrice), minStock: formData.minStock ? safeNumber(formData.minStock) : null,
                         defaultDiscount: formData.defaultDiscount ? safeNumber(formData.defaultDiscount) : 0,
                         defaultDiscountType: formData.defaultDiscountType || '%',
+                        packagePrices: (formData.packagePrices || []).filter(p => p.name && p.qty > 0 && p.price > 0),
                         updatedAt: window.serverTimestamp()
                     };
                     const stockUpdate = { [`stocks.${activeStoreId}`]: newQty };
@@ -14769,7 +14865,7 @@
                         }
                     }
 
-                    setEditingItem(null); setFormData({ name: '', qty: '', unit: 'Pcs', exp: '', rack: '', price: '', costPrice: '', minStock: '', defaultDiscount: '', defaultDiscountType: '%' }); setActiveTab('list');
+                    setEditingItem(null); setFormData({ name: '', qty: '', unit: 'Pcs', exp: '', rack: '', price: '', costPrice: '', minStock: '', defaultDiscount: '', defaultDiscountType: '%', packagePrices: [] }); setActiveTab('list');
                 } catch (error) { console.error("Error saving:", error); showToast("Gagal menyimpan ke database", "error"); } finally { setSubmitting(false); }
             };
 
@@ -15143,7 +15239,7 @@
                         {activeTab === 'purchases' && (<PurchaseView user={user} showToast={showToast} items={inventoryData} currentProfile={currentProfile} settings={settingsData} readOnly={menuItems.find(m=>m.id==='purchases')?.readOnly} />)}
                         {activeTab === 'cashbook' && (<CashBookView user={user} currentProfile={currentProfile} showToast={showToast} readOnly={menuItems.find(m=>m.id==='cashbook')?.readOnly} />)}
                         {activeTab === 'list' && (<ListView items={inventoryData} loading={loading} settings={settingsData} searchQuery={searchQuery} setSearchQuery={setSearchQuery} showOnlyLowStock={showOnlyLowStock} setShowOnlyLowStock={setShowOnlyLowStock} selectedRacks={selectedRacks} setSelectedRacks={setSelectedRacks} uniqueRacksData={uniqueRacksData} onCopySuccess={showToast} onEdit={(item) => { setFormData({...item}); setEditingItem(item); setActiveTab('add'); }} onDelete={(item) => setDeleteModal({ show: true, item: item })} onDeleteRack={(rackName) => setDeleteRackModal({ show: true, rackName })} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='list')?.readOnly} isOwner={isOwner} />)}
-                        {activeTab === 'add' && (<FormView formData={formData} setFormData={setFormData} onSubmit={handleSubmit} isEditing={!!editingItem} submitting={submitting} onCancel={() => { setEditingItem(null); setFormData({name:'', qty:'', unit:'Pcs', exp:'', rack:'', price:'', costPrice:'', minStock: '', defaultDiscount: '', defaultDiscountType: '%'}); setActiveTab('list'); }} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='add')?.readOnly} />)}
+                        {activeTab === 'add' && (<FormView formData={formData} setFormData={setFormData} onSubmit={handleSubmit} isEditing={!!editingItem} submitting={submitting} onCancel={() => { setEditingItem(null); setFormData({name:'', qty:'', unit:'Pcs', exp:'', rack:'', price:'', costPrice:'', minStock: '', defaultDiscount: '', defaultDiscountType: '%', packagePrices: []}); setActiveTab('list'); }} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='add')?.readOnly} />)}
                         {activeTab === 'import' && (<BulkImportView user={user} onImportComplete={(count) => { showToast(`${count} Barang berhasil diimport`); setActiveTab('list'); }} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='import')?.readOnly} />)}
                         {activeTab === 'stock_opname' && (<StockOpnameView items={inventoryData} user={user} showToast={showToast} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='stock_opname')?.readOnly} isOwner={isOwner} />)}
                         {activeTab === 'rekam_medis' && (<RekamMedisView user={user} showToast={showToast} readOnly={menuItems.find(m=>m.id==='rekam_medis')?.readOnly} />)}
