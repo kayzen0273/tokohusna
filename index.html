@@ -9034,9 +9034,10 @@
                             batch.update(invRef, { [stockField]: window.increment(ri.qty * qtyToRetur), updatedAt: window.serverTimestamp() });
                         });
                     } else {
-                        // Item biasa
+                        // Item biasa — kalikan packageQtyPerUnit agar retur per box mengembalikan stok satuan yang benar
                         const invRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id);
-                        batch.update(invRef, { [stockField]: window.increment(qtyToRetur) });
+                        const returStockQty = qtyToRetur * (item.packageQtyPerUnit || 1);
+                        batch.update(invRef, { [stockField]: window.increment(returStockQty) });
                     }
                     
                     const txRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions', tx.id);
@@ -9048,7 +9049,7 @@
                     if (totalReturnedCount === totalItemsCount) newStatus = 'returned'; else if (totalReturnedCount > 0) newStatus = 'partial';
                     batch.update(txRef, { items: updatedItems, status: newStatus, returnedAt: window.serverTimestamp() });
                     await batch.commit();
-                    const label = item.isRacikanGroup ? 'Racikan' : `${qtyToRetur} ${item.unit}`;
+                    const label = item.isRacikanGroup ? 'Racikan' : `${qtyToRetur} ${item.selectedUnit || item.unit}${item.packageQtyPerUnit > 1 ? ` (${qtyToRetur * item.packageQtyPerUnit} ${item.unit} kembali ke stok)` : ''}`;
                     showToast(`Berhasil meretur ${label} ke Stok Toko`, "success");
                     setReturModal({ show: false, tx: null, item: null, index: -1 }); setSelectedTx(null);
                 } catch (error) { console.error("Retur error", error); showToast("Gagal melakukan retur", "error"); } finally { setProcessingRetur(false); }
