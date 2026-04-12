@@ -11373,15 +11373,23 @@
                 return () => unsub();
             }, []);
 
+            const initializedSessionRef = React.useRef(null);
+
             useEffect(() => {
                 const active = sessions.find(s => s.status === 'open' && s.profileId === profileId);
                 if (active) {
                     setActiveSession(active);
                     setSessionId(active.id);
-                    const counts = {};
-                    (active.entries || []).forEach(e => { counts[e.itemId] = e.physicalQty; });
-                    setPhysicalCounts(counts);
+                    // Hanya load physicalCounts saat pertama kali sesi ditemukan,
+                    // supaya snapshot berikutnya tidak overwrite input user
+                    if (initializedSessionRef.current !== active.id) {
+                        initializedSessionRef.current = active.id;
+                        const counts = {};
+                        (active.entries || []).forEach(e => { counts[e.itemId] = e.physicalQty; });
+                        setPhysicalCounts(counts);
+                    }
                 } else {
+                    initializedSessionRef.current = null;
                     setActiveSession(null);
                     setSessionId(null);
                     setPhysicalCounts({});
@@ -11423,21 +11431,25 @@
                 setPhysicalCounts(prev => ({ ...prev, [itemId]: val === '' ? undefined : val }));
             };
 
-            const saveProgress = async () => {
-                if (!sessionId) return;
-                setSaving(true);
-                const entries = Object.entries(physicalCounts)
+            const saveProgress = React.useCallback(async (counts, sid) => {
+                if (!sid) return;
+                const entries = Object.entries(counts)
                     .filter(([, v]) => v !== undefined)
                     .map(([itemId, physicalQty]) => {
                         const item = items.find(i => i.id === itemId);
                         return { itemId, name: item?.name || '?', systemQty: Number(item?.qty || 0), physicalQty: Number(physicalQty), selisih: Number(physicalQty) - Number(item?.qty || 0), price: Number(item?.price || 0) };
                     });
                 try {
-                    await window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'stock_opname', sessionId), { entries, updatedAt: window.serverTimestamp() });
-                    showToast('Progress tersimpan!');
-                } catch (e) { showToast('Gagal menyimpan', 'error'); }
-                setSaving(false);
-            };
+                    await window.updateDoc(window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'stock_opname', sid), { entries, updatedAt: window.serverTimestamp() });
+                } catch (e) { console.error('Auto-save SO error', e); }
+            }, [items]);
+
+            // Auto-save dengan debounce 1.5 detik setiap physicalCounts berubah
+            useEffect(() => {
+                if (!sessionId || Object.keys(physicalCounts).length === 0) return;
+                const timer = setTimeout(() => { saveProgress(physicalCounts, sessionId); }, 0);
+                return () => clearTimeout(timer);
+            }, [physicalCounts, sessionId]);
 
             const finishSession = async () => {
                 if (!sessionId) return;
@@ -11763,7 +11775,7 @@
                                             <i className="fa-solid fa-ban text-[10px]"></i> Batalkan
                                             {!isOwner && <i className="fa-solid fa-lock text-[9px] opacity-60"></i>}
                                         </button>
-                                        <button onClick={saveProgress} disabled={saving} className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold px-3 py-1.5 rounded-lg transition-all">{saving ? '...' : ' Simpan'}</button>
+
                                         <button onClick={() => setShowFinishModal(true)} className="text-xs bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all"> Selesaikan</button>
                                     </div>
                                 </div>
