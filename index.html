@@ -14366,6 +14366,168 @@
 
 
 
+                // ====== REKAP BARANG TERJUAL VIEW ======
+                const RekapBarangView = ({ user, currentProfile, settings }) => {
+                    const [transactions, setTransactions] = useState([]);
+                    const [loading, setLoading] = useState(true);
+                    const [filterMode, setFilterMode] = useState('this_month');
+                    const [searchQuery, setSearchQuery] = useState('');
+                    const [sortBy, setSortBy] = useState('qty'); // 'qty' | 'revenue'
+
+                    useEffect(() => {
+                        if (!user) return;
+                        setLoading(true);
+                        const q = window.query(
+                            window.collection(window.db, 'artifacts', window.appId, 'public', 'data', 'transactions'),
+                            window.orderBy('date', 'desc'),
+                            window.limit(1000)
+                        );
+                        const unsub = window.onSnapshot(q, snap => {
+                            setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                            setLoading(false);
+                        }, () => setLoading(false));
+                        return () => unsub();
+                    }, [user]);
+
+                    const filteredTx = React.useMemo(() => {
+                        const now = new Date();
+                        return transactions.filter(tx => {
+                            if (tx.status === 'returned') return false;
+                            if (currentProfile?.id && currentProfile.id !== 'all_stores' && tx.storeId && tx.storeId !== currentProfile.id) return false;
+                            const txDate = tx.date?.seconds ? new Date(tx.date.seconds * 1000) : new Date(tx.date);
+                            if (filterMode === 'today') {
+                                return txDate.toDateString() === now.toDateString();
+                            } else if (filterMode === 'this_week') {
+                                const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - now.getDay()); startOfWeek.setHours(0,0,0,0);
+                                return txDate >= startOfWeek;
+                            } else if (filterMode === 'this_month') {
+                                return txDate.getMonth() === now.getMonth() && txDate.getFullYear() === now.getFullYear();
+                            } else if (filterMode === 'all') {
+                                return true;
+                            }
+                            return true;
+                        });
+                    }, [transactions, filterMode, currentProfile]);
+
+                    const rekapData = React.useMemo(() => {
+                        const map = {};
+                        filteredTx.forEach(tx => {
+                            (tx.items || []).forEach(item => {
+                                const validQty = (item.cartQty || 0) - (item.returnedQty || 0);
+                                if (validQty <= 0) return;
+                                const key = item.name || 'Unknown';
+                                if (!map[key]) map[key] = { name: key, totalQty: 0, totalRevenue: 0, unit: item.unit || '' };
+                                map[key].totalQty += validQty;
+                                map[key].totalRevenue += validQty * (item.price || 0);
+                            });
+                        });
+                        let arr = Object.values(map);
+                        if (searchQuery) arr = arr.filter(r => r.name.toLowerCase().includes(searchQuery.toLowerCase()));
+                        arr.sort((a, b) => sortBy === 'qty' ? b.totalQty - a.totalQty : b.totalRevenue - a.totalRevenue);
+                        return arr;
+                    }, [filteredTx, searchQuery, sortBy]);
+
+                    const totalQtyAll = rekapData.reduce((s, r) => s + r.totalQty, 0);
+                    const totalRevenueAll = rekapData.reduce((s, r) => s + r.totalRevenue, 0);
+
+                    const filterLabels = { today: 'Hari Ini', this_week: 'Minggu Ini', this_month: 'Bulan Ini', all: 'Semua' };
+
+                    return (
+                        <div className="space-y-4">
+                            {/* Header */}
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-sky-600 flex items-center justify-center text-white shadow-lg">
+                                    <Icon name="chart-bar" className="text-lg" />
+                                </div>
+                                <div>
+                                    <h2 className="text-xl font-black text-slate-800">Rekap Barang Terjual</h2>
+                                    <p className="text-xs text-slate-400">{currentProfile?.name || 'Semua Toko'}</p>
+                                </div>
+                            </div>
+
+                            {/* Filter bar */}
+                            <div className="flex flex-wrap gap-2 items-center">
+                                {Object.entries(filterLabels).map(([k, v]) => (
+                                    <button key={k} onClick={() => setFilterMode(k)}
+                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${filterMode === k ? 'bg-sky-600 text-white shadow' : 'bg-white text-slate-500 border border-slate-200 hover:bg-sky-50'}`}>
+                                        {v}
+                                    </button>
+                                ))}
+                                <div className="ml-auto flex gap-2">
+                                    <button onClick={() => setSortBy('qty')} className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${sortBy === 'qty' ? 'bg-amber-500 text-white shadow' : 'bg-white text-slate-500 border border-slate-200 hover:bg-amber-50'}`}>
+                                        <Icon name="sort-amount-down" className="mr-1" />Qty
+                                    </button>
+                                    <button onClick={() => setSortBy('revenue')} className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${sortBy === 'revenue' ? 'bg-amber-500 text-white shadow' : 'bg-white text-slate-500 border border-slate-200 hover:bg-amber-50'}`}>
+                                        <Icon name="money-bill" className="mr-1" />Omset
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Search */}
+                            <div className="relative">
+                                <Icon name="magnifying-glass" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
+                                <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                                    placeholder="Cari nama barang..."
+                                    className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-sky-300" />
+                            </div>
+
+                            {/* Summary cards */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-soft">
+                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wide">Total Item Terjual</p>
+                                    <p className="text-2xl font-black text-slate-800 mt-1">{totalQtyAll.toLocaleString('id-ID')}</p>
+                                    <p className="text-[10px] text-slate-400 mt-1">{rekapData.length} jenis barang</p>
+                                </div>
+                                <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-soft">
+                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wide">Total Omset</p>
+                                    <p className="text-xl font-black text-sky-600 mt-1">{formatRupiah(totalRevenueAll)}</p>
+                                    <p className="text-[10px] text-slate-400 mt-1">{filterLabels[filterMode]}</p>
+                                </div>
+                            </div>
+
+                            {/* Table */}
+                            {loading ? (
+                                <div className="flex items-center justify-center py-16 text-slate-400">
+                                    <Icon name="spinner" className="animate-spin mr-2" /> Memuat data...
+                                </div>
+                            ) : rekapData.length === 0 ? (
+                                <div className="bg-white rounded-2xl p-10 text-center text-slate-400 border border-slate-100">
+                                    <Icon name="box-open" className="text-3xl mb-2" />
+                                    <p className="font-bold">Belum ada data penjualan</p>
+                                    <p className="text-xs mt-1">untuk periode {filterLabels[filterMode]}</p>
+                                </div>
+                            ) : (
+                                <div className="bg-white rounded-2xl border border-slate-100 shadow-soft overflow-hidden">
+                                    <div className="grid grid-cols-12 px-4 py-2 bg-slate-50 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-wide">
+                                        <span className="col-span-1">#</span>
+                                        <span className="col-span-5">Nama Barang</span>
+                                        <span className="col-span-2 text-center">Qty</span>
+                                        <span className="col-span-4 text-right">Omset</span>
+                                    </div>
+                                    <div className="divide-y divide-slate-50 max-h-[420px] overflow-y-auto">
+                                        {rekapData.map((r, i) => (
+                                            <div key={r.name} className="grid grid-cols-12 px-4 py-3 items-center hover:bg-sky-50/40 transition-colors">
+                                                <span className="col-span-1 text-xs font-black text-slate-300">{i + 1}</span>
+                                                <div className="col-span-5">
+                                                    <p className="text-sm font-bold text-slate-700 truncate">{r.name}</p>
+                                                    {r.unit && <p className="text-[10px] text-slate-400">{r.unit}</p>}
+                                                </div>
+                                                <div className="col-span-2 text-center">
+                                                    <span className="text-sm font-black text-sky-600">{r.totalQty.toLocaleString('id-ID')}</span>
+                                                </div>
+                                                <div className="col-span-4 text-right">
+                                                    <span className="text-sm font-bold text-slate-700">{formatRupiah(r.totalRevenue)}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    );
+                };
+                // ====== END REKAP BARANG TERJUAL VIEW ======
+
                 const App = () => {
             const [inventoryData, setInventoryData] = useState([]);
             const [rawInventory, setRawInventory] = useState([]); // Store original data from DB
@@ -14385,6 +14547,9 @@
             const _expiryAlertShown = useRef(false); // hanya tampil sekali per session
             const [user, setUser] = useState(null);
             const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+            const [kasirDropdownOpen, setKasirDropdownOpen] = useState(true);
+            const [barangDropdownOpen, setBarangDropdownOpen] = useState(false);
+            const [pembelianDropdownOpen, setPembelianDropdownOpen] = useState(false);
             const [receiptToPrint, setReceiptToPrint] = useState(null);
             const [isGeneratingImage, setIsGeneratingImage] = useState(false);
             const [activeStoreId, setActiveStoreId] = useState(localStorage.getItem('activeStoreId') || 'default');
@@ -14885,7 +15050,7 @@
             const handleSaveSettings = async (newSettings) => { if(!user) return; setSubmitting(true); try { const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'settings', 'global'); await window.setDoc(docRef, newSettings); showToast("Pengaturan disimpan"); } catch(error) { console.error(error); showToast("Gagal simpan pengaturan", "error"); } finally { setSubmitting(false); } };
             const handleDelete = async () => { if (!deleteModal.item || !user) return; try { const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', deleteModal.item.id); await window.deleteDoc(docRef); showToast("Barang dihapus (dari semua toko)"); } catch (error) { showToast("Gagal menghapus", "error"); } finally { setDeleteModal({ show: false, item: null }); } };
             const handleConfirmDeleteRack = async () => { if (!deleteRackModal.rackName || !user) return; const rackName = deleteRackModal.rackName; try { const batch = window.writeBatch(window.db); const itemsToUpdate = inventoryData.filter(item => item.rack && item.rack.includes(rackName)); if (itemsToUpdate.length === 0) { showToast("Tidak ada item di rak ini"); setDeleteRackModal({ show: false, rackName: null }); return; } itemsToUpdate.forEach(item => { const newRacks = item.rack.split(',').map(r => r.trim()).filter(r => r !== rackName); const newRackString = newRacks.length > 0 ? newRacks.join(', ') : '-'; const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'inventory', item.id); batch.update(docRef, { rack: newRackString }); }); await batch.commit(); showToast(`Rak "${rackName}" berhasil dihapus`); setSelectedRacks([]); } catch (err) { console.error("Failed delete rack", err); showToast("Gagal menghapus rak", "error"); } finally { setDeleteRackModal({ show: false, rackName: null }); } };
-            const handleNavClick = (tabId, event) => { setActiveTab(tabId); if (tabId !== 'list') setShowOnlyLowStock(false); setIsSidebarOpen(false); };
+            const handleNavClick = (tabId, event) => { setActiveTab(tabId); if (tabId !== 'list') setShowOnlyLowStock(false); setIsSidebarOpen(false); if (['cashier','history','rekap_barang'].includes(tabId)) setKasirDropdownOpen(true); else setKasirDropdownOpen(false); if (['list','stock_opname','add','import','transfer_barang'].includes(tabId)) setBarangDropdownOpen(true); else setBarangDropdownOpen(false); if (['purchases'].includes(tabId)) setPembelianDropdownOpen(true); else setPembelianDropdownOpen(false); };
             
             const handleLogout = () => {
                 clearSession();
@@ -15044,7 +15209,171 @@
                                     <button onClick={() => setIsSidebarOpen(false)} className="md:hidden w-9 h-9 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"><Icon name="xmark" className="text-xl" /></button>
                                 </div>
                             </div>
-                            <nav className="space-y-0.5 flex-1 overflow-y-auto min-h-0 pr-1">{visibleMenuItems.map(menu => (<button key={menu.id} onClick={(e) => handleNavClick(menu.id, e)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 relative overflow-hidden group ${activeTab === menu.id ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}><div className="relative w-5 flex-shrink-0"><Icon name={menu.icon} className={`text-base ${activeTab === menu.id ? 'text-white' : 'text-slate-400'}`} />{menu.badge > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center leading-none shadow-sm animate-pulse">{menu.badge > 9 ? '9+' : menu.badge}</span>}</div><span className="flex-1 text-left">{menu.label}</span>{menu.readOnly && activeTab !== menu.id && <Icon name="eye" className="text-[9px] text-slate-300 flex-shrink-0" title="Lihat saja" />}{menu.badge > 0 && activeTab !== menu.id && <span className="text-[9px] bg-red-100 text-red-600 font-black px-1.5 py-0.5 rounded-full border border-red-200">{menu.badge} baru</span>}</button>))}</nav>
+                            <nav className="space-y-0.5 flex-1 overflow-y-auto min-h-0 pr-1">
+                                {visibleMenuItems.map(menu => {
+                                    // --- KASIR: render sebagai dropdown group ---
+                                    if (menu.id === 'cashier') {
+                                        const kasirSubItems = [
+                                            { id: 'cashier', label: 'Kasir', icon: 'cash-register' },
+                                            { id: 'history', label: 'Riwayat Kasir', icon: 'clock-rotate-left' },
+                                            { id: 'rekap_barang', label: 'Rekap Barang Terjual', icon: 'chart-bar' },
+                                        ];
+                                        const kasirSubIds = kasirSubItems.map(s => s.id);
+                                        const isKasirGroupActive = kasirSubIds.includes(activeTab);
+                                        return (
+                                            <div key="kasir-group">
+                                                {/* Tombol induk Kasir — navigasi ke submenu pertama */}
+                                                <div className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 relative group cursor-pointer ${isKasirGroupActive ? 'text-slate-800' : 'text-slate-500'}`}
+                                                    onClick={() => { setKasirDropdownOpen(true); setActiveTab('cashier'); setShowOnlyLowStock(false); }}
+                                                >
+                                                    <div className="relative w-5 flex-shrink-0">
+                                                        <Icon name="cash-register" className={`text-base ${isKasirGroupActive ? 'text-slate-700' : 'text-slate-400'}`} />
+                                                        {menu.badge > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center leading-none shadow-sm animate-pulse">{menu.badge > 9 ? '9+' : menu.badge}</span>}
+                                                    </div>
+                                                    <span className="flex-1 text-left">Kasir</span>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setKasirDropdownOpen(prev => !prev); }}
+                                                        className="w-6 h-6 flex items-center justify-center rounded-lg transition-all flex-shrink-0"
+                                                    >
+                                                        <Icon name={kasirDropdownOpen ? 'chevron-up' : 'chevron-down'} className="text-xs text-slate-300" />
+                                                    </button>
+                                                </div>
+                                                {/* Dropdown sub-menu */}
+                                                {kasirDropdownOpen && (
+                                                    <div className="ml-3 mt-0.5 pl-3 space-y-0.5">
+                                                        {kasirSubItems.map(sub => (
+                                                            <button
+                                                                key={sub.id}
+                                                                onClick={(e) => handleNavClick(sub.id, e)}
+                                                                className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${activeTab === sub.id ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+                                                            >
+                                                                <Icon name={sub.icon} className={`text-sm flex-shrink-0 ${activeTab === sub.id ? 'text-white' : 'text-slate-400'}`} />
+                                                                <span className="flex-1 text-left">{sub.label}</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    }
+                                    // --- BARANG: render sebagai dropdown group ---
+                                    if (menu.id === 'list') {
+                                        const barangSubItems = [
+                                            { id: 'list',            label: 'Stok Barang',    icon: 'boxes-stacked',  showKey: 'showMenuStock',         enableKey: 'enableStock' },
+                                            { id: 'stock_opname',    label: 'Stock Opname',   icon: 'clipboard-check',showKey: 'showMenuStockOpname',    enableKey: 'enableStockOpname' },
+                                            { id: 'add',             label: 'Input Manual',   icon: 'pen-to-square',  showKey: 'showMenuAdd',            enableKey: 'enableInputManual' },
+                                            { id: 'import',          label: 'Import Masal',   icon: 'file-import',    showKey: 'showMenuImport',         enableKey: 'enableImport' },
+                                            { id: 'transfer_barang', label: 'Transfer Barang',icon: 'right-left',     showKey: 'showMenuTransferBarang', enableKey: 'enableTransferBarang' },
+                                        ];
+                                        const barangSubIds = barangSubItems.map(s => s.id);
+                                        const isBarangGroupActive = barangSubIds.includes(activeTab);
+                                        return (
+                                            <div key="barang-group">
+                                                {/* Tombol induk Barang — navigasi ke submenu pertama */}
+                                                <div className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 relative group cursor-pointer ${isBarangGroupActive ? 'text-slate-800' : 'text-slate-500'}`}
+                                                    onClick={() => { setBarangDropdownOpen(true); setActiveTab('list'); setShowOnlyLowStock(false); }}
+                                                >
+                                                    <div className="relative w-5 flex-shrink-0">
+                                                        <Icon name="box-open" className={`text-base ${isBarangGroupActive ? 'text-slate-700' : 'text-slate-400'}`} />
+                                                    </div>
+                                                    <span className="flex-1 text-left">Barang</span>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setBarangDropdownOpen(prev => !prev); }}
+                                                        className="w-6 h-6 flex items-center justify-center rounded-lg transition-all flex-shrink-0"
+                                                    >
+                                                        <Icon name={barangDropdownOpen ? 'chevron-up' : 'chevron-down'} className="text-xs text-slate-300" />
+                                                    </button>
+                                                </div>
+                                                {/* Dropdown sub-menu */}
+                                                {barangDropdownOpen && (
+                                                    <div className="ml-3 mt-0.5 pl-3 space-y-0.5">
+                                                        {barangSubItems.map(sub => {
+                                                            const subEnabled = isOwner || showMenu(sub.showKey, settingsData[sub.showKey]);
+                                                            if (!subEnabled) return null;
+                                                            const subReadOnly = !isOwner && !menuOn(sub.enableKey, settingsData[sub.enableKey]);
+                                                            return (
+                                                                <button
+                                                                    key={sub.id}
+                                                                    onClick={(e) => handleNavClick(sub.id, e)}
+                                                                    className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${activeTab === sub.id ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+                                                                >
+                                                                    <Icon name={sub.icon} className={`text-sm flex-shrink-0 ${activeTab === sub.id ? 'text-white' : 'text-slate-400'}`} />
+                                                                    <span className="flex-1 text-left">{sub.label}</span>
+                                                                    {subReadOnly && activeTab !== sub.id && <Icon name="eye" className="text-[9px] text-slate-300 flex-shrink-0" title="Lihat saja" />}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    }
+                                    // --- PEMBELIAN: render sebagai dropdown group ---
+                                    if (menu.id === 'purchases') {
+                                        const pembelianSubItems = [
+                                            { id: 'purchases', label: 'Faktur Pembelian', icon: 'file-invoice-dollar', showKey: 'showMenuPurchases', enableKey: 'enablePurchases' },
+                                        ];
+                                        const pembelianSubIds = pembelianSubItems.map(s => s.id);
+                                        const isPembelianGroupActive = pembelianSubIds.includes(activeTab);
+                                        return (
+                                            <div key="pembelian-group">
+                                                {/* Tombol induk Pembelian — navigasi ke submenu pertama */}
+                                                <div className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 relative group cursor-pointer ${isPembelianGroupActive ? 'text-slate-800' : 'text-slate-500'}`}
+                                                    onClick={() => { setPembelianDropdownOpen(true); setActiveTab('purchases'); setShowOnlyLowStock(false); }}
+                                                >
+                                                    <div className="relative w-5 flex-shrink-0">
+                                                        <Icon name="cart-shopping" className={`text-base ${isPembelianGroupActive ? 'text-slate-700' : 'text-slate-400'}`} />
+                                                    </div>
+                                                    <span className="flex-1 text-left">Pembelian</span>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setPembelianDropdownOpen(prev => !prev); }}
+                                                        className="w-6 h-6 flex items-center justify-center rounded-lg transition-all flex-shrink-0"
+                                                    >
+                                                        <Icon name={pembelianDropdownOpen ? 'chevron-up' : 'chevron-down'} className="text-xs text-slate-300" />
+                                                    </button>
+                                                </div>
+                                                {/* Dropdown sub-menu */}
+                                                {pembelianDropdownOpen && (
+                                                    <div className="ml-3 mt-0.5 pl-3 space-y-0.5">
+                                                        {pembelianSubItems.map(sub => {
+                                                            const subEnabled = isOwner || showMenu(sub.showKey, settingsData[sub.showKey]);
+                                                            if (!subEnabled) return null;
+                                                            const subReadOnly = !isOwner && !menuOn(sub.enableKey, settingsData[sub.enableKey]);
+                                                            return (
+                                                                <button
+                                                                    key={sub.id}
+                                                                    onClick={(e) => handleNavClick(sub.id, e)}
+                                                                    className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${activeTab === sub.id ? 'bg-slate-800 text-white shadow-md' : 'text-slate-500 hover:bg-slate-100'}`}
+                                                                >
+                                                                    <Icon name={sub.icon} className={`text-sm flex-shrink-0 ${activeTab === sub.id ? 'text-white' : 'text-slate-400'}`} />
+                                                                    <span className="flex-1 text-left">{sub.label}</span>
+                                                                    {subReadOnly && activeTab !== sub.id && <Icon name="eye" className="text-[9px] text-slate-300 flex-shrink-0" title="Lihat saja" />}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    }
+                                    // --- Sembunyikan "Riwayat" dari menu utama karena sudah masuk dropdown Kasir ---
+                                    if (menu.id === 'history') return null;
+                                    // --- Sembunyikan item-item yang sudah masuk dropdown Barang ---
+                                    if (['stock_opname','add','import','transfer_barang'].includes(menu.id)) return null;
+                                    // --- Menu biasa ---
+                                    return (
+                                        <button key={menu.id} onClick={(e) => handleNavClick(menu.id, e)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 relative overflow-hidden group ${activeTab === menu.id ? 'bg-slate-800 text-white shadow-lg' : 'text-slate-500 hover:bg-slate-100'}`}>
+                                            <div className="relative w-5 flex-shrink-0">
+                                                <Icon name={menu.icon} className={`text-base ${activeTab === menu.id ? 'text-white' : 'text-slate-400'}`} />
+                                                {menu.badge > 0 && <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center leading-none shadow-sm animate-pulse">{menu.badge > 9 ? '9+' : menu.badge}</span>}
+                                            </div>
+                                            <span className="flex-1 text-left">{menu.label}</span>
+                                            {menu.readOnly && activeTab !== menu.id && <Icon name="eye" className="text-[9px] text-slate-300 flex-shrink-0" title="Lihat saja" />}
+                                            {menu.badge > 0 && activeTab !== menu.id && <span className="text-[9px] bg-red-100 text-red-600 font-black px-1.5 py-0.5 rounded-full border border-red-200">{menu.badge} baru</span>}
+                                        </button>
+                                    );
+                                })}
+                            </nav>
                             <div className="pt-4 border-t border-slate-100 flex-shrink-0">
                                 {authSession && (
                                     <div className="mb-2 px-3 py-2 bg-sky-50 rounded-xl border border-sky-100">
@@ -15249,6 +15578,7 @@
                         {activeTab === 'home' && (<DashboardView items={inventoryData} settings={settingsData} currentProfile={currentProfile} isOwner={isOwner} onShowLowStock={() => { setActiveTab('list'); setShowOnlyLowStock(true); }} />)}
                         {activeTab === 'cashier' && (<CashierView items={inventoryData} user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='cashier')?.readOnly} authSession={authSession} onNavigateToAdd={() => setActiveTab('add')} isOwner={isOwner} />)}
                         {activeTab === 'history' && (<HistoryView user={user} showToast={showToast} settings={settingsData} onGenerateImage={handleGenerateImage} currentProfile={currentProfile} items={inventoryData} readOnly={menuItems.find(m=>m.id==='history')?.readOnly} isOwner={isOwner} authSession={authSession} />)}
+                        {activeTab === 'rekap_barang' && (<RekapBarangView user={user} currentProfile={currentProfile} settings={settingsData} />)}
                         {activeTab === 'purchases' && (<PurchaseView user={user} showToast={showToast} items={inventoryData} currentProfile={currentProfile} settings={settingsData} readOnly={menuItems.find(m=>m.id==='purchases')?.readOnly} />)}
                         {activeTab === 'cashbook' && (<CashBookView user={user} currentProfile={currentProfile} showToast={showToast} readOnly={menuItems.find(m=>m.id==='cashbook')?.readOnly} />)}
                         {activeTab === 'list' && (<ListView items={inventoryData} loading={loading} settings={settingsData} searchQuery={searchQuery} setSearchQuery={setSearchQuery} showOnlyLowStock={showOnlyLowStock} setShowOnlyLowStock={setShowOnlyLowStock} selectedRacks={selectedRacks} setSelectedRacks={setSelectedRacks} uniqueRacksData={uniqueRacksData} onCopySuccess={showToast} onEdit={(item) => { setFormData({...item}); setEditingItem(item); setActiveTab('add'); }} onDelete={(item) => setDeleteModal({ show: true, item: item })} onDeleteRack={(rackName) => setDeleteRackModal({ show: true, rackName })} currentProfile={currentProfile} readOnly={menuItems.find(m=>m.id==='list')?.readOnly} isOwner={isOwner} />)}
